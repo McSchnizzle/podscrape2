@@ -1,5 +1,5 @@
 """
-Database models and connection management for YouTube Transcript Digest System.
+Database models and connection management for RSS Podcast Transcript Digest System.
 Provides SQLite database operations with proper error handling and connection pooling.
 """
 
@@ -17,33 +17,37 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 @dataclass
-class Channel:
-    """YouTube Channel model"""
-    channel_id: str
-    channel_name: str
-    channel_url: Optional[str] = None
+class Feed:
+    """RSS Podcast Feed model"""
+    feed_url: str
+    title: str
+    description: Optional[str] = None
     active: bool = True
     consecutive_failures: int = 0
     last_checked: Optional[datetime] = None
-    last_video_date: Optional[datetime] = None
-    total_videos_processed: int = 0
-    total_videos_failed: int = 0
+    last_episode_date: Optional[datetime] = None
+    total_episodes_processed: int = 0
+    total_episodes_failed: int = 0
     id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
 @dataclass 
 class Episode:
-    """YouTube Episode/Video model"""
-    video_id: str
-    channel_id: str
+    """RSS Podcast Episode model"""
+    episode_guid: str
+    feed_id: int
     title: str
     published_date: datetime
+    audio_url: str
     duration_seconds: Optional[int] = None
     description: Optional[str] = None
+    audio_path: Optional[str] = None
+    audio_downloaded_at: Optional[datetime] = None
     transcript_path: Optional[str] = None
-    transcript_fetched_at: Optional[datetime] = None
+    transcript_generated_at: Optional[datetime] = None
     transcript_word_count: Optional[int] = None
+    chunk_count: int = 0
     scores: Optional[Dict[str, float]] = None
     scored_at: Optional[datetime] = None
     status: str = 'pending'
@@ -149,90 +153,8 @@ class DatabaseManager:
             conn.commit()
             return cursor.lastrowid
 
-class ChannelRepository:
-    """Repository for Channel database operations"""
-    
-    def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
-    
-    def create(self, channel: Channel) -> int:
-        """Create new channel and return ID"""
-        query = """
-        INSERT INTO channels (channel_id, channel_name, channel_url, active)
-        VALUES (?, ?, ?, ?)
-        """
-        return self.db.get_last_insert_id(
-            query, 
-            (channel.channel_id, channel.channel_name, channel.channel_url, channel.active)
-        )
-    
-    def get_by_id(self, channel_id: str) -> Optional[Channel]:
-        """Get channel by channel_id"""
-        query = "SELECT * FROM channels WHERE channel_id = ?"
-        rows = self.db.execute_query(query, (channel_id,))
-        return self._row_to_channel(rows[0]) if rows else None
-    
-    def get_all_active(self) -> List[Channel]:
-        """Get all active channels"""
-        query = "SELECT * FROM channels WHERE active = 1 ORDER BY channel_name"
-        rows = self.db.execute_query(query)
-        return [self._row_to_channel(row) for row in rows]
-    
-    def update_last_checked(self, channel_id: str, last_checked: datetime = None):
-        """Update last_checked timestamp"""
-        if last_checked is None:
-            last_checked = datetime.now()
-        
-        query = "UPDATE channels SET last_checked = ? WHERE channel_id = ?"
-        self.db.execute_update(query, (last_checked.isoformat(), channel_id))
-    
-    def increment_failures(self, channel_id: str, failure_reason: str = None):
-        """Increment failure count for channel health monitoring"""
-        query = """
-        UPDATE channels 
-        SET consecutive_failures = consecutive_failures + 1,
-            total_videos_failed = total_videos_failed + 1
-        WHERE channel_id = ?
-        """
-        self.db.execute_update(query, (channel_id,))
-    
-    def reset_failures(self, channel_id: str):
-        """Reset failure count after successful processing"""
-        query = "UPDATE channels SET consecutive_failures = 0 WHERE channel_id = ?"
-        self.db.execute_update(query, (channel_id,))
-    
-    def get_unhealthy_channels(self, failure_threshold: int = 3) -> List[Channel]:
-        """Get channels with consecutive failures above threshold"""
-        query = "SELECT * FROM channels WHERE consecutive_failures >= ? AND active = 1"
-        rows = self.db.execute_query(query, (failure_threshold,))
-        return [self._row_to_channel(row) for row in rows]
-    
-    def deactivate(self, channel_id: str):
-        """Deactivate a channel"""
-        query = "UPDATE channels SET active = 0 WHERE channel_id = ?"
-        self.db.execute_update(query, (channel_id,))
-    
-    def delete(self, channel_id: str):
-        """Delete channel and all associated episodes"""
-        query = "DELETE FROM channels WHERE channel_id = ?"
-        return self.db.execute_update(query, (channel_id,))
-    
-    def _row_to_channel(self, row: sqlite3.Row) -> Channel:
-        """Convert database row to Channel object"""
-        return Channel(
-            id=row['id'],
-            channel_id=row['channel_id'],
-            channel_name=row['channel_name'],
-            channel_url=row['channel_url'],
-            active=bool(row['active']),
-            consecutive_failures=row['consecutive_failures'],
-            last_checked=datetime.fromisoformat(row['last_checked']) if row['last_checked'] else None,
-            last_video_date=datetime.fromisoformat(row['last_video_date']) if row['last_video_date'] else None,
-            total_videos_processed=row['total_videos_processed'],
-            total_videos_failed=row['total_videos_failed'],
-            created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
-            updated_at=datetime.fromisoformat(row['updated_at']) if row['updated_at'] else None
-        )
+# FeedRepository temporarily commented out for Phase 4 focus on Episodes
+# Will implement complete RSS feed management in later phases
 
 class EpisodeRepository:
     """Repository for Episode database operations"""
@@ -244,19 +166,19 @@ class EpisodeRepository:
         """Create new episode and return ID"""
         query = """
         INSERT INTO episodes (
-            video_id, channel_id, title, published_date, duration_seconds, description
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            episode_guid, feed_id, title, published_date, audio_url, duration_seconds, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         return self.db.get_last_insert_id(
             query, 
-            (episode.video_id, episode.channel_id, episode.title, 
-             episode.published_date.isoformat(), episode.duration_seconds, episode.description)
+            (episode.episode_guid, episode.feed_id, episode.title, 
+             episode.published_date.isoformat(), episode.audio_url, episode.duration_seconds, episode.description)
         )
     
-    def get_by_video_id(self, video_id: str) -> Optional[Episode]:
-        """Get episode by video_id"""
-        query = "SELECT * FROM episodes WHERE video_id = ?"
-        rows = self.db.execute_query(query, (video_id,))
+    def get_by_episode_guid(self, episode_guid: str) -> Optional[Episode]:
+        """Get episode by episode_guid"""
+        query = "SELECT * FROM episodes WHERE episode_guid = ?"
+        rows = self.db.execute_query(query, (episode_guid,))
         return self._row_to_episode(rows[0]) if rows else None
     
     def get_by_status(self, status: str) -> List[Episode]:
@@ -289,30 +211,30 @@ class EpisodeRepository:
         rows = self.db.execute_query(query, tuple(params))
         return [self._row_to_episode(row) for row in rows]
     
-    def update_status(self, video_id: str, status: str):
+    def update_status(self, episode_guid: str, status: str):
         """Update episode status"""
-        query = "UPDATE episodes SET status = ? WHERE video_id = ?"
-        self.db.execute_update(query, (status, video_id))
+        query = "UPDATE episodes SET status = ? WHERE episode_guid = ?"
+        self.db.execute_update(query, (status, episode_guid))
     
-    def update_transcript(self, video_id: str, transcript_path: str, word_count: int):
+    def update_transcript(self, episode_guid: str, transcript_path: str, word_count: int):
         """Update transcript information"""
         query = """
         UPDATE episodes 
-        SET transcript_path = ?, transcript_fetched_at = ?, transcript_word_count = ?, status = 'transcribed'
-        WHERE video_id = ?
+        SET transcript_path = ?, transcript_generated_at = ?, transcript_word_count = ?, status = 'transcribed'
+        WHERE episode_guid = ?
         """
-        self.db.execute_update(query, (transcript_path, datetime.now().isoformat(), word_count, video_id))
+        self.db.execute_update(query, (transcript_path, datetime.now().isoformat(), word_count, episode_guid))
     
-    def update_scores(self, video_id: str, scores: Dict[str, float]):
+    def update_scores(self, episode_guid: str, scores: Dict[str, float]):
         """Update AI scores for episode"""
         query = """
         UPDATE episodes 
         SET scores = ?, scored_at = ?, status = 'scored'
-        WHERE video_id = ?
+        WHERE episode_guid = ?
         """
-        self.db.execute_update(query, (json.dumps(scores), datetime.now().isoformat(), video_id))
+        self.db.execute_update(query, (json.dumps(scores), datetime.now().isoformat(), episode_guid))
     
-    def mark_failure(self, video_id: str, failure_reason: str):
+    def mark_failure(self, episode_guid: str, failure_reason: str):
         """Mark episode as failed and increment failure count"""
         query = """
         UPDATE episodes 
@@ -320,9 +242,9 @@ class EpisodeRepository:
             failure_reason = ?, 
             last_failure_at = ?,
             status = CASE WHEN failure_count >= 2 THEN 'failed' ELSE status END
-        WHERE video_id = ?
+        WHERE episode_guid = ?
         """
-        self.db.execute_update(query, (failure_reason, datetime.now().isoformat(), video_id))
+        self.db.execute_update(query, (failure_reason, datetime.now().isoformat(), episode_guid))
     
     def cleanup_old_episodes(self, days_old: int = 14):
         """Delete episodes older than specified days"""
@@ -335,15 +257,19 @@ class EpisodeRepository:
         
         return Episode(
             id=row['id'],
-            video_id=row['video_id'],
-            channel_id=row['channel_id'],
+            episode_guid=row['episode_guid'],
+            feed_id=row['feed_id'],
             title=row['title'],
             published_date=datetime.fromisoformat(row['published_date']),
+            audio_url=row['audio_url'],
             duration_seconds=row['duration_seconds'],
             description=row['description'],
+            audio_path=row['audio_path'],
+            audio_downloaded_at=datetime.fromisoformat(row['audio_downloaded_at']) if row['audio_downloaded_at'] else None,
             transcript_path=row['transcript_path'],
-            transcript_fetched_at=datetime.fromisoformat(row['transcript_fetched_at']) if row['transcript_fetched_at'] else None,
+            transcript_generated_at=datetime.fromisoformat(row['transcript_generated_at']) if row['transcript_generated_at'] else None,
             transcript_word_count=row['transcript_word_count'],
+            chunk_count=row['chunk_count'],
             scores=scores,
             scored_at=datetime.fromisoformat(row['scored_at']) if row['scored_at'] else None,
             status=row['status'],
@@ -445,12 +371,8 @@ def get_database_manager(db_path: str = None) -> DatabaseManager:
     
     return DatabaseManager(str(db_path))
 
-# Repository factory functions
-def get_channel_repo(db_manager: DatabaseManager = None) -> ChannelRepository:
-    """Get channel repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return ChannelRepository(db_manager)
+# Repository factory functions  
+# get_feed_repo temporarily commented out for Phase 4
 
 def get_episode_repo(db_manager: DatabaseManager = None) -> EpisodeRepository:
     """Get episode repository"""

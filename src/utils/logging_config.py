@@ -1,5 +1,5 @@
 """
-Comprehensive logging infrastructure for YouTube Transcript Digest System.
+Comprehensive logging infrastructure for RSS Podcast Transcript Digest System.
 Provides structured logging with file rotation, error handling, and performance tracking.
 """
 
