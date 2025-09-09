@@ -1,0 +1,28 @@
+{
+  "channels": [
+    {
+      "name": "Example Channel 1",
+      "channel_id": "UC1234567890abcdef",
+      "url": "https://youtube.com/@examplechannel1",
+      "active": true,
+      "added_date": "2025-09-09T12:00:00",
+      "description": "Example channel for testing"
+    },
+    {
+      "name": "Example Channel 2",
+      "channel_id": "UC0987654321fedcba",
+      "url": "https://youtube.com/channel/UC0987654321fedcba",
+      "active": true,
+      "added_date": "2025-09-09T12:00:00",
+      "description": "Another example channel"
+    }
+  ],
+  "settings": {
+    "min_video_duration_seconds": 180,
+    "max_concurrent_fetches": 5,
+    "retry_attempts": 3,
+    "failure_threshold": 3,
+    "check_frequency_hours": 6
+  },
+  "last_updated": "2025-09-09T12:00:00"
+}

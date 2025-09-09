@@ -1,0 +1,56 @@
+# YouTube Transcript Digest System - Python Dependencies
+
+# Core Dependencies
+python-dotenv>=1.0.0           # Environment variable management
+requests>=2.31.0               # HTTP requests
+urllib3>=2.0.0                 # URL handling
+
+# YouTube & Video Processing  
+youtube-transcript-api>=0.6.0  # YouTube transcript extraction
+yt-dlp>=2023.7.6               # YouTube metadata and channel resolution
+
+# AI & LLM APIs
+openai>=1.0.0                  # GPT-5 models for scoring and generation
+elevenlabs>=0.2.26             # TTS audio generation
+
+# Audio Processing
+pydub>=0.25.1                  # Audio manipulation
+mutagen>=1.47.0                # Audio metadata
+
+# Database & Data
+sqlite3                        # SQLite database (built-in)
+pandas>=2.0.0                  # Data manipulation (optional)
+
+# Configuration & Validation
+pydantic>=2.0.0                # Data validation
+jsonschema>=4.17.0             # JSON schema validation
+
+# GitHub & Publishing
+PyGithub>=1.59.0               # GitHub API integration
+feedgen>=0.9.0                 # RSS feed generation
+
+# Web & Network
+aiohttp>=3.8.0                 # Async HTTP client
+httpx>=0.24.0                  # Modern HTTP client
+
+# Development & Testing
+pytest>=7.4.0                  # Testing framework
+pytest-asyncio>=0.21.0         # Async testing support
+black>=23.0.0                  # Code formatting
+flake8>=6.0.0                  # Code linting
+mypy>=1.5.0                    # Type checking
+
+# Utilities
+click>=8.1.0                   # CLI framework
+rich>=13.0.0                   # Rich terminal output
+tqdm>=4.65.0                   # Progress bars
+schedule>=1.2.0                # Job scheduling
+
+# Date & Time
+python-dateutil>=2.8.0         # Date parsing
+pytz>=2023.3                   # Timezone handling
+
+# Optional: Advanced Features
+# transformers>=4.30.0         # Local AI models (future)
+# torch>=2.0.0                 # PyTorch for AI (future)
+# librosa>=0.10.0              # Audio analysis (future)
