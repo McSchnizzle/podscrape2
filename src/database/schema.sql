@@ -1,42 +1,48 @@
--- YouTube Transcript Digest System Database Schema
--- SQLite3 Database Schema for Episodes, Channels, and Digests
+-- RSS Podcast Transcript Digest System Database Schema
+-- SQLite3 Database Schema for Episodes, Feeds, and Digests
 
 -- Enable foreign key constraints
 PRAGMA foreign_keys = ON;
 
--- Channels table: YouTube channels being monitored
-CREATE TABLE IF NOT EXISTS channels (
+-- Feeds table: RSS podcast feeds being monitored
+CREATE TABLE IF NOT EXISTS feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    channel_id TEXT UNIQUE NOT NULL,
-    channel_name TEXT NOT NULL,
-    channel_url TEXT,
+    feed_url TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
     active BOOLEAN DEFAULT 1,
     consecutive_failures INTEGER DEFAULT 0,
     last_checked DATETIME,
-    last_video_date DATETIME,
-    total_videos_processed INTEGER DEFAULT 0,
-    total_videos_failed INTEGER DEFAULT 0,
+    last_episode_date DATETIME,
+    total_episodes_processed INTEGER DEFAULT 0,
+    total_episodes_failed INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Episodes table: Individual YouTube videos and their processing status
+-- Episodes table: Individual podcast episodes and their processing status
 CREATE TABLE IF NOT EXISTS episodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    video_id TEXT UNIQUE NOT NULL,
-    channel_id TEXT NOT NULL,
+    episode_guid TEXT UNIQUE NOT NULL,
+    feed_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     published_date DATETIME NOT NULL,
     duration_seconds INTEGER,
     description TEXT,
+    audio_url TEXT NOT NULL,
+    audio_path TEXT,
+    audio_downloaded_at DATETIME,
     transcript_path TEXT,
-    transcript_fetched_at DATETIME,
+    transcript_generated_at DATETIME,
     transcript_word_count INTEGER,
+    chunk_count INTEGER DEFAULT 0,
     scores JSON,
     scored_at DATETIME,
     status TEXT CHECK(status IN (
         'pending',
-        'fetching',
+        'downloading',
+        'chunking',
+        'transcribing',
         'transcribed',
         'scoring',
         'scored',
@@ -48,7 +54,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     last_failure_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE
+    FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 );
 
 -- Digests table: Generated topic-based daily digests
@@ -81,17 +87,17 @@ CREATE TABLE IF NOT EXISTS system_metadata (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_episodes_status ON episodes(status);
 CREATE INDEX IF NOT EXISTS idx_episodes_published ON episodes(published_date);
-CREATE INDEX IF NOT EXISTS idx_episodes_channel ON episodes(channel_id);
+CREATE INDEX IF NOT EXISTS idx_episodes_feed ON episodes(feed_id);
 CREATE INDEX IF NOT EXISTS idx_episodes_scores ON episodes(scores) WHERE scores IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_channels_active ON channels(active) WHERE active = 1;
+CREATE INDEX IF NOT EXISTS idx_feeds_active ON feeds(active) WHERE active = 1;
 CREATE INDEX IF NOT EXISTS idx_digests_date ON digests(digest_date);
 CREATE INDEX IF NOT EXISTS idx_digests_topic ON digests(topic);
 
 -- Triggers for automatic timestamp updates
-CREATE TRIGGER IF NOT EXISTS update_channels_timestamp 
-    AFTER UPDATE ON channels
+CREATE TRIGGER IF NOT EXISTS update_feeds_timestamp 
+    AFTER UPDATE ON feeds
     BEGIN
-        UPDATE channels SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        UPDATE feeds SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
 CREATE TRIGGER IF NOT EXISTS update_episodes_timestamp 
@@ -107,26 +113,26 @@ INSERT OR REPLACE INTO system_metadata (key, value) VALUES
     ('last_migration', datetime('now'));
 
 -- Views for common queries
-CREATE VIEW IF NOT EXISTS active_channels AS
-SELECT * FROM channels WHERE active = 1;
+CREATE VIEW IF NOT EXISTS active_feeds AS
+SELECT * FROM feeds WHERE active = 1;
 
 CREATE VIEW IF NOT EXISTS recent_episodes AS
 SELECT 
     e.*,
-    c.channel_name,
+    f.title as feed_title,
     julianday('now') - julianday(e.published_date) as days_old
 FROM episodes e
-JOIN channels c ON e.channel_id = c.channel_id
+JOIN feeds f ON e.feed_id = f.id
 WHERE e.published_date > date('now', '-30 days')
 ORDER BY e.published_date DESC;
 
 CREATE VIEW IF NOT EXISTS scored_episodes AS
 SELECT 
     e.*,
-    c.channel_name,
+    f.title as feed_title,
     json_extract(e.scores, '$') as all_scores
 FROM episodes e
-JOIN channels c ON e.channel_id = c.channel_id
+JOIN feeds f ON e.feed_id = f.id
 WHERE e.status = 'scored' AND e.scores IS NOT NULL;
 
 CREATE VIEW IF NOT EXISTS digest_stats AS

@@ -45,6 +45,10 @@ class PublishingError(DigestSystemError):
     """Raised when publishing operations fail"""
     pass
 
+class PodcastError(DigestSystemError):
+    """Raised when podcast processing operations fail"""
+    pass
+
 class APIError(DigestSystemError):
     """Raised when external API calls fail"""
     
@@ -63,64 +67,70 @@ class RateLimitError(APIError):
 
 # Retry decorators and utilities
 def retry_with_backoff(
-    max_attempts: int = 3,
+    func: Callable = None,
+    max_retries: int = 3,
+    backoff_factor: float = 2.0,
     base_delay: float = 1.0,
     max_delay: float = 60.0,
-    exponential: bool = True,
     jitter: bool = True,
     exceptions: tuple = (Exception,)
 ):
     """
-    Decorator for retrying functions with configurable backoff strategy.
+    Function/decorator for retrying functions with configurable backoff strategy.
+    Can be used as a decorator or called directly with a function.
     
     Args:
-        max_attempts: Maximum number of retry attempts
+        func: Function to retry (when used as direct call)
+        max_retries: Maximum number of retry attempts
+        backoff_factor: Multiplier for exponential backoff
         base_delay: Base delay between retries in seconds
         max_delay: Maximum delay between retries in seconds
-        exponential: Use exponential backoff
         jitter: Add random jitter to delays
         exceptions: Tuple of exceptions to retry on
     """
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                    
-                except exceptions as e:
-                    last_exception = e
-                    
-                    if attempt == max_attempts - 1:
-                        # Last attempt failed, don't sleep
-                        break
-                    
-                    # Calculate delay
-                    if exponential:
-                        delay = base_delay * (2 ** attempt)
-                    else:
-                        delay = base_delay
-                    
-                    delay = min(delay, max_delay)
-                    
-                    if jitter:
-                        delay += random.uniform(0, delay * 0.1)
-                    
-                    logger.warning(
-                        f"Attempt {attempt + 1}/{max_attempts} failed for {func.__name__}: {e}. "
-                        f"Retrying in {delay:.2f} seconds..."
-                    )
-                    
-                    time.sleep(delay)
-            
-            # All attempts failed
-            logger.error(f"All {max_attempts} attempts failed for {func.__name__}")
-            raise last_exception
+    def _retry_func(target_func: Callable) -> Any:
+        last_exception = None
         
-        return wrapper
-    return decorator
+        for attempt in range(max_retries + 1):  # +1 because we include the initial attempt
+            try:
+                return target_func()
+                
+            except exceptions as e:
+                last_exception = e
+                
+                if attempt == max_retries:
+                    # Last attempt failed, don't sleep
+                    break
+                
+                # Calculate delay
+                delay = base_delay * (backoff_factor ** attempt)
+                delay = min(delay, max_delay)
+                
+                if jitter:
+                    delay += random.uniform(0, delay * 0.1)
+                
+                logger.warning(
+                    f"Attempt {attempt + 1}/{max_retries + 1} failed: {e}. "
+                    f"Retrying in {delay:.2f} seconds..."
+                )
+                
+                time.sleep(delay)
+        
+        # All attempts failed
+        logger.error(f"All {max_retries + 1} attempts failed")
+        raise last_exception
+    
+    if func is None:
+        # Used as decorator
+        def decorator(target_func: Callable) -> Callable:
+            @wraps(target_func)
+            def wrapper(*args, **kwargs):
+                return _retry_func(lambda: target_func(*args, **kwargs))
+            return wrapper
+        return decorator
+    else:
+        # Used as direct function call
+        return _retry_func(func)
 
 def retry_api_call(
     api_name: str,

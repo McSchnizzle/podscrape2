@@ -1,16 +1,16 @@
-# YouTube Transcript Digest System - Product Requirements Document
+# RSS Podcast Transcript Digest System - Product Requirements Document
 
 ## Project Overview
 
-An automated daily digest system that collects YouTube transcripts from specified creators, scores them for topic relevancy using GPT-5-mini, combines high-scoring content into topic-based scripts using GPT-5, converts scripts to audio using ElevenLabs TTS, and publishes them via RSS feed.
+An automated daily digest system that collects podcast episodes from RSS feeds, transcribes them using Nvidia Parakeet ASR, scores them for topic relevancy using GPT-5-mini, combines high-scoring content into topic-based scripts using GPT-5, converts scripts to audio using ElevenLabs TTS, and publishes them via RSS feed.
 
 ## Vision Statement
 
-Create a fully automated daily podcast that intelligently curates and synthesizes content from YouTube creators across multiple topics, delivering personalized AI-generated digest episodes via RSS feed with minimal manual intervention.
+Create a fully automated daily podcast that intelligently curates and synthesizes content from podcast RSS feeds across multiple topics, delivering personalized AI-generated digest episodes via RSS feed with minimal manual intervention.
 
 ## Core Objectives
 
-- **Automated Content Collection**: Collect YouTube transcripts from specified creators using youtube-transcript-api
+- **Automated Content Collection**: Collect podcast episodes from RSS feeds and transcribe using Nvidia Parakeet ASR with 10-minute audio chunking
 - **Intelligent Content Scoring**: Score each episode against multiple topics using GPT-5-mini with ≥0.65 relevancy threshold
 - **Topic-Based Script Generation**: Combine relevant transcripts into coherent scripts following topic-specific instructions using GPT-5
 - **High-Quality Audio Production**: Convert scripts to podcast-quality audio using ElevenLabs TTS with configurable voices
@@ -21,11 +21,11 @@ Create a fully automated daily podcast that intelligently curates and synthesize
 ### Database Design (SQLite)
 ```sql
 -- Core Tables
-episodes: id, video_id, channel_id, title, published_date, duration_seconds, 
-          transcript_path, scores (JSON), status, failure_count, timestamps
+episodes: id, episode_guid, feed_id, title, published_date, duration_seconds, 
+          audio_url, transcript_path, scores (JSON), status, failure_count, timestamps
 
-channels: id, channel_id, channel_name, channel_url, active, 
-          consecutive_failures, last_checked, timestamps
+feeds: id, feed_url, title, description, active, 
+       consecutive_failures, last_checked, timestamps
 
 digests: id, topic, digest_date, script_path, mp3_path, mp3_title, 
          mp3_summary, episode_ids (JSON), github_url, timestamps
@@ -34,8 +34,10 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 ### File Structure
 ```
 /podscrape2/
-├── transcripts/           # YouTube transcripts: {video_id}_{timestamp}.txt
-├── completed-tts/         # MP3 files: {topic}_{YYYYMMDD}_{HHMMSS}.mp3
+├── transcripts/           # Podcast transcripts: {episode_guid}_{timestamp}.txt
+├── audio_cache/          # Downloaded podcast episodes: {episode_guid}.mp3
+├── audio_chunks/         # 10-minute audio chunks for processing
+├── completed-tts/        # MP3 files: {topic}_{YYYYMMDD}_{HHMMSS}.mp3
 ├── scripts/              # Digest scripts: {topic}_{YYYYMMDD}.md
 ├── logs/                 # Execution logs: digest_{YYYYMMDD}.log
 ├── config/               # Configuration files
@@ -46,37 +48,42 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 
 ### Core Components
 
-1. **Channel Manager** (`channel_manager.py`)
-   - Add/remove YouTube channels via URL or name
-   - Auto-resolve channel IDs using YouTube API techniques
-   - Track channel health and failure monitoring
+1. **Feed Manager** (`feed_manager.py`)
+   - Add/remove RSS podcast feeds
+   - Parse RSS feeds to discover new episodes
+   - Track feed health and failure monitoring
 
-2. **Transcript Fetcher** (`transcript_fetcher.py`)
-   - Extract transcripts using youtube-transcript-api
-   - Filter videos by duration (>3 minutes to exclude shorts)
-   - Retry logic (3 attempts) with failure tracking
+2. **Audio Processor** (`audio_processor.py`)
+   - Download podcast audio files from RSS episodes
+   - Split audio into 10-minute chunks for processing
+   - Manage audio file caching and cleanup
 
-3. **Content Scorer** (`content_scorer.py`)
+3. **Transcript Generator** (`transcript_generator.py`)
+   - Transcribe audio chunks using Nvidia Parakeet ASR
+   - Concatenate chunk transcripts into complete episodes
+   - Quality validation and error handling
+
+4. **Content Scorer** (`content_scorer.py`)
    - Score episodes against all topics using GPT-5-mini Responses API
    - Structured JSON output with relevancy scores 0.0-1.0
    - Batch processing for efficiency
 
-4. **Script Generator** (`script_generator.py`)
+5. **Script Generator** (`script_generator.py`)
    - Combine high-scoring episodes (≥0.65) per topic
    - Follow topic-specific instructions from digest_instructions/
    - Use GPT-5 with 25,000 word limit per script
 
-5. **TTS Generator** (`tts_generator.py`)
+6. **TTS Generator** (`tts_generator.py`)
    - Convert scripts to MP3 using ElevenLabs API
    - Configurable voice settings per topic
    - Generate titles/summaries using GPT-5-nano
 
-6. **Publisher** (`publisher.py`)
+7. **Publisher** (`publisher.py`)
    - Upload MP3s to GitHub repository
    - Update RSS XML feed for podcast.paulrbrown.org
    - Manage retention: 7 days local, 14 days GitHub
 
-7. **Main Orchestrator** (`daily_digest.py`)
+8. **Main Orchestrator** (`daily_digest.py`)
    - Coordinate entire pipeline
    - Handle Monday (72hr) vs weekday (24hr) lookback
    - Support manual trigger with date parameters
@@ -84,18 +91,20 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 ## Key Features & Requirements
 
 ### Content Processing
-- **Source**: YouTube channels specified by user
-- **Filtering**: Minimum 3-minute duration, exclude shorts
+- **Source**: RSS podcast feeds specified by user
+- **Filtering**: Minimum 3-minute duration, exclude short segments
+- **Transcription**: Nvidia Parakeet ASR with 10-minute audio chunking
 - **Scoring**: Each episode scored against all topics (0.0-1.0 scale)
 - **Threshold**: Only episodes scoring ≥0.65 included in digests
-- **Deduplication**: Prevent reprocessing of same video_id
+- **Deduplication**: Prevent reprocessing of same episode_guid
 
 ### Quality Controls
-- **Transcript Validation**: Verify transcript quality and completeness
+- **Transcript Validation**: Verify transcript quality and completeness from ASR
 - **Failure Handling**: 3-retry limit, mark failed episodes permanently
-- **Channel Health**: Flag channels with 3+ consecutive days of failures
+- **Feed Health**: Flag feeds with 3+ consecutive days of failures
 - **Content Limits**: Maximum 25,000 words per script
 - **Audio Quality**: Optimize for Bluetooth earbuds (good mobile quality)
+- **Chunking Strategy**: Process audio in 10-minute segments for optimal ASR performance
 
 ### Automation Features
 - **Daily Execution**: Cron job at 6 AM daily
@@ -113,9 +122,10 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 
 ## API Integrations
 
-### YouTube Data
-- **youtube-transcript-api**: Primary transcript extraction
-- **YouTube Data API**: Channel resolution and video metadata (if needed)
+### Audio Processing
+- **RSS Feeds**: Standard RSS 2.0 with podcast extensions for episode discovery
+- **HTTP Downloads**: Direct audio file downloads from podcast CDNs
+- **Nvidia Parakeet ASR**: Open-source ASR model via Hugging Face Transformers
 
 ### AI Services
 - **OpenAI GPT-5-mini**: Content scoring with Responses API and JSON schema
@@ -140,7 +150,7 @@ GITHUB_REPOSITORY=McSchnizzle/podscrape2
 ```
 
 ### Configuration Files
-- **config/channels.json**: YouTube channel management
+- **config/feeds.json**: RSS podcast feed management
 - **config/topics.json**: Topic configuration with voice settings
 - **digest_instructions/*.md**: Topic-specific generation instructions
 
@@ -153,7 +163,7 @@ GITHUB_REPOSITORY=McSchnizzle/podscrape2
 - **Error Recovery**: Graceful handling of API failures and timeouts
 
 ### Quality Metrics
-- **Transcript Accuracy**: Successful extraction from target channels
+- **Transcript Accuracy**: Successful ASR transcription from podcast episodes
 - **Scoring Accuracy**: Relevant content properly identified (≥0.65 threshold)
 - **Audio Quality**: Clear, professional-sounding TTS output
 - **RSS Compliance**: Compatible with all major podcast clients
@@ -162,7 +172,7 @@ GITHUB_REPOSITORY=McSchnizzle/podscrape2
 - **Zero Manual Effort**: Fully automated daily operation
 - **Reliable Delivery**: Consistent daily episode availability
 - **Topic Relevance**: High-quality, on-topic content curation
-- **Easy Management**: Simple channel add/remove process
+- **Easy Management**: Simple RSS feed add/remove process
 
 ## Risk Mitigation
 
@@ -175,7 +185,8 @@ GITHUB_REPOSITORY=McSchnizzle/podscrape2
 ### Content Risks
 - **Quality Control**: AI scoring ensures relevant content inclusion
 - **Copyright Compliance**: Transcript-only processing, no audio redistribution
-- **Content Availability**: Handle transcript extraction failures gracefully
+- **Content Availability**: Handle ASR transcription failures gracefully
+- **Audio Processing**: Robust handling of various audio formats and quality levels
 
 ### Operational Risks
 - **Maintenance Burden**: Well-documented, modular architecture
