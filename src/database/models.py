@@ -190,13 +190,16 @@ class EpisodeRepository:
     def get_scored_episodes_for_topic(self, topic: str, min_score: float = 0.65, 
                                     start_date: date = None, end_date: date = None) -> List[Episode]:
         """Get episodes scored above threshold for specific topic"""
-        query = """
+        # Build JSON path for SQLite json_extract
+        json_path = f'$."{topic}"'
+        
+        query = f"""
         SELECT * FROM episodes 
         WHERE status = 'scored' 
         AND scores IS NOT NULL
-        AND json_extract(scores, '$." + topic + "') >= ?
+        AND json_extract(scores, ?) >= ?
         """
-        params = [min_score]
+        params = [json_path, min_score]
         
         if start_date:
             query += " AND date(published_date) >= ?"
@@ -206,7 +209,8 @@ class EpisodeRepository:
             query += " AND date(published_date) <= ?"
             params.append(end_date.isoformat())
         
-        query += " ORDER BY json_extract(scores, '$." + topic + "') DESC, published_date DESC"
+        query += f" ORDER BY json_extract(scores, ?) DESC, published_date DESC"
+        params.append(json_path)
         
         rows = self.db.execute_query(query, tuple(params))
         return [self._row_to_episode(row) for row in rows]

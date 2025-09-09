@@ -140,6 +140,31 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             "additionalProperties": False
         }
     
+    def _clean_transcript(self, transcript: str) -> str:
+        """
+        Clean transcript by removing advertisement portions.
+        Removes first 5% and last 5% where ads typically appear.
+        """
+        if not transcript or len(transcript) < 500:
+            return transcript
+            
+        # Calculate trim points (5% from each end)
+        total_length = len(transcript)
+        trim_amount = int(total_length * 0.05)
+        
+        # Trim from both ends
+        start_pos = trim_amount
+        end_pos = total_length - trim_amount
+        
+        cleaned = transcript[start_pos:end_pos]
+        
+        # Log the cleaning results
+        reduction_pct = (trim_amount * 2 / total_length * 100) if total_length > 0 else 0
+        
+        logger.info(f"Transcript cleaning: {total_length} → {len(cleaned)} chars ({reduction_pct:.1f}% reduction)")
+        
+        return cleaned
+
     def score_transcript(self, transcript: str, episode_id: str = None) -> ScoringResult:
         """
         Score a single transcript against all active topics.
@@ -153,21 +178,25 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
         """
         start_time = datetime.now()
         
+        # Clean transcript to remove advertisements and sponsor content
+        cleaned_transcript = self._clean_transcript(transcript)
+        
         try:
             # Create prompt and schema
-            prompt = self._create_scoring_prompt(transcript, self.topics)
+            prompt = self._create_scoring_prompt(cleaned_transcript, self.topics)
             schema = self._create_json_schema(self.topics)
             
-            # Call GPT-5-mini using Chat Completions (fallback until Responses API format confirmed)
-            response = self.client.chat.completions.create(
+            # Call GPT-5-mini using Responses API (correct format from gpt5-implementation-learnings.md)
+            response = self.client.responses.create(
                 model="gpt-5-mini",
-                messages=[
+                input=[
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=1000,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
+                reasoning={"effort": "minimal"},  # Minimal effort for scoring tasks
+                max_output_tokens=1000,
+                text={
+                    "format": {
+                        "type": "json_schema",
                         "name": "content_scores",
                         "schema": schema,
                         "strict": True
@@ -175,8 +204,8 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
                 }
             )
             
-            # Parse response using Chat Completions format
-            scores_json = response.choices[0].message.content
+            # Parse response using Responses API format
+            scores_json = response.output_text
             scores = json.loads(scores_json)
             
             # Validate scores are within expected range
@@ -187,7 +216,7 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             
             processing_time = (datetime.now() - start_time).total_seconds()
             
-            logger.info(f"Successfully scored {'episode ' + episode_id if episode_id else 'transcript'} "
+            logger.info(f"Successfully scored {'episode ' + episode_id if episode_id else 'transcript'} with GPT-5-mini "
                        f"in {processing_time:.2f}s")
             
             return ScoringResult(

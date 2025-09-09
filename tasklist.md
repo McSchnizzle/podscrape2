@@ -94,7 +94,7 @@
 ## Phase 3: RSS Feed & Parakeet ASR Transcription
 **Goal**: RSS podcast feed parsing and Nvidia Parakeet ASR transcription  
 **Duration**: 2 days (architecture pivot from YouTube blocking)  
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 
 ### Tasks
 - [x] **Task 3.1**: Research RSS podcast feed processing and Nvidia Parakeet integration
@@ -142,22 +142,26 @@
 ## Phase 5: Script Generation
 **Goal**: Topic-based script generation using GPT-5  
 **Duration**: 2 days  
-**Status**: ⏳ Planned
+**Status**: ✅ Complete
 
 ### Tasks
-- [ ] **Task 5.1**: Load and parse topic instructions from digest_instructions/ directory
-- [ ] **Task 5.2**: Implement episode filtering by score threshold (≥0.65) with topic grouping
-- [ ] **Task 5.3**: Build script generation using GPT-5 with 25K word limit enforcement
-- [ ] **Task 5.4**: Add "no content" day handling with appropriate messaging
-- [ ] **Task 5.5**: Test with real topic instructions and scored episodes for quality validation
+- [x] **Task 5.1**: Load and parse topic instructions from digest_instructions/ directory
+- [x] **Task 5.2**: Implement episode filtering by score threshold (≥0.65) with topic grouping
+- [x] **Task 5.3**: Build script generation using GPT-5 with 25K word limit enforcement
+- [x] **Task 5.4**: Add "no content" day handling with appropriate messaging
+- [x] **Task 5.5**: Test with real topic instructions and scored episodes for quality validation
+- [x] **Task 5.6**: Add robust error handling for API failures and rate limits  
+- [x] **Task 5.7**: Implement script metadata tracking in database
+- [x] **Task 5.8**: Fix advertisement filtering in content scoring (5% trim from each end)
+- [x] **Task 5.9**: Fix database JSON query for episode filtering
 
 ### Testing Criteria
-- [ ] Topic instructions load correctly and are properly formatted for GPT-5 prompts
-- [ ] Episode filtering accurately selects episodes meeting score threshold per topic
-- [ ] Script generation produces coherent, topic-focused content within word limits
-- [ ] "No content" scenarios handled gracefully with appropriate default messaging
-- [ ] Generated scripts meet quality standards and follow topic instruction guidelines
-- [ ] **Test Script**: `test_phase5.py` - Topic loading, filtering, script generation quality
+- [x] Topic instructions load correctly and are properly formatted for GPT-5 prompts
+- [x] Episode filtering accurately selects episodes meeting score threshold per topic
+- [x] Script generation produces coherent, topic-focused content within word limits
+- [x] "No content" scenarios handled gracefully with appropriate default messaging
+- [x] Generated scripts meet quality standards and follow topic instruction guidelines
+- [x] **Test Script**: `test_phase5.py` - Topic loading, filtering, script generation quality
 
 ---
 
@@ -319,10 +323,23 @@ python test_performance.py
 - ✅ All test criteria passed: API integration, JSON validation, database storage, end-to-end workflow
 - **Result**: Production-ready content scoring system qualifying episodes for digest inclusion
 
+### Phase 5 - Script Generation (Sep 9, 2025)
+- ✅ Identified and fixed critical scoring bug: advertisement content was inflating scores
+- ✅ Implemented 5% trim from each end of transcripts to remove ad content
+- ✅ Fixed database JSON query for episode filtering (was using broken string concatenation)
+- ✅ Built complete ScriptGenerator class with topic instruction parsing
+- ✅ Implemented episode filtering by score threshold (≥0.65) per topic
+- ✅ Added GPT-5/GPT-4 integration with word limit enforcement (25K words)
+- ✅ Created "no content" day handling with appropriate messaging
+- ✅ Implemented script file saving and database metadata tracking
+- ✅ Built comprehensive test suite with 8 test cases
+- ✅ Verified system works with corrected episode scores (1 qualifying episode)
+- **Result**: Production-ready script generation system that correctly filters content and generates topic-focused digest scripts
+
 ### Future Phase Notes
 *Notes will be added as phases are completed...*
 
 ---
 
 **Last Updated**: September 9, 2025  
-**Next Milestone**: Begin Phase 3: Transcript Processing
+**Next Milestone**: Complete Phase 5: Script Generation
