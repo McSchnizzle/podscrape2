@@ -65,6 +65,13 @@ class FullPipelineRunner:
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
         
+        # Initialize Parakeet transcriber (after dependency verification)
+        if hasattr(self, 'has_parakeet_mlx') and self.has_parakeet_mlx:
+            from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
+            self.transcriber = create_parakeet_mlx_transcriber(chunk_duration_minutes=3)
+        else:
+            self.transcriber = None
+        
         # RSS feeds to check (using proven feeds from CLAUDE.md)
         self.rss_feeds = [
             {
@@ -104,24 +111,17 @@ class FullPipelineRunner:
         
         self.logger.info("✓ OpenAI API key verified")
         
-        # Check MLX Whisper availability
+        # Check Parakeet MLX availability
         try:
-            import mlx_whisper
-            self.logger.info("✓ MLX Whisper available for transcription")
-            self.has_mlx_whisper = True
-        except ImportError:
-            self.logger.warning("⚠️  MLX Whisper not available - will attempt fallback")
-            self.has_mlx_whisper = False
-            
-            # Check for alternative transcription
-            try:
-                import whisper
-                self.logger.info("✓ OpenAI Whisper available as fallback")
-                self.has_whisper = True
-            except ImportError:
-                self.logger.error("✗ No transcription engine available")
-                self.logger.error("Install with: pip install mlx-whisper  OR  pip install openai-whisper")
-                raise Exception("No transcription engine available")
+            import parakeet_mlx
+            from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
+            self.logger.info("✓ Parakeet MLX available for transcription")
+            self.has_parakeet_mlx = True
+        except ImportError as e:
+            self.logger.error("✗ Parakeet MLX not available")
+            self.logger.error(f"Error: {e}")
+            self.logger.error("Install with: pip install parakeet-mlx")
+            raise Exception("Parakeet MLX transcription engine not available")
         
         # Check FFmpeg for audio processing
         try:
@@ -162,13 +162,20 @@ class FullPipelineRunner:
                     episode_guid = entry.get('id', entry.get('guid', entry.link))
                     title = entry.get('title', 'Untitled')
                     
-                    # Skip if already processed
+                    # Check if episode needs processing
                     existing = self.episode_repo.get_by_episode_guid(episode_guid)
-                    if existing:
+                    if existing and existing.status in ['transcribed', 'scored']:
                         self.logger.info(f"  [{i+1:2d}] SKIP: {title[:60]}... (already processed)")
                         continue
+                    elif existing and existing.status in ['pending', 'failed']:
+                        status_label = "pending transcription" if existing.status == 'pending' else "retry after failure"
+                        self.logger.info(f"  [{i+1:2d}] RESUME: {title[:60]}... ({status_label})")
+                        # Return existing episode for resume processing
+                        # Add expected topics for compatibility
+                        existing.expected_topics = feed_info['expected_topics']
+                        return existing
                     
-                    # Find audio URL
+                    # Find audio URL for new episodes
                     audio_url = None
                     for link in entry.get('links', []):
                         if link.get('type', '').startswith('audio/'):
@@ -185,7 +192,7 @@ class FullPipelineRunner:
                         self.logger.info(f"  [{i+1:2d}] SKIP: {title[:60]}... (no audio URL)")
                         continue
                     
-                    # Found a candidate episode!
+                    # Found a new candidate episode!
                     episode = {
                         'guid': episode_guid,
                         'title': title,
@@ -216,73 +223,104 @@ class FullPipelineRunner:
         self.logger.info("PHASE 2: AUDIO PROCESSING")
         self.logger.info("="*80)
         
-        self.logger.info(f"Processing: {episode['title']}")
-        self.logger.info(f"Feed: {episode['feed_name']}")
-        
-        # Create database record
-        db_episode = Episode(
-            episode_guid=episode['guid'],
-            feed_id=1,  # Simplified for demo
-            title=episode['title'],
-            published_date=episode['published_date'],
-            audio_url=episode['audio_url'],
-            duration_seconds=episode['duration_seconds'],
-            description=episode['description']
-        )
-        
-        episode_id = self.episode_repo.create(db_episode)
-        db_episode.id = episode_id
-        self.logger.info(f"✓ Database record created (ID: {episode_id})")
+        # Handle both new episodes (dict) and existing episodes (Episode object)
+        if isinstance(episode, dict):
+            # New episode - create database record
+            self.logger.info(f"Processing: {episode['title']}")
+            self.logger.info(f"Feed: {episode['feed_name']}")
+            
+            db_episode = Episode(
+                episode_guid=episode['guid'],
+                feed_id=1,  # Simplified for demo
+                title=episode['title'],
+                published_date=episode['published_date'],
+                audio_url=episode['audio_url'],
+                duration_seconds=episode['duration_seconds'],
+                description=episode['description']
+            )
+            
+            episode_id = self.episode_repo.create(db_episode)
+            db_episode.id = episode_id
+            self.logger.info(f"✓ Database record created (ID: {episode_id})")
+            
+        else:
+            # Existing episode - resume processing
+            db_episode = episode
+            self.logger.info(f"Processing: {db_episode.title}")
+            self.logger.info(f"Resuming episode ID: {db_episode.id} (status: {db_episode.status})")
         
         try:
             # Step 2.1: Download audio
             self.logger.info(f"\n📥 STEP 2.1: Audio Download")
-            self.logger.info(f"URL: {episode['audio_url']}")
+            # Get episode data (handle both dict and Episode object)
+            if isinstance(episode, dict):
+                audio_url = episode['audio_url']
+                episode_guid = episode['guid']
+            else:
+                audio_url = db_episode.audio_url
+                episode_guid = db_episode.episode_guid
             
-            audio_path = self.audio_processor.download_audio(episode['audio_url'], episode['guid'])
+            self.logger.info(f"URL: {audio_url}")
+            
+            audio_path = self.audio_processor.download_audio(audio_url, episode_guid)
             audio_size_mb = Path(audio_path).stat().st_size / (1024*1024)
             self.logger.info(f"✓ Downloaded {audio_size_mb:.1f}MB to: {audio_path}")
             
             # Step 2.2: Chunk audio
             self.logger.info(f"\n🔪 STEP 2.2: Audio Chunking")
-            chunk_paths = self.audio_processor.chunk_audio(audio_path, episode['guid'])
-            total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
-            self.logger.info(f"✓ Created {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")
+            chunk_paths = self.audio_processor.chunk_audio(audio_path, episode_guid)
             
-            # Step 2.3: Full transcription
+            # TESTING LIMIT: Only process first 4 chunks for faster testing
+            if len(chunk_paths) > 4:
+                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 4 chunks (of {len(chunk_paths)})")
+                chunk_paths = chunk_paths[:4]
+            
+            total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
+            self.logger.info(f"✓ Processing {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")
+            
+            # Step 2.3: Full transcription with Parakeet MLX
             self.logger.info(f"\n🎤 STEP 2.3: Full Transcription ({len(chunk_paths)} chunks)")
             
-            if self.has_mlx_whisper:
-                import mlx_whisper
-                self.logger.info("Using MLX Whisper for transcription")
-            else:
-                import whisper
-                model = whisper.load_model("base")
-                self.logger.info("Using OpenAI Whisper (base model) for transcription")
+            if not self.transcriber:
+                raise Exception("Parakeet MLX transcriber not initialized")
             
-            all_transcripts = []
+            self.logger.info("Using Parakeet MLX (Apple Silicon optimized) for transcription")
             
-            for i, chunk_path in enumerate(chunk_paths):
-                chunk_num = i + 1
-                self.logger.info(f"  [{chunk_num:2d}/{len(chunk_paths)}] {chunk_path.name}")
+            # Use Parakeet's episode transcription method
+            try:
+                self.logger.info("Starting Parakeet transcription...")
                 
-                try:
-                    if self.has_mlx_whisper:
-                        result = mlx_whisper.transcribe(str(chunk_path))
-                        transcript = result['text']
-                    else:
-                        result = model.transcribe(str(chunk_path))
-                        transcript = result['text']
-                    
-                    all_transcripts.append(transcript.strip())
+                # Convert Path objects to strings for Parakeet API
+                chunk_paths_str = [str(path) for path in chunk_paths]
+                
+                # Create in-progress transcript file for monitoring
+                progress_dir = Path("data/transcripts")
+                progress_dir.mkdir(parents=True, exist_ok=True)
+                in_progress_file = progress_dir / f"{episode_guid[:6]}_in_progress.txt"
+                self.logger.info(f"Progress file: {in_progress_file}")
+                
+                # Call Parakeet transcriber (it will initialize model internally)
+                transcription_result = self.transcriber.transcribe_episode(
+                    chunk_paths_str, 
+                    episode_guid,
+                    str(in_progress_file)
+                )
+                
+                # EpisodeTranscription object doesn't have success attribute - if we get here, it worked
+                all_transcripts = [chunk.text for chunk in transcription_result.chunks]
+                
+                # Log individual chunk results
+                for i, chunk_result in enumerate(transcription_result.chunks):
+                    chunk_num = i + 1
+                    transcript = chunk_result.text
                     char_count = len(transcript)
                     word_count = len(transcript.split())
+                    self.logger.info(f"  [{chunk_num:2d}/{len(chunk_paths)}] {Path(chunk_paths[i]).name}")
                     self.logger.info(f"       ✓ {char_count:,} chars, {word_count:,} words")
-                    
-                except Exception as e:
-                    self.logger.error(f"       ✗ Transcription failed: {e}")
-                    all_transcripts.append("")
-                    continue
+                
+            except Exception as e:
+                self.logger.error(f"Parakeet transcription failed: {e}")
+                raise
             
             # Combine all transcripts
             combined_transcript = "\n\n".join([t for t in all_transcripts if t])
@@ -293,17 +331,27 @@ class FullPipelineRunner:
             transcript_dir = Path("data/transcripts")
             transcript_dir.mkdir(parents=True, exist_ok=True)
             
-            # Use feed prefix and episode ID for naming
-            feed_prefix = episode['feed_name'].lower().replace(' ', '-')[:10]
-            transcript_filename = f"{feed_prefix}-{episode_id:06d}.txt"
+            # Get feed name for naming (handle both dict and Episode object)
+            if isinstance(episode, dict):
+                feed_name = episode['feed_name']
+                episode_title = episode['title']
+            else:
+                # For existing episodes, derive feed name from expected_topics or use default
+                feed_name = getattr(episode, 'feed_name', 'Movement Memos')  # Default based on expected_topics
+                episode_title = db_episode.title
+            
+            # Use feed prefix and short episode GUID for naming (format: movement-8292fe.txt)
+            feed_prefix = feed_name.split()[0].lower()  # First word of feed name
+            short_guid = episode_guid[:6]
+            transcript_filename = f"{feed_prefix}-{short_guid}.txt"
             transcript_path = transcript_dir / transcript_filename
             
             # Write final transcript
             with open(transcript_path, 'w', encoding='utf-8') as f:
                 f.write(f"# Complete Transcript\n")
-                f.write(f"# Episode: {episode['title']}\n")
-                f.write(f"# Feed: {episode['feed_name']}\n")
-                f.write(f"# GUID: {episode['guid']}\n")
+                f.write(f"# Episode: {episode_title}\n")
+                f.write(f"# Feed: {feed_name}\n")
+                f.write(f"# GUID: {episode_guid}\n")
                 f.write(f"# Processed: {datetime.now().isoformat()}\n")
                 f.write(f"# Chunks: {len(chunk_paths)}\n")
                 f.write(f"# Words: {total_words:,}\n")
@@ -311,13 +359,43 @@ class FullPipelineRunner:
                 f.write(combined_transcript)
             
             # Update database
-            self.episode_repo.update_transcript(episode['guid'], str(transcript_path), total_words)
+            self.episode_repo.update_transcript(episode_guid, str(transcript_path), total_words)
             
             # Update episode object
             db_episode.transcript_path = str(transcript_path)
             db_episode.transcript_word_count = total_words
             db_episode.chunk_count = len(chunk_paths)
             db_episode.status = 'transcribed'
+            
+            # Cleanup: Delete audio chunks and in-progress file
+            self.logger.info(f"\n🧹 STEP 2.4: Cleanup")
+            try:
+                # Delete all audio chunks for this episode
+                chunks_deleted = 0
+                for chunk_path_str in chunk_paths:
+                    chunk_path = Path(chunk_path_str)
+                    if chunk_path.exists():
+                        chunk_path.unlink()
+                        chunks_deleted += 1
+                
+                # Delete the chunks directory if empty
+                chunk_episode_dir = Path(chunk_paths[0]).parent if chunk_paths else None
+                if chunk_episode_dir and chunk_episode_dir.exists():
+                    try:
+                        chunk_episode_dir.rmdir()  # Only removes if empty
+                        self.logger.info(f"✓ Removed chunk directory: {chunk_episode_dir}")
+                    except OSError:
+                        pass  # Directory not empty, leave it
+                
+                # Delete in-progress file
+                if in_progress_file.exists():
+                    in_progress_file.unlink()
+                    self.logger.info(f"✓ Deleted progress file: {in_progress_file}")
+                
+                self.logger.info(f"✓ Cleanup complete: {chunks_deleted} audio chunks deleted")
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Cleanup failed: {e}")
             
             self.logger.info(f"\n✅ TRANSCRIPTION COMPLETE:")
             self.logger.info(f"   Total words: {total_words:,}")
@@ -330,7 +408,7 @@ class FullPipelineRunner:
         except Exception as e:
             self.logger.error(f"✗ Audio processing failed: {e}")
             try:
-                self.episode_repo.mark_failure(episode['guid'], str(e))
+                self.episode_repo.mark_failure(episode_guid, str(e))
             except:
                 pass
             raise

@@ -34,6 +34,13 @@
 - All test execution: `python3 test_script.py`
 - All pip installations: `pip3 install package`
 
+## macOS Command Compatibility
+**CRITICAL**: On macOS, use `gtimeout` instead of `timeout` for command timeouts
+- All timeout commands: `gtimeout 300 python3 script.py`
+- Standard Linux `timeout` command is not available on macOS
+- For Claude Code Bash tool: Add `timeout` parameter (in milliseconds) to override 2-minute default
+  - Example: `timeout: 300000` for 5 minutes
+
 ## RSS Feed Management
 - Always use the real RSS feeds listed above for testing
 - Test episode discovery with realistic timeframes (7+ days)

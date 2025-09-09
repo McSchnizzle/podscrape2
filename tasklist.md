@@ -4,7 +4,7 @@
 **Project**: RSS Podcast Transcript Digest System (pivoted from YouTube)  
 **Total Duration**: 16 days across 8 phases  
 **Start Date**: September 9, 2025  
-**Current Status**: Phase 3 Pivoted to RSS + Parakeet ASR Architecture
+**Current Status**: Phase 5 Complete - Full RSS → Script Pipeline Operational
 
 ---
 
@@ -17,7 +17,7 @@
 | Phase 2: Channel Management & Discovery | ✅ Complete | Sep 9 | Sep 9 | 100% | ✅ 5/5 Tests Passed |
 | Phase 3: RSS Feed & Parakeet ASR | ✅ Complete | Sep 9 | Sep 10 | 100% | ✅ Passed |
 | Phase 4: Content Scoring System | ✅ Complete | Sep 9 | Sep 9 | 100% | ✅ Passed |
-| Phase 5: Script Generation | ⏳ Planned | Sep 16 | Sep 17 | 0% | ⏳ Pending |
+| Phase 5: Script Generation | ✅ Complete | Sep 9 | Sep 9 | 100% | ✅ Passed |
 | Phase 6: TTS & Audio Generation | ⏳ Planned | Sep 18 | Sep 19 | 0% | ⏳ Pending |
 | Phase 7: Publishing Pipeline | ⏳ Planned | Sep 20 | Sep 21 | 0% | ⏳ Pending |
 | Phase 8: Orchestration & Automation | ⏳ Planned | Sep 22 | Sep 23 | 0% | ⏳ Pending |
@@ -154,6 +154,16 @@
 - [x] **Task 5.7**: Implement script metadata tracking in database
 - [x] **Task 5.8**: Fix advertisement filtering in content scoring (5% trim from each end)
 - [x] **Task 5.9**: Fix database JSON query for episode filtering
+- [ ] **Task 5.10**: Add fallback general summary for days with no qualifying topics (score <0.65)
+  - When no topics have episodes scoring ≥0.65, select 1-5 undigested episodes
+  - Create general summary digest combining these episodes
+  - Mark selected episodes as 'digested' in database even though they didn't qualify for specific topics
+  - Publish this general digest to Vercel RSS feed for that day
+- [ ] **Task 5.11**: Add episode lifecycle management after digest creation
+  - Mark all episodes used in digests as 'digested' in database status field
+  - Move transcripts from data/transcripts/ to data/transcripts/digested/ folder
+  - Exclude 'digested' episodes from future daily digest queries
+  - Preserve digested transcripts for weekly summary generation on Fridays
 
 ### Testing Criteria
 - [x] Topic instructions load correctly and are properly formatted for GPT-5 prompts
@@ -161,6 +171,10 @@
 - [x] Script generation produces coherent, topic-focused content within word limits
 - [x] "No content" scenarios handled gracefully with appropriate default messaging
 - [x] Generated scripts meet quality standards and follow topic instruction guidelines
+- [ ] Fallback general summary system correctly handles days with no qualifying topics
+- [ ] General summary selects appropriate undigested episodes and marks them as processed
+- [ ] Episode lifecycle management correctly updates database status and moves transcript files
+- [ ] Digested episodes properly excluded from future daily digest queries
 - [x] **Test Script**: `test_phase5.py` - Topic loading, filtering, script generation quality
 
 ---
@@ -219,14 +233,21 @@
 - [ ] **Task 8.2**: Add manual trigger support for specific dates and catch-up processing
 - [ ] **Task 8.3**: Implement comprehensive error handling and recovery mechanisms
 - [ ] **Task 8.4**: Create cron job setup and documentation for daily automation
-- [ ] **Task 8.5**: End-to-end testing with real YouTube channels and full pipeline
+- [ ] **Task 8.5**: Add Friday weekly summary generation for each topic
+  - On Fridays, generate weekly summary episodes for each topic using all digested transcripts from that week
+  - Use data/transcripts/digested/ folder to collect episodes by topic and date range
+  - Create separate weekly digest scripts combining 7 days of content per topic
+  - Publish weekly summaries to RSS feed alongside daily digests
+- [ ] **Task 8.6**: End-to-end testing with real RSS channels and full pipeline
 
 ### Testing Criteria
 - [ ] Orchestrator correctly handles different lookback periods based on day of week
 - [ ] Manual trigger allows processing of specific dates for debugging and catch-up
 - [ ] Error handling gracefully manages API failures, rate limits, and edge cases
 - [ ] Cron job setup documented and tested for reliable daily execution
-- [ ] Full end-to-end pipeline processes real channels through to RSS feed publication
+- [ ] Friday weekly summary generation correctly aggregates digested episodes by topic
+- [ ] Weekly summaries published to RSS feed alongside daily digests with proper metadata
+- [ ] Full end-to-end pipeline processes real RSS channels through to RSS feed publication
 - [ ] **Test Script**: `test_phase8.py` - Full pipeline integration, error scenarios, automation
 
 ---
@@ -342,4 +363,4 @@ python test_performance.py
 ---
 
 **Last Updated**: September 9, 2025  
-**Next Milestone**: Complete Phase 5: Script Generation
+**Next Milestone**: Complete Phase 6: TTS & Audio Generation
