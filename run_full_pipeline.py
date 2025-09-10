@@ -25,6 +25,10 @@ from src.generation.script_generator import ScriptGenerator
 from src.database.models import get_episode_repo, get_digest_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.audio.complete_audio_processor import CompleteAudioProcessor
+from src.publishing.github_publisher import create_github_publisher
+from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata
+from src.publishing.retention_manager import create_retention_manager
+from src.publishing.vercel_deployer import create_vercel_deployer
 import feedparser
 import sqlite3
 
@@ -67,6 +71,32 @@ class FullPipelineRunner:
         self.complete_audio_processor = CompleteAudioProcessor()
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
+        
+        # Initialize publishing components
+        try:
+            from src.publishing.rss_generator import PodcastMetadata
+            
+            # Create podcast metadata for RSS generation
+            podcast_metadata = PodcastMetadata(
+                title="Daily AI & Tech Digest",
+                description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
+                author="Paul Brown", 
+                email="paul@paulrbrown.org",
+                category="Technology",
+                subcategory="Tech News",
+                website_url="https://podcast.paulrbrown.org",
+                copyright="© 2025 Paul Brown"
+            )
+            
+            self.github_publisher = create_github_publisher()
+            self.rss_generator = create_rss_generator(podcast_metadata)
+            self.retention_manager = create_retention_manager()
+            self.vercel_deployer = create_vercel_deployer()
+            self.publishing_enabled = True
+            self.logger.info("Publishing components initialized successfully")
+        except Exception as e:
+            self.logger.warning(f"Publishing components disabled: {e}")
+            self.publishing_enabled = False
         
         # Initialize Parakeet transcriber (after dependency verification)
         if hasattr(self, 'has_parakeet_mlx') and self.has_parakeet_mlx:
@@ -327,10 +357,10 @@ class FullPipelineRunner:
             self.logger.info(f"\n🔪 STEP 2.2: Audio Chunking")
             chunk_paths = self.audio_processor.chunk_audio(audio_path, episode_guid)
             
-            # TESTING LIMIT: Only process first 3 chunks for faster testing
-            if len(chunk_paths) > 3:
-                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 3 chunks (of {len(chunk_paths)})")
-                chunk_paths = chunk_paths[:3]
+            # TESTING LIMIT: Only process first 2 chunks for faster testing
+            if len(chunk_paths) > 2:
+                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 2 chunks (of {len(chunk_paths)})")
+                chunk_paths = chunk_paths[:2]
             
             total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
             self.logger.info(f"✓ Processing {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")
@@ -481,7 +511,7 @@ class FullPipelineRunner:
             self.logger.info(f"\n✅ TRANSCRIPTION COMPLETE:")
             self.logger.info(f"   Total words: {total_words:,}")
             self.logger.info(f"   Total characters: {total_chars:,}")
-            self.logger.info(f"   Chunks processed: {len(chunk_paths)}")
+            self.logger.info(f"   Chunks processed: {len(transcription_result.chunks)} out of {len(chunk_paths)} total")
             self.logger.info(f"   Saved to: {transcript_path}")
             
             return db_episode
@@ -768,6 +798,9 @@ class FullPipelineRunner:
             # Phase 6: TTS & Audio Generation
             audio_results = self.generate_audio(all_digests)
             
+            # Phase 7: Publishing Pipeline
+            publishing_results = self.publish_digests(all_digests)
+            
             # Final Summary
             elapsed = datetime.now() - start_time
             
@@ -827,8 +860,29 @@ class FullPipelineRunner:
                     else:
                         self.logger.info(f"      • {result['topic']}: Generated successfully")
             
+            # Publishing summary
+            if publishing_results and not publishing_results.get('skipped'):
+                self.logger.info(f"   📡 Publishing Results:")
+                self.logger.info(f"      • GitHub Releases: {publishing_results.get('published', 0)} published")
+                self.logger.info(f"      • RSS Feed: {'✅ Generated' if publishing_results.get('rss_generated') else '❌ Failed'}")
+                self.logger.info(f"      • Vercel Deployment: {'✅ Deployed' if publishing_results.get('deployed') else '❌ Failed'}")
+                
+                if publishing_results.get('rss_url'):
+                    self.logger.info(f"      • RSS URL: {publishing_results['rss_url']}")
+            elif publishing_results and publishing_results.get('skipped'):
+                self.logger.info(f"   📡 Publishing: ⏭️  Skipped ({publishing_results.get('reason', 'Unknown reason')})")
+            
             self.logger.info(f"\n📋 Log File: {self.log_file}")
-            self.logger.info("🚀 PIPELINE SUCCESS - Ready for production use!")
+            
+            # Final status message
+            if publishing_results and publishing_results.get('deployed'):
+                self.logger.info("🌟 COMPLETE SUCCESS - RSS feed live at podcast.paulrbrown.org!")
+            elif self.publishing_enabled:
+                self.logger.info("⚠️  PARTIAL SUCCESS - Audio generated but publishing failed")
+            else:
+                self.logger.info("✅ PIPELINE SUCCESS - Audio generated (publishing disabled)")
+            
+            self.logger.info("🚀 Ready for production use!")
             
         except Exception as e:
             elapsed = datetime.now() - start_time
@@ -836,6 +890,180 @@ class FullPipelineRunner:
             self.logger.error(f"Error: {e}")
             self.logger.error(f"📋 Check log file for details: {self.log_file}")
             raise
+    
+    def publish_digests(self, digests):
+        """
+        Phase 7: Publishing Pipeline
+        Publish generated digests to GitHub, create RSS feed, and deploy to Vercel
+        """
+        self.logger.info("\n" + "="*100)
+        self.logger.info("📡 PHASE 7: PUBLISHING PIPELINE")
+        self.logger.info("="*100)
+        
+        if not self.publishing_enabled:
+            self.logger.warning("Publishing components disabled - skipping Phase 7")
+            return {"skipped": True, "reason": "Publishing components not available"}
+        
+        if not digests:
+            self.logger.info("No digests to publish")
+            return {"published": 0, "rss_generated": False, "deployed": False}
+        
+        try:
+            published_digests = []
+            failed_digests = []
+            
+            # Step 1: Publish each digest to GitHub
+            self.logger.info(f"📤 Publishing {len(digests)} digests to GitHub...")
+            
+            for i, digest in enumerate(digests, 1):
+                try:
+                    self.logger.info(f"[{i}/{len(digests)}] Publishing: {digest.topic}")
+                    
+                    # Check if digest has MP3 file
+                    if not digest.mp3_path or not Path(digest.mp3_path).exists():
+                        self.logger.warning(f"  ⚠️  No MP3 file found for {digest.topic}")
+                        failed_digests.append(digest)
+                        continue
+                    
+                    # Upload to GitHub
+                    mp3_files = [digest.mp3_path]
+                    release = self.github_publisher.create_daily_release(digest.digest_date, mp3_files)
+                    
+                    if release:
+                        # Update digest in database with GitHub URL
+                        with self.digest_repo.db_manager.get_connection() as conn:
+                            conn.execute("""
+                                UPDATE digests 
+                                SET github_url = ?, github_release_id = ?, published_at = ?
+                                WHERE id = ?
+                            """, (release.html_url, str(release.id), datetime.now().isoformat(), digest.id))
+                            conn.commit()
+                        
+                        digest.github_url = release.html_url  # Update object for RSS generation
+                        published_digests.append(digest)
+                        self.logger.info(f"  ✅ Published: {release.html_url}")
+                    else:
+                        self.logger.error(f"  ❌ Failed to publish {digest.topic}")
+                        failed_digests.append(digest)
+                        
+                except Exception as e:
+                    self.logger.error(f"  ❌ Error publishing {digest.topic}: {e}")
+                    failed_digests.append(digest)
+            
+            # Step 2: Generate RSS Feed
+            self.logger.info(f"\n📰 Generating RSS feed from {len(published_digests)} published digests...")
+            
+            rss_content = None
+            if published_digests:
+                try:
+                    # Convert digests to PodcastEpisode format
+                    episodes = []
+                    for digest in published_digests:
+                        # Extract MP3 URL from GitHub release
+                        repo = os.getenv('GITHUB_REPOSITORY', 'user/repo')
+                        date_str = digest.digest_date.isoformat()
+                        mp3_filename = Path(digest.mp3_path).name
+                        
+                        mp3_url = f"https://github.com/{repo}/releases/download/daily-{date_str}/{mp3_filename}"
+                        
+                        episode = PodcastEpisode(
+                            title=digest.mp3_title or f"{digest.topic} - {digest.digest_date}",
+                            description=digest.mp3_summary or f"Daily digest for {digest.topic}",
+                            mp3_url=mp3_url,
+                            pub_date=datetime.combine(digest.digest_date, datetime.min.time().replace(hour=12)),
+                            duration_seconds=digest.mp3_duration_seconds or 0,
+                            file_size=Path(digest.mp3_path).stat().st_size if Path(digest.mp3_path).exists() else 0,
+                            episode_id=f"digest-{date_str}-{digest.topic.lower().replace(' ', '-')}"
+                        )
+                        episodes.append(episode)
+                    
+                    # Create podcast metadata
+                    podcast_meta = create_podcast_metadata(
+                        title="Daily AI & Tech Digest",
+                        description="Automated daily digest of AI and technology podcast episodes",
+                        website_url="https://podcast.paulrbrown.org",
+                        author="Paul Brown",
+                        email="paul@paulrbrown.org"
+                    )
+                    
+                    # Generate RSS XML
+                    rss_content = self.rss_generator.generate_rss_feed(episodes, podcast_meta)
+                    
+                    # Save RSS feed locally
+                    rss_file = Path("data") / "rss" / "daily-digest.xml"
+                    rss_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    with open(rss_file, 'w', encoding='utf-8') as f:
+                        f.write(rss_content)
+                    
+                    self.logger.info(f"  ✅ RSS feed generated: {rss_file}")
+                    
+                except Exception as e:
+                    self.logger.error(f"  ❌ Failed to generate RSS feed: {e}")
+                    rss_content = None
+            
+            # Step 3: Deploy to Vercel
+            vercel_deployed = False
+            if rss_content:
+                try:
+                    self.logger.info(f"\n🚀 Deploying to Vercel...")
+                    
+                    result = self.vercel_deployer.deploy_rss_feed(rss_content, production=True)
+                    
+                    if result.success:
+                        self.logger.info(f"  ✅ Deployed: {result.url}")
+                        
+                        # Validate deployment
+                        if self.vercel_deployer.validate_deployment():
+                            self.logger.info("  ✅ Deployment validation passed")
+                            vercel_deployed = True
+                            
+                            # Update database with RSS publication timestamp
+                            with self.digest_repo.db_manager.get_connection() as conn:
+                                conn.execute("""
+                                    UPDATE digests 
+                                    SET rss_published_at = ?
+                                    WHERE github_url IS NOT NULL 
+                                    AND rss_published_at IS NULL
+                                """, (datetime.now().isoformat(),))
+                                conn.commit()
+                        else:
+                            self.logger.error("  ⚠️  Deployment validation failed")
+                    else:
+                        self.logger.error(f"  ❌ Deployment failed: {result.error}")
+                        
+                except Exception as e:
+                    self.logger.error(f"  ❌ Error deploying to Vercel: {e}")
+            
+            # Step 4: Cleanup (optional)
+            try:
+                self.logger.info(f"\n🧹 Running cleanup...")
+                self.retention_manager.cleanup_all()
+                self.logger.info("  ✅ Cleanup completed")
+            except Exception as e:
+                self.logger.warning(f"  ⚠️  Cleanup failed: {e}")
+            
+            # Summary
+            self.logger.info(f"\n📊 PUBLISHING SUMMARY:")
+            self.logger.info(f"   📤 Published to GitHub: {len(published_digests)}")
+            self.logger.info(f"   ❌ Failed to publish: {len(failed_digests)}")
+            self.logger.info(f"   📰 RSS feed generated: {'✅' if rss_content else '❌'}")
+            self.logger.info(f"   🚀 Vercel deployed: {'✅' if vercel_deployed else '❌'}")
+            
+            if vercel_deployed:
+                self.logger.info(f"   🔗 RSS feed URL: https://podcast.paulrbrown.org/daily-digest2.xml")
+            
+            return {
+                "published": len(published_digests),
+                "failed": len(failed_digests),
+                "rss_generated": bool(rss_content),
+                "deployed": vercel_deployed,
+                "rss_url": "https://podcast.paulrbrown.org/daily-digest2.xml" if vercel_deployed else None
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Publishing pipeline failed: {e}")
+            return {"error": str(e), "published": 0, "rss_generated": False, "deployed": False}
 
 def main():
     parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline')

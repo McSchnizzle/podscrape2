@@ -335,6 +335,20 @@ Thank you for your understanding, and we'll see you tomorrow!
                 logger.error(f"Failed to create general summary: {e}")
         
         logger.info(f"Created {len(digests)} digests for {digest_date}")
+        
+        # Mark all episodes used in digests as 'digested' after all daily digests are complete
+        all_used_episode_ids = set()
+        for digest in digests:
+            if digest.episode_ids:
+                all_used_episode_ids.update(digest.episode_ids)
+        
+        if all_used_episode_ids:
+            logger.info(f"Marking {len(all_used_episode_ids)} episodes as digested after completing all daily digests")
+            for episode_id in all_used_episode_ids:
+                episode = self.episode_repo.get_by_id(episode_id)
+                if episode:
+                    self.mark_episode_as_digested(episode)
+        
         return digests
     
     def get_undigested_episodes(self, start_date: date = None, 

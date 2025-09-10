@@ -195,7 +195,7 @@ class EpisodeRepository:
         
         query = f"""
         SELECT * FROM episodes 
-        WHERE status IN ('scored', 'digested') 
+        WHERE status = 'scored'
         AND scores IS NOT NULL
         AND json_extract(scores, ?) >= ?
         """
