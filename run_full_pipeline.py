@@ -327,10 +327,10 @@ class FullPipelineRunner:
             self.logger.info(f"\n🔪 STEP 2.2: Audio Chunking")
             chunk_paths = self.audio_processor.chunk_audio(audio_path, episode_guid)
             
-            # TESTING LIMIT: Only process first 2 chunks for faster testing
-            if len(chunk_paths) > 2:
-                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 2 chunks (of {len(chunk_paths)})")
-                chunk_paths = chunk_paths[:2]
+            # TESTING LIMIT: Only process first 3 chunks for faster testing
+            if len(chunk_paths) > 3:
+                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 3 chunks (of {len(chunk_paths)})")
+                chunk_paths = chunk_paths[:3]
             
             total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
             self.logger.info(f"✓ Processing {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")

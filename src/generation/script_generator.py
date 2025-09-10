@@ -100,14 +100,30 @@ class ScriptGenerator:
         return instructions
     
     def get_qualifying_episodes(self, topic: str, start_date: date = None, 
-                              end_date: date = None) -> List[Episode]:
-        """Get episodes that qualify for digest generation (score >= threshold)"""
-        return self.episode_repo.get_scored_episodes_for_topic(
+                              end_date: date = None, max_episodes: int = 5) -> List[Episode]:
+        """
+        Get episodes that qualify for digest generation (score >= threshold)
+        Limited to max_episodes per topic to maintain digest quality
+        """
+        all_qualifying = self.episode_repo.get_scored_episodes_for_topic(
             topic=topic,
             min_score=self.score_threshold,
             start_date=start_date,
             end_date=end_date
         )
+        
+        # If we have more than max_episodes, take the highest scoring ones
+        if len(all_qualifying) > max_episodes:
+            # Sort by score (highest first) and take top max_episodes
+            sorted_episodes = sorted(
+                all_qualifying, 
+                key=lambda ep: ep.scores.get(topic, 0.0), 
+                reverse=True
+            )
+            logger.info(f"Limiting {topic} episodes from {len(all_qualifying)} to {max_episodes} (saving {len(all_qualifying) - max_episodes} for future digests)")
+            return sorted_episodes[:max_episodes]
+        
+        return all_qualifying
     
     def generate_script(self, topic: str, episodes: List[Episode], 
                        digest_date: date) -> Tuple[str, int]:

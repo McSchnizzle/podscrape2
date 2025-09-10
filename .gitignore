@@ -92,3 +92,4 @@ yarn-error.log*
 # Project specific
 config/channels.json
 config/topics.json
+.vercel

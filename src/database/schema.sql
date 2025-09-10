@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS digests (
     episode_count INTEGER DEFAULT 0,
     average_score REAL,
     github_url TEXT,
+    github_release_id TEXT,
+    rss_published_at DATETIME,
     published_at DATETIME,
     generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(topic, digest_date)
