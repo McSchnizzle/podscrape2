@@ -354,6 +354,12 @@ class DigestRepository:
         rows = self.db.execute_query(query, (digest_date.isoformat(),))
         return [self._row_to_digest(row) for row in rows]
     
+    def get_by_id(self, digest_id: int) -> Optional[Digest]:
+        """Get digest by ID"""
+        query = "SELECT * FROM digests WHERE id = ?"
+        rows = self.db.execute_query(query, (digest_id,))
+        return self._row_to_digest(rows[0]) if rows else None
+    
     def update_script(self, digest_id: int, script_path: str, word_count: int):
         """Update script information"""
         query = "UPDATE digests SET script_path = ?, script_word_count = ? WHERE id = ?"

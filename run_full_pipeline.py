@@ -798,8 +798,24 @@ class FullPipelineRunner:
             # Phase 6: TTS & Audio Generation
             audio_results = self.generate_audio(all_digests)
             
+            # Refresh digest objects from database to get updated mp3_path values
+            # (Phase 6 updates database but not in-memory objects)
+            self.logger.info("🔄 Refreshing digest data from database after audio generation...")
+            refreshed_digests = []
+            for digest in all_digests:
+                fresh_digest = self.digest_repo.get_by_id(digest.id)
+                if fresh_digest:
+                    refreshed_digests.append(fresh_digest)
+                    if fresh_digest.mp3_path:
+                        self.logger.info(f"   ✅ {fresh_digest.topic}: Found MP3 at {Path(fresh_digest.mp3_path).name}")
+                    else:
+                        self.logger.warning(f"   ⚠️  {fresh_digest.topic}: No MP3 path in database")
+                else:
+                    self.logger.error(f"   ❌ Could not refresh digest {digest.id}")
+                    refreshed_digests.append(digest)  # Fall back to original
+            
             # Phase 7: Publishing Pipeline
-            publishing_results = self.publish_digests(all_digests)
+            publishing_results = self.publish_digests(refreshed_digests)
             
             # Final Summary
             elapsed = datetime.now() - start_time
