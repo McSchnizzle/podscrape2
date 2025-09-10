@@ -8,7 +8,7 @@ Designed for terminal execution with comprehensive logging to file.
 import os
 import sys
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 import argparse
 
@@ -24,6 +24,7 @@ from src.scoring.content_scorer import ContentScorer
 from src.generation.script_generator import ScriptGenerator
 from src.database.models import get_episode_repo, get_digest_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
+from src.audio.complete_audio_processor import CompleteAudioProcessor
 import feedparser
 
 class FullPipelineRunner:
@@ -62,6 +63,7 @@ class FullPipelineRunner:
         self.audio_processor = AudioProcessor()
         self.content_scorer = ContentScorer()
         self.script_generator = ScriptGenerator()
+        self.complete_audio_processor = CompleteAudioProcessor()
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
         
@@ -157,10 +159,27 @@ class FullPipelineRunner:
                 
                 self.logger.info(f"  Found {len(feed.entries)} episodes in feed")
                 
-                # Check recent episodes for new ones
+                # Check recent episodes for new ones (within last 7 days)
+                cutoff_date = datetime.now() - timedelta(days=7)
+                
                 for i, entry in enumerate(feed.entries[:10]):
                     episode_guid = entry.get('id', entry.get('guid', entry.link))
                     title = entry.get('title', 'Untitled')
+                    
+                    # Parse episode published date
+                    published_date = None
+                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                        published_date = datetime(*entry.published_parsed[:6])
+                    elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                        published_date = datetime(*entry.updated_parsed[:6])
+                    else:
+                        # Fallback to current time if no date available
+                        published_date = datetime.now()
+                    
+                    # Skip episodes older than 7 days
+                    if published_date < cutoff_date:
+                        self.logger.info(f"  [{i+1:2d}] SKIP: {title[:50]}... (older than 7 days: {published_date.strftime('%Y-%m-%d')})")
+                        continue
                     
                     # Check if episode needs processing
                     existing = self.episode_repo.get_by_episode_guid(episode_guid)
@@ -198,7 +217,7 @@ class FullPipelineRunner:
                         'title': title,
                         'description': entry.get('summary', '')[:500],
                         'audio_url': audio_url,
-                        'published_date': datetime.now(),  # Simplified for demo
+                        'published_date': published_date,
                         'duration_seconds': None,
                         'feed_name': feed_name,
                         'expected_topics': feed_info['expected_topics']
@@ -206,6 +225,7 @@ class FullPipelineRunner:
                     
                     self.logger.info(f"  [{i+1:2d}] ✅ NEW: {title}")
                     self.logger.info(f"       Feed: {feed_name}")
+                    self.logger.info(f"       Published: {published_date.strftime('%Y-%m-%d %H:%M')}")
                     self.logger.info(f"       Audio: {audio_url[:80]}...")
                     self.logger.info(f"       Expected topics: {', '.join(feed_info['expected_topics'])}")
                     
@@ -370,22 +390,23 @@ class FullPipelineRunner:
             # Cleanup: Delete audio chunks and in-progress file
             self.logger.info(f"\n🧹 STEP 2.4: Cleanup")
             try:
-                # Delete all audio chunks for this episode
+                # Delete ALL audio chunks for this episode (not just processed ones)
                 chunks_deleted = 0
-                for chunk_path_str in chunk_paths:
-                    chunk_path = Path(chunk_path_str)
-                    if chunk_path.exists():
-                        chunk_path.unlink()
-                        chunks_deleted += 1
-                
-                # Delete the chunks directory if empty
                 chunk_episode_dir = Path(chunk_paths[0]).parent if chunk_paths else None
+                
                 if chunk_episode_dir and chunk_episode_dir.exists():
+                    # Delete all files in the episode chunk directory
+                    for chunk_file in chunk_episode_dir.iterdir():
+                        if chunk_file.is_file():
+                            chunk_file.unlink()
+                            chunks_deleted += 1
+                    
+                    # Remove the empty directory
                     try:
-                        chunk_episode_dir.rmdir()  # Only removes if empty
+                        chunk_episode_dir.rmdir()
                         self.logger.info(f"✓ Removed chunk directory: {chunk_episode_dir}")
-                    except OSError:
-                        pass  # Directory not empty, leave it
+                    except OSError as e:
+                        self.logger.warning(f"⚠️ Could not remove chunk directory {chunk_episode_dir}: {e}")
                 
                 # Delete in-progress file
                 if in_progress_file.exists():
@@ -524,6 +545,64 @@ class FullPipelineRunner:
         self.logger.info(f"\n✅ DIGEST GENERATION COMPLETE: {len(digests)} digests created")
         return digests
     
+    def generate_audio(self, digests):
+        """Generate TTS audio for all qualifying digests (Phase 6)"""
+        self.logger.info("\n" + "="*80)
+        self.logger.info("PHASE 6: TTS & AUDIO GENERATION")
+        self.logger.info("="*80)
+        
+        if not digests:
+            self.logger.info("📝 No digests to process for audio generation")
+            return []
+        
+        audio_results = []
+        
+        for digest in digests:
+            self.logger.info(f"\n🎤 Generating audio for: {digest.topic}")
+            
+            try:
+                # Use CompleteAudioProcessor to handle TTS generation
+                result = self.complete_audio_processor.process_digest_to_audio(digest)
+                
+                if result.get('skipped'):
+                    self.logger.info(f"   ⏭️  Skipped: {result.get('skip_reason')}")
+                elif result.get('success'):
+                    audio_metadata = result.get('audio_metadata', {})
+                    file_path = audio_metadata.get('file_path', 'Unknown')
+                    file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
+                    self.logger.info(f"   ✅ Generated successfully: {file_name}")
+                else:
+                    errors = result.get('errors', ['Unknown error'])
+                    self.logger.error(f"   ❌ Failed: {errors[0]}")
+                
+                audio_results.append(result)
+                
+            except Exception as e:
+                self.logger.error(f"   💥 Audio generation failed for {digest.topic}: {e}")
+                audio_results.append({
+                    'digest_id': digest.id,
+                    'topic': digest.topic,
+                    'success': False,
+                    'errors': [str(e)]
+                })
+        
+        # Summary
+        successful = [r for r in audio_results if r.get('success') and not r.get('skipped')]
+        skipped = [r for r in audio_results if r.get('skipped')]
+        failed = [r for r in audio_results if not r.get('success')]
+        
+        self.logger.info(f"\n✅ AUDIO GENERATION COMPLETE:")
+        self.logger.info(f"   🎵 Generated: {len(successful)} MP3 files")
+        self.logger.info(f"   ⏭️  Skipped: {len(skipped)} (no qualifying episodes)")
+        self.logger.info(f"   ❌ Failed: {len(failed)}")
+        
+        for result in successful:
+            file_path = result.get('audio_metadata', {}).get('file_path', 'Unknown')
+            file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
+            self.logger.info(f"      • {result['topic']}: {file_name}")
+        
+        return audio_results
+    
     def run_pipeline(self):
         """Execute the complete pipeline"""
         start_time = datetime.now()
@@ -540,6 +619,9 @@ class FullPipelineRunner:
             
             # Phase 4: Digest Generation
             digests = self.generate_digests(scored_episode)
+            
+            # Phase 6: TTS & Audio Generation
+            audio_results = self.generate_audio(digests)
             
             # Final Summary
             elapsed = datetime.now() - start_time
@@ -565,6 +647,20 @@ class FullPipelineRunner:
             
             for digest in digests:
                 self.logger.info(f"   • {digest.topic}: {digest.script_word_count:,} words")
+            
+            # Audio generation summary
+            if audio_results:
+                successful_audio = [r for r in audio_results if r.get('success') and not r.get('skipped')]
+                skipped_audio = [r for r in audio_results if r.get('skipped')]
+                
+                self.logger.info(f"🎵 Audio Generated: {len(successful_audio)} MP3 files")
+                if skipped_audio:
+                    self.logger.info(f"⏭️  Audio Skipped: {len(skipped_audio)} (no qualifying episodes)")
+                
+                for result in successful_audio:
+                    file_path = result.get('audio_metadata', {}).get('file_path', 'Unknown')
+                    file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
+                    self.logger.info(f"   • {result['topic']}: {file_name}")
             
             self.logger.info(f"\n📋 Log File: {self.log_file}")
             self.logger.info("🚀 PIPELINE SUCCESS - Ready for production use!")

@@ -195,7 +195,7 @@ class EpisodeRepository:
         
         query = f"""
         SELECT * FROM episodes 
-        WHERE status = 'scored' 
+        WHERE status IN ('scored', 'digested') 
         AND scores IS NOT NULL
         AND json_extract(scores, ?) >= ?
         """
@@ -255,6 +255,46 @@ class EpisodeRepository:
         query = "DELETE FROM episodes WHERE published_date < date('now', '-' || ? || ' days')"
         return self.db.execute_update(query, (days_old,))
     
+    def get_undigested_episodes(self, start_date: date = None, end_date: date = None, 
+                               limit: int = 5) -> List[Episode]:
+        """Get episodes that haven't been used in digests"""
+        query = """
+        SELECT * FROM episodes 
+        WHERE status != 'digested'
+        AND status NOT IN ('pending', 'failed') 
+        """
+        params = []
+        
+        if start_date:
+            query += " AND date(published_date) >= ?"
+            params.append(start_date.isoformat())
+        
+        if end_date:
+            query += " AND date(published_date) <= ?"
+            params.append(end_date.isoformat())
+        
+        query += " ORDER BY published_date DESC LIMIT ?"
+        params.append(limit)
+        
+        rows = self.db.execute_query(query, tuple(params))
+        return [self._row_to_episode(row) for row in rows]
+    
+    def update_status_by_id(self, episode_id: int, status: str):
+        """Update episode status by ID"""
+        query = "UPDATE episodes SET status = ? WHERE id = ?"
+        self.db.execute_update(query, (status, episode_id))
+    
+    def update_transcript_path(self, episode_id: int, transcript_path: str):
+        """Update transcript path by ID"""
+        query = "UPDATE episodes SET transcript_path = ? WHERE id = ?"
+        self.db.execute_update(query, (transcript_path, episode_id))
+    
+    def get_by_id(self, episode_id: int) -> Optional[Episode]:
+        """Get episode by ID"""
+        query = "SELECT * FROM episodes WHERE id = ?"
+        rows = self.db.execute_query(query, (episode_id,))
+        return self._row_to_episode(rows[0]) if rows else None
+    
     def _row_to_episode(self, row: sqlite3.Row) -> Episode:
         """Convert database row to Episode object"""
         scores = json.loads(row['scores']) if row['scores'] else None
@@ -307,6 +347,12 @@ class DigestRepository:
         query = "SELECT * FROM digests WHERE topic = ? AND digest_date = ?"
         rows = self.db.execute_query(query, (topic, digest_date.isoformat()))
         return self._row_to_digest(rows[0]) if rows else None
+    
+    def get_by_date(self, digest_date: date) -> List[Digest]:
+        """Get all digests for a specific date"""
+        query = "SELECT * FROM digests WHERE digest_date = ?"
+        rows = self.db.execute_query(query, (digest_date.isoformat(),))
+        return [self._row_to_digest(row) for row in rows]
     
     def update_script(self, digest_id: int, script_path: str, word_count: int):
         """Update script information"""

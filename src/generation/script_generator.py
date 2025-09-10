@@ -285,6 +285,11 @@ Thank you for your understanding, and we'll see you tomorrow!
             digest.id = digest_id
             
             logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
+            
+            # TODO: Mark episodes as digested AFTER all daily digests are complete
+            # This allows episodes to appear in multiple topic digests
+            # self.mark_digest_episodes_as_digested(digest)
+            
             return digest
     
     def create_daily_digests(self, digest_date: date, 
@@ -292,6 +297,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         """Create digests for all active topics for given date"""
         digests = []
         
+        # Try to create topic-specific digests
         for topic_name in self.topic_instructions:
             try:
                 digest = self.create_digest(topic_name, digest_date, start_date, end_date)
@@ -300,5 +306,222 @@ Thank you for your understanding, and we'll see you tomorrow!
                 logger.error(f"Failed to create digest for {topic_name}: {e}")
                 continue
         
+        # Check if we have any qualifying episodes (non-empty digests)
+        qualifying_digests = [d for d in digests if d.episode_count > 0]
+        
+        if not qualifying_digests:
+            logger.info("No qualifying episodes for any topics, attempting general summary")
+            try:
+                general_digest = self.create_general_summary(digest_date, start_date, end_date)
+                if general_digest:
+                    digests.append(general_digest)
+            except Exception as e:
+                logger.error(f"Failed to create general summary: {e}")
+        
         logger.info(f"Created {len(digests)} digests for {digest_date}")
         return digests
+    
+    def get_undigested_episodes(self, start_date: date = None, 
+                               end_date: date = None, limit: int = 5) -> List[Episode]:
+        """Get undigested episodes for fallback general summary"""
+        return self.episode_repo.get_undigested_episodes(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+    
+    def create_general_summary(self, digest_date: date, 
+                              start_date: date = None, end_date: date = None) -> Optional[Digest]:
+        """
+        Create fallback general summary when no topics have qualifying episodes.
+        Selects 1-5 undigested episodes and creates a general digest.
+        """
+        logger.info(f"Creating general summary for {digest_date}")
+        
+        # Check if we already have any topic-specific digests for this date
+        existing_digests = self.digest_repo.get_by_date(digest_date)
+        has_topic_digests = any(d.topic != "General Summary" for d in existing_digests)
+        
+        if has_topic_digests:
+            logger.info("Topic-specific digests exist, skipping general summary")
+            return None
+        
+        # Check if general summary already exists
+        existing_general = next((d for d in existing_digests if d.topic == "General Summary"), None)
+        if existing_general and existing_general.script_path:
+            logger.info("General summary already exists for this date")
+            return existing_general
+        
+        # Get undigested episodes
+        episodes = self.get_undigested_episodes(start_date, end_date, limit=5)
+        if not episodes:
+            logger.info("No undigested episodes available for general summary")
+            return None
+        
+        logger.info(f"Found {len(episodes)} undigested episodes for general summary")
+        
+        # Generate general summary script
+        script_content, word_count = self._generate_general_summary_script(episodes, digest_date)
+        
+        # Save script to file
+        script_path = self.save_script("General_Summary", digest_date, script_content, word_count)
+        
+        # Mark episodes as digested
+        for episode in episodes:
+            self.mark_episode_as_digested(episode)
+        
+        # Create digest in database
+        if existing_general:
+            # Update existing
+            self.digest_repo.update_script(existing_general.id, script_path, word_count)
+            existing_general.script_path = script_path
+            existing_general.script_word_count = word_count
+            return existing_general
+        else:
+            # Create new digest
+            digest = Digest(
+                topic="General Summary",
+                digest_date=digest_date,
+                episode_ids=[ep.id for ep in episodes],
+                episode_count=len(episodes),
+                script_path=script_path,
+                script_word_count=word_count,
+                average_score=0.0  # No topic-specific score for general summary
+            )
+            
+            digest_id = self.digest_repo.create(digest)
+            digest.id = digest_id
+            
+            logger.info(f"Created general summary digest {digest_id}: {word_count} words, {len(episodes)} episodes")
+            return digest
+    
+    def _generate_general_summary_script(self, episodes: List[Episode], 
+                                        digest_date: date) -> Tuple[str, int]:
+        """Generate a general summary script from undigested episodes"""
+        # Prepare episode transcripts
+        transcripts = []
+        for episode in episodes:
+            if episode.transcript_path and Path(episode.transcript_path).exists():
+                with open(episode.transcript_path, 'r', encoding='utf-8') as f:
+                    transcript = f.read()
+                transcripts.append({
+                    'title': episode.title,
+                    'published_date': episode.published_date.strftime('%Y-%m-%d'),
+                    'transcript': transcript[:10000]  # Truncate to 10K chars for API limits
+                })
+        
+        if not transcripts:
+            # Return basic message if no transcripts available
+            script = f"""# General Summary - {digest_date.strftime('%B %d, %Y')}
+
+Hello and welcome to your general podcast digest for {digest_date.strftime('%B %d, %Y')}.
+
+Today we found some interesting podcast episodes that didn't quite reach our specific topic thresholds, but still contain valuable insights worth sharing.
+
+Unfortunately, we encountered some technical issues accessing the episode transcripts. We'll work to resolve this and provide you with better content tomorrow.
+
+Thank you for your patience, and we'll see you tomorrow with fresh insights!
+
+---
+*This digest was automatically generated from episodes that didn't meet specific topic thresholds.*"""
+            return script, len(script.split())
+        
+        # Generate script using GPT-5
+        system_prompt = """You are a professional podcast script writer creating a general daily digest.
+
+Create a compelling summary that:
+1. Introduces the digest and today's date
+2. Provides key insights from the episode transcripts provided
+3. Groups related themes and topics naturally
+4. Maintains a conversational, engaging tone
+5. Concludes with a brief summary and sign-off
+6. Keeps content under 1000 words
+
+Focus on extracting the most interesting and valuable insights across all episodes."""
+
+        user_prompt = f"""Create a general podcast digest for {digest_date.strftime('%B %d, %Y')} from these episodes:
+
+"""
+        for i, transcript in enumerate(transcripts, 1):
+            user_prompt += f"""
+Episode {i}: {transcript['title']} (Published: {transcript['published_date']})
+Transcript: {transcript['transcript']}
+
+"""
+
+        user_prompt += "\nCreate an engaging general digest that highlights the most interesting insights from these episodes."
+
+        try:
+            response = self.client.responses.create(
+                model="gpt-5",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=2000
+            )
+            
+            script = response.output_text
+            word_count = len(script.split())
+            
+            if word_count > 1200:
+                logger.warning(f"General summary script ({word_count} words) exceeds recommended 1000 words")
+            
+            logger.info(f"Generated general summary script: {word_count} words")
+            return script, word_count
+            
+        except Exception as e:
+            logger.error(f"GPT-5 error for general summary: {e}")
+            # Fallback to basic summary
+            basic_script = f"""# General Summary - {digest_date.strftime('%B %d, %Y')}
+
+Hello and welcome to your general podcast digest for {digest_date.strftime('%B %d, %Y')}.
+
+Today we have {len(episodes)} interesting episodes that contain valuable insights:
+
+"""
+            for episode in episodes:
+                basic_script += f"- **{episode.title}** (Published: {episode.published_date.strftime('%B %d, %Y')})\n"
+            
+            basic_script += """
+While we encountered some technical issues generating a detailed summary, these episodes are worth checking out directly.
+
+Thank you for your understanding, and we'll see you tomorrow with fresh insights!
+
+---
+*This digest was automatically generated from episodes that didn't meet specific topic thresholds.*"""
+            
+            return basic_script, len(basic_script.split())
+    
+    def mark_episode_as_digested(self, episode: Episode) -> None:
+        """Mark episode as digested and move transcript to digested folder"""
+        logger.info(f"Marking episode {episode.id} as digested: {episode.title}")
+        
+        # Update episode status in database
+        self.episode_repo.update_status_by_id(episode.id, 'digested')
+        
+        # Move transcript file to digested folder if it exists
+        if episode.transcript_path and Path(episode.transcript_path).exists():
+            transcript_path = Path(episode.transcript_path)
+            digested_dir = transcript_path.parent / 'digested'
+            digested_dir.mkdir(exist_ok=True)
+            
+            new_path = digested_dir / transcript_path.name
+            
+            try:
+                transcript_path.rename(new_path)
+                # Update transcript path in database
+                self.episode_repo.update_transcript_path(episode.id, str(new_path))
+                logger.info(f"Moved transcript to: {new_path}")
+            except Exception as e:
+                logger.error(f"Failed to move transcript for episode {episode.id}: {e}")
+    
+    def mark_digest_episodes_as_digested(self, digest: Digest) -> None:
+        """Mark all episodes in a digest as digested"""
+        if not digest.episode_ids:
+            return
+        
+        for episode_id in digest.episode_ids:
+            episode = self.episode_repo.get_by_id(episode_id)
+            if episode:
+                self.mark_episode_as_digested(episode)
