@@ -85,9 +85,9 @@ class MetadataGenerator:
         script_content = self._extract_script_content(script_path)
         content_length = len(script_content)
         
-        # Truncate if too long for API (keep under 10K chars for context)
-        if content_length > 8000:
-            script_content = script_content[:8000] + "..."
+        # Truncate if too long for API (generous limit for GPT-5-mini context)
+        if content_length > 15000:
+            script_content = script_content[:15000] + "..."
             logger.info(f"Truncated script content from {content_length} to {len(script_content)} characters")
         
         # Generate metadata using GPT-5

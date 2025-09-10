@@ -1,0 +1,45 @@
+{
+  "export_date": "2025-09-09T09:56:16.180372",
+  "storage_stats": {
+    "directories": {
+      "current": {
+        "file_count": 1,
+        "size_bytes": 597308,
+        "size_mb": 0.5696372985839844
+      },
+      "archive": {
+        "file_count": 0,
+        "size_bytes": 0,
+        "size_mb": 0.0
+      },
+      "temp": {
+        "file_count": 0,
+        "size_bytes": 0,
+        "size_mb": 0.0
+      },
+      "base": {
+        "file_count": 0,
+        "size_bytes": 0,
+        "size_mb": 0.0
+      }
+    },
+    "total_files": 1,
+    "total_size_bytes": 597308,
+    "total_size_mb": 0.5696372985839844
+  },
+  "files": {
+    "current": [
+      {
+        "filename": "AI_News_20250909_094954.mp3",
+        "filepath": "data/completed-tts/current/AI_News_20250909_094954.mp3",
+        "topic": "AI News",
+        "date_created": "2025-09-09 09:49:54",
+        "file_size_bytes": 597308,
+        "estimated_duration_seconds": 0.0,
+        "voice_id": "unknown",
+        "voice_name": "unknown"
+      }
+    ],
+    "archive": []
+  }
+}

@@ -26,6 +26,7 @@ from src.database.models import get_episode_repo, get_digest_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.audio.complete_audio_processor import CompleteAudioProcessor
 import feedparser
+import sqlite3
 
 class FullPipelineRunner:
     """
@@ -74,26 +75,48 @@ class FullPipelineRunner:
         else:
             self.transcriber = None
         
-        # RSS feeds to check (using proven feeds from CLAUDE.md)
-        self.rss_feeds = [
-            {
-                'url': 'https://feeds.megaphone.fm/movementmemos',
-                'name': 'Movement Memos',
-                'expected_topics': ['Community Organizing', 'Societal Culture Change']
-            },
-            {
-                'url': 'https://thegreatsimplification.libsyn.com/rss',
-                'name': 'The Great Simplification',
-                'expected_topics': ['Societal Culture Change', 'Tech News and Tech Culture']
-            },
-            {
-                'url': 'https://feed.podbean.com/kultural/feed.xml',
-                'name': 'Kultural',
-                'expected_topics': ['Community Organizing', 'Societal Culture Change']
-            }
-        ]
+        # Load RSS feeds from database
+        self.rss_feeds = self._load_feeds_from_database()
         
         self.logger.info(f"Initialized pipeline with {len(self.rss_feeds)} RSS feeds")
+        
+    def _load_feeds_from_database(self):
+        """Load active RSS feeds from database"""
+        db_path = "data/database/digest.db"
+        try:
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT feed_url, title 
+                    FROM feeds 
+                    WHERE active = 1 
+                    ORDER BY title
+                """)
+                feeds = cursor.fetchall()
+                
+                # Convert to expected format with topic mapping
+                feed_list = []
+                topic_mapping = {
+                    'Movement Memos': ['Community Organizing', 'Societal Culture Change'],
+                    'The Great Simplification': ['Societal Culture Change', 'Tech News and Tech Culture'],
+                    'Kultural': ['Community Organizing', 'Societal Culture Change'],
+                    'The Bridge with Peter Mansbridge': ['Societal Culture Change', 'Community Organizing'],
+                    'Anchor feed': ['Tech News and Tech Culture', 'AI News']
+                }
+                
+                for url, title in feeds:
+                    feed_list.append({
+                        'url': url,
+                        'name': title,
+                        'expected_topics': topic_mapping.get(title, ['Tech News and Tech Culture'])
+                    })
+                
+                return feed_list
+                
+        except Exception as e:
+            self.logger.error(f"Failed to load feeds from database: {e}")
+            # Fallback to empty list - will be handled gracefully
+            return []
         
     def _verify_dependencies(self):
         """Verify all required dependencies and API keys"""
@@ -137,13 +160,19 @@ class FullPipelineRunner:
         
         self.logger.info("✅ All dependencies verified")
     
-    def discover_new_episode(self):
-        """Find the most recent unprocessed episode from RSS feeds"""
+    def discover_new_episodes(self):
+        """Find up to 3 recent unprocessed episodes from different RSS feeds (5 feeds available)"""
         self.logger.info("\n" + "="*80)
-        self.logger.info("PHASE 1: DISCOVER NEW EPISODE")
+        self.logger.info("PHASE 1: DISCOVER NEW EPISODES (max 3 from 5 feeds, 1 per feed)")
         self.logger.info("="*80)
         
+        discovered_episodes = []
+        
         for feed_info in self.rss_feeds:
+            # Stop if we already have 3 episodes
+            if len(discovered_episodes) >= 3:
+                break
+                
             feed_url = feed_info['url']
             feed_name = feed_info['name']
             
@@ -159,11 +188,12 @@ class FullPipelineRunner:
                 
                 self.logger.info(f"  Found {len(feed.entries)} episodes in feed")
                 
-                # Check recent episodes for new ones (within last 7 days)
-                cutoff_date = datetime.now() - timedelta(days=7)
+                # Check recent episodes for new ones (within last 14 days for testing)
+                cutoff_date = datetime.now() - timedelta(days=14)
                 
                 for i, entry in enumerate(feed.entries[:10]):
-                    episode_guid = entry.get('id', entry.get('guid', entry.link))
+                    # Safely get episode GUID with fallback
+                    episode_guid = entry.get('id') or entry.get('guid') or getattr(entry, 'link', f"episode_{i}_{feed_name}")
                     title = entry.get('title', 'Untitled')
                     
                     # Parse episode published date
@@ -176,9 +206,9 @@ class FullPipelineRunner:
                         # Fallback to current time if no date available
                         published_date = datetime.now()
                     
-                    # Skip episodes older than 7 days
+                    # Skip episodes older than 14 days
                     if published_date < cutoff_date:
-                        self.logger.info(f"  [{i+1:2d}] SKIP: {title[:50]}... (older than 7 days: {published_date.strftime('%Y-%m-%d')})")
+                        self.logger.info(f"  [{i+1:2d}] SKIP: {title[:50]}... (older than 14 days: {published_date.strftime('%Y-%m-%d')})")
                         continue
                     
                     # Check if episode needs processing
@@ -189,10 +219,10 @@ class FullPipelineRunner:
                     elif existing and existing.status in ['pending', 'failed']:
                         status_label = "pending transcription" if existing.status == 'pending' else "retry after failure"
                         self.logger.info(f"  [{i+1:2d}] RESUME: {title[:60]}... ({status_label})")
-                        # Return existing episode for resume processing
-                        # Add expected topics for compatibility
+                        # Add existing episode for resume processing
                         existing.expected_topics = feed_info['expected_topics']
-                        return existing
+                        discovered_episodes.append(existing)
+                        break  # Only take one episode per feed
                     
                     # Find audio URL for new episodes
                     audio_url = None
@@ -229,13 +259,20 @@ class FullPipelineRunner:
                     self.logger.info(f"       Audio: {audio_url[:80]}...")
                     self.logger.info(f"       Expected topics: {', '.join(feed_info['expected_topics'])}")
                     
-                    return episode
+                    discovered_episodes.append(episode)
+                    break  # Only take one episode per feed
                 
             except Exception as e:
                 self.logger.error(f"  ✗ Error parsing {feed_name}: {e}")
                 continue
         
-        raise Exception("No new episodes found in any RSS feed")
+        if not discovered_episodes:
+            self.logger.info(f"\n✅ NO NEW EPISODES FOUND - All recent episodes already processed")
+            self.logger.info("This is normal - your system is up to date!")
+            return []
+            
+        self.logger.info(f"\n✅ DISCOVERED {len(discovered_episodes)} EPISODES for processing")
+        return discovered_episodes
     
     def process_audio(self, episode):
         """Download audio, chunk, and transcribe completely"""
@@ -290,10 +327,10 @@ class FullPipelineRunner:
             self.logger.info(f"\n🔪 STEP 2.2: Audio Chunking")
             chunk_paths = self.audio_processor.chunk_audio(audio_path, episode_guid)
             
-            # TESTING LIMIT: Only process first 4 chunks for faster testing
-            if len(chunk_paths) > 4:
-                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 4 chunks (of {len(chunk_paths)})")
-                chunk_paths = chunk_paths[:4]
+            # TESTING LIMIT: Only process first 2 chunks for faster testing
+            if len(chunk_paths) > 2:
+                self.logger.info(f"⚠️  TESTING MODE: Limiting to first 2 chunks (of {len(chunk_paths)})")
+                chunk_paths = chunk_paths[:2]
             
             total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
             self.logger.info(f"✓ Processing {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")
@@ -567,10 +604,14 @@ class FullPipelineRunner:
                 if result.get('skipped'):
                     self.logger.info(f"   ⏭️  Skipped: {result.get('skip_reason')}")
                 elif result.get('success'):
-                    audio_metadata = result.get('audio_metadata', {})
-                    file_path = audio_metadata.get('file_path', 'Unknown')
-                    file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
-                    self.logger.info(f"   ✅ Generated successfully: {file_name}")
+                    audio_metadata = result.get('audio_metadata')
+                    if audio_metadata:
+                        # Handle AudioMetadata object (has .file_path attribute)
+                        file_path = getattr(audio_metadata, 'file_path', 'Unknown')
+                        file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
+                        self.logger.info(f"   ✅ Generated successfully: {file_name}")
+                    else:
+                        self.logger.info(f"   ✅ Generated successfully (no metadata)")
                 else:
                     errors = result.get('errors', ['Unknown error'])
                     self.logger.error(f"   ❌ Failed: {errors[0]}")
@@ -604,24 +645,98 @@ class FullPipelineRunner:
         return audio_results
     
     def run_pipeline(self):
-        """Execute the complete pipeline"""
+        """Execute the complete pipeline with multiple episodes"""
         start_time = datetime.now()
         
         try:
-            # Phase 1: Discovery
-            episode = self.discover_new_episode()
+            # Phase 1: Discovery - Get up to 3 episodes (1 per feed)
+            episodes = self.discover_new_episodes()
             
-            # Phase 2: Audio Processing
-            processed_episode = self.process_audio(episode)
+            # Handle case where no new episodes are found
+            if not episodes:
+                self.logger.info("\n" + "="*100)
+                self.logger.info("🎉 PIPELINE EXECUTION COMPLETE - NO NEW EPISODES")
+                self.logger.info("="*100)
+                
+                elapsed = datetime.now() - start_time
+                self.logger.info(f"⏱️  Total Runtime: {elapsed}")
+                self.logger.info(f"📻 Episodes Processed: 0 (all recent episodes already processed)")
+                self.logger.info(f"📊 System Status: ✅ UP TO DATE")
+                self.logger.info(f"📋 Log File: {self.log_file}")
+                self.logger.info("🚀 PIPELINE SUCCESS - No new content to process!")
+                return
             
-            # Phase 3: Content Scoring
-            scored_episode = self.score_episode(processed_episode)
+            all_scored_episodes = []
+            all_digests = []
+            total_transcript_words = 0
+            total_chunks = 0
             
-            # Phase 4: Digest Generation
-            digests = self.generate_digests(scored_episode)
+            # Process each episode through phases 2-3
+            for i, episode in enumerate(episodes, 1):
+                self.logger.info(f"\n" + "="*100)
+                self.logger.info(f"PROCESSING EPISODE {i}/{len(episodes)}")
+                self.logger.info("="*100)
+                
+                # Phase 2: Audio Processing
+                processed_episode = self.process_audio(episode)
+                
+                # Phase 3: Content Scoring
+                scored_episode = self.score_episode(processed_episode)
+                
+                all_scored_episodes.append(scored_episode)
+                total_transcript_words += scored_episode.transcript_word_count or 0
+                total_chunks += scored_episode.chunk_count or 0
+            
+            # Phase 4: Digest Generation (uses all scored episodes collectively)
+            self.logger.info(f"\n" + "="*100)
+            self.logger.info("DIGEST GENERATION FOR ALL EPISODES")
+            self.logger.info("="*100)
+            
+            # Generate digests for qualifying topics across all episodes
+            all_qualifying_topics = set()
+            for episode in all_scored_episodes:
+                if episode.scores:
+                    qualifying = [t for t, s in episode.scores.items() if s >= 0.65]
+                    all_qualifying_topics.update(qualifying)
+            
+            if all_qualifying_topics:
+                self.logger.info(f"📝 Generating digests for {len(all_qualifying_topics)} qualifying topics across all episodes")
+                
+                digests = []
+                for topic in all_qualifying_topics:
+                    self.logger.info(f"\n🎯 Generating digest: {topic}")
+                    
+                    try:
+                        # Use ScriptGenerator to create digest with all qualifying episodes
+                        digest = self.script_generator.create_digest(topic, date.today())
+                        
+                        self.logger.info(f"   ✅ Generated successfully")
+                        self.logger.info(f"      Words: {digest.script_word_count:,}")
+                        self.logger.info(f"      Episodes: {digest.episode_count}")
+                        self.logger.info(f"      Path: {digest.script_path}")
+                        
+                        digests.append(digest)
+                        
+                    except Exception as e:
+                        self.logger.error(f"   ✗ Failed to generate digest for {topic}: {e}")
+                        continue
+                
+                all_digests = digests
+            else:
+                self.logger.info("📝 No qualifying topics - generating no-content digest example")
+                
+                # Generate one no-content digest as example
+                first_topic = list(self.script_generator.topic_instructions.keys())[0]
+                digest = self.script_generator.create_digest(first_topic, date.today())
+                
+                self.logger.info(f"✓ Generated no-content digest for '{first_topic}'")
+                self.logger.info(f"   Words: {digest.script_word_count}")
+                self.logger.info(f"   Path: {digest.script_path}")
+                
+                all_digests = [digest]
             
             # Phase 6: TTS & Audio Generation
-            audio_results = self.generate_audio(digests)
+            audio_results = self.generate_audio(all_digests)
             
             # Final Summary
             elapsed = datetime.now() - start_time
@@ -631,36 +746,56 @@ class FullPipelineRunner:
             self.logger.info("="*100)
             
             self.logger.info(f"⏱️  Total Runtime: {elapsed}")
-            self.logger.info(f"📻 Episode Processed: {scored_episode.title}")
-            self.logger.info(f"📝 Transcript Words: {scored_episode.transcript_word_count:,}")
-            self.logger.info(f"🔊 Audio Chunks: {scored_episode.chunk_count}")
+            self.logger.info(f"📻 Episodes Processed: {len(all_scored_episodes)}")
             
-            if scored_episode.scores:
-                qualifying = [t for t, s in scored_episode.scores.items() if s >= 0.65]
-                if qualifying:
-                    self.logger.info(f"✅ Qualifying Topics: {', '.join(qualifying)}")
-                else:
-                    max_score = max(scored_episode.scores.values())
-                    self.logger.info(f"❌ No Qualifying Topics (max score: {max_score:.2f})")
+            # Summary for each episode
+            for i, episode in enumerate(all_scored_episodes, 1):
+                feed_name = getattr(episode, 'feed_name', 'Unknown Feed')
+                if hasattr(episode, 'expected_topics') and episode.expected_topics:
+                    # Derive feed name from expected topics or use direct attribute
+                    if 'Movement Memos' in str(episode.expected_topics):
+                        feed_name = 'Movement Memos'
+                    elif 'Great Simplification' in str(episode.expected_topics):
+                        feed_name = 'The Great Simplification'
+                    elif 'Kultural' in str(episode.expected_topics):
+                        feed_name = 'Kultural'
+                
+                self.logger.info(f"   [{i}] {episode.title[:50]}... ({feed_name})")
+                self.logger.info(f"       📝 {episode.transcript_word_count:,} words, 🔊 {episode.chunk_count} chunks")
+                
+                if episode.scores:
+                    qualifying = [t for t, s in episode.scores.items() if s >= 0.65]
+                    if qualifying:
+                        self.logger.info(f"       ✅ Qualifying: {', '.join(qualifying)}")
+                    else:
+                        max_score = max(episode.scores.values())
+                        self.logger.info(f"       ❌ No qualifying topics (max: {max_score:.2f})")
             
-            self.logger.info(f"📚 Digests Generated: {len(digests)}")
+            self.logger.info(f"\n📊 TOTALS:")
+            self.logger.info(f"   📝 Total Transcript Words: {total_transcript_words:,}")
+            self.logger.info(f"   🔊 Total Audio Chunks: {total_chunks}")
+            self.logger.info(f"   📚 Digests Generated: {len(all_digests)}")
             
-            for digest in digests:
-                self.logger.info(f"   • {digest.topic}: {digest.script_word_count:,} words")
+            for digest in all_digests:
+                self.logger.info(f"      • {digest.topic}: {digest.script_word_count:,} words")
             
             # Audio generation summary
             if audio_results:
                 successful_audio = [r for r in audio_results if r.get('success') and not r.get('skipped')]
                 skipped_audio = [r for r in audio_results if r.get('skipped')]
                 
-                self.logger.info(f"🎵 Audio Generated: {len(successful_audio)} MP3 files")
+                self.logger.info(f"   🎵 Audio Generated: {len(successful_audio)} MP3 files")
                 if skipped_audio:
-                    self.logger.info(f"⏭️  Audio Skipped: {len(skipped_audio)} (no qualifying episodes)")
+                    self.logger.info(f"   ⏭️  Audio Skipped: {len(skipped_audio)} (no qualifying episodes)")
                 
                 for result in successful_audio:
-                    file_path = result.get('audio_metadata', {}).get('file_path', 'Unknown')
-                    file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
-                    self.logger.info(f"   • {result['topic']}: {file_name}")
+                    audio_metadata = result.get('audio_metadata')
+                    if audio_metadata:
+                        file_path = getattr(audio_metadata, 'file_path', 'Unknown')
+                        file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
+                        self.logger.info(f"      • {result['topic']}: {file_name}")
+                    else:
+                        self.logger.info(f"      • {result['topic']}: Generated successfully")
             
             self.logger.info(f"\n📋 Log File: {self.log_file}")
             self.logger.info("🚀 PIPELINE SUCCESS - Ready for production use!")

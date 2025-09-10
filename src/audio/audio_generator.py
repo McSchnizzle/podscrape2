@@ -124,8 +124,8 @@ class AudioGenerator:
         text = text.replace('! ', '! ... ')  # Pause after exclamations
         text = text.replace('? ', '? ... ')  # Pause after questions
         
-        # Limit text length for API (ElevenLabs has limits)
-        max_chars = 5000  # Conservative limit
+        # Limit text length for API (ElevenLabs turbo_v2_5 supports 40,000 chars)
+        max_chars = 40000  # Match actual API limit for content creation
         if len(text) > max_chars:
             # Find a good breaking point
             text = text[:max_chars]
@@ -220,7 +220,7 @@ class AudioGenerator:
         
         payload = {
             "text": text,
-            "model_id": "eleven_multilingual_v2",  # High quality model
+            "model_id": "eleven_turbo_v2_5",  # High quality, 40K char limit, optimized for content creation
             "voice_settings": {
                 "stability": voice_settings.stability,
                 "similarity_boost": voice_settings.similarity_boost,
