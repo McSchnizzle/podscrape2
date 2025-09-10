@@ -450,7 +450,30 @@ class FullPipelineRunner:
                     in_progress_file.unlink()
                     self.logger.info(f"✓ Deleted progress file: {in_progress_file}")
                 
-                self.logger.info(f"✓ Cleanup complete: {chunks_deleted} audio chunks deleted")
+                # Delete original audio file from cache (since transcription is complete)
+                original_deleted = 0
+                episode_id = episode_guid.replace('-', '')[:6]
+                audio_cache_dir = Path(self.audio_processor.audio_cache_dir)
+                for audio_file in audio_cache_dir.glob(f"*-{episode_id}.mp3"):
+                    try:
+                        audio_file.unlink()
+                        original_deleted += 1
+                        self.logger.info(f"✓ Deleted original audio file: {audio_file.name}")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Could not delete original audio file {audio_file}: {e}")
+                
+                if original_deleted == 0:
+                    # Try alternative pattern (full episode GUID)
+                    for audio_file in audio_cache_dir.glob(f"{episode_guid}*.mp3"):
+                        try:
+                            audio_file.unlink()
+                            original_deleted += 1
+                            self.logger.info(f"✓ Deleted original audio file: {audio_file.name}")
+                            break  # Only delete the first match
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ Could not delete original audio file {audio_file}: {e}")
+                
+                self.logger.info(f"✓ Cleanup complete: {chunks_deleted} audio chunks deleted, {original_deleted} original audio file deleted")
                 
             except Exception as e:
                 self.logger.warning(f"⚠️ Cleanup failed: {e}")
@@ -638,7 +661,14 @@ class FullPipelineRunner:
         self.logger.info(f"   ❌ Failed: {len(failed)}")
         
         for result in successful:
-            file_path = result.get('audio_metadata', {}).get('file_path', 'Unknown')
+            audio_metadata = result.get('audio_metadata')
+            if audio_metadata:
+                if isinstance(audio_metadata, dict):
+                    file_path = audio_metadata.get('file_path', 'Unknown')
+                else:
+                    file_path = getattr(audio_metadata, 'file_path', 'Unknown')
+            else:
+                file_path = 'Unknown'
             file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
             self.logger.info(f"      • {result['topic']}: {file_name}")
         

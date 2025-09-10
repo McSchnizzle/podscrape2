@@ -189,8 +189,8 @@ class RSSTranscriptionPipeline:
                 transcription.chunk_count
             )
             
-            # Clean up audio chunks (keep original)
-            self.audio_processor.cleanup_episode_files(episode.guid, keep_original=True)
+            # Clean up audio chunks and original audio file (save disk space)
+            self.audio_processor.cleanup_episode_files(episode.guid, keep_original=False)
             
             logger.info(f"Transcript saved to: {final_transcript_path}")
             
