@@ -12,7 +12,6 @@ data/database/*.db-journal
 
 # Generated content
 data/transcripts/
-data/completed-tts/
 data/scripts/
 data/logs/
 
@@ -80,9 +79,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Audio cache (keep structure, ignore content for repo size)
-music_cache/*.mp3
-music_cache/*.wav
+# Audio files (exclude all except TTS outputs)
+*.mp3
+*.wav
+*.zip
+!data/completed-tts/**/*.mp3
+!data/completed-tts/**/*.wav
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
