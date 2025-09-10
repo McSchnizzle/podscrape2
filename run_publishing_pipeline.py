@@ -26,7 +26,7 @@ load_dotenv()
 
 from src.database.models import get_database_manager, get_digest_repo
 from src.publishing.github_publisher import create_github_publisher
-from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata
+from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata, PodcastMetadata
 from src.publishing.retention_manager import create_retention_manager
 from src.publishing.vercel_deployer import create_vercel_deployer
 
@@ -71,7 +71,20 @@ class PublishingPipelineRunner:
         # Initialize publishing components
         if not dry_run:
             self.github_publisher = create_github_publisher()
-            self.rss_generator = create_rss_generator()
+            
+            # Create podcast metadata for RSS generator
+            podcast_metadata = PodcastMetadata(
+                title="Daily AI & Tech Digest",
+                description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
+                author="Paul Brown", 
+                email="paul@paulrbrown.org",
+                category="Technology",
+                subcategory="Tech News",
+                website_url="https://podcast.paulrbrown.org",
+                copyright="© 2025 Paul Brown"
+            )
+            self.rss_generator = create_rss_generator(podcast_metadata)
+            
             self.retention_manager = create_retention_manager()
             self.vercel_deployer = create_vercel_deployer()
         
