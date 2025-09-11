@@ -99,10 +99,10 @@ podscrape2/
 
 #### API Keys (.env)
 ```bash
-OPENAI_API_KEY=sk-proj-...          # GPT-5 models
-ELEVENLABS_API_KEY=sk_...           # TTS generation
-GITHUB_TOKEN=github_pat_...         # Repository access
-GITHUB_REPOSITORY=McSchnizzle/podscrape2
+OPENAI_API_KEY=your-openai-api-key-here          # GPT-5 models
+ELEVENLABS_API_KEY=your-elevenlabs-key-here      # TTS generation
+GITHUB_TOKEN=your-github-token-here              # Repository access
+GITHUB_REPOSITORY=your-username/your-repo-name
 ```
 
 #### Channel Management

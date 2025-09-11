@@ -172,8 +172,8 @@ OK
 ### Environment Requirements
 ```bash
 # Required environment variables
-GITHUB_TOKEN=github_pat_...     # GitHub API access
-GITHUB_REPOSITORY=owner/repo    # Target repository
+GITHUB_TOKEN=your-github-token-here     # GitHub API access
+GITHUB_REPOSITORY=owner/repo            # Target repository
 # Vercel CLI must be pre-authenticated (vercel login)
 ```
 

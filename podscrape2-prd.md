@@ -143,10 +143,10 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 
 ### Environment Variables (.env)
 ```
-OPENAI_API_KEY=sk-proj-...
-ELEVENLABS_API_KEY=sk_...
-GITHUB_TOKEN=github_pat_...
-GITHUB_REPOSITORY=McSchnizzle/podscrape2
+OPENAI_API_KEY=your-openai-api-key-here
+ELEVENLABS_API_KEY=your-elevenlabs-key-here
+GITHUB_TOKEN=your-github-token-here
+GITHUB_REPOSITORY=your-username/your-repo-name
 ```
 
 ### Configuration Files
