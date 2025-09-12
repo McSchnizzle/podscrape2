@@ -884,7 +884,10 @@ class FullPipelineRunner:
                 for result in successful_audio:
                     audio_metadata = result.get('audio_metadata')
                     if audio_metadata:
-                        file_path = getattr(audio_metadata, 'file_path', 'Unknown')
+                        if isinstance(audio_metadata, dict):
+                            file_path = audio_metadata.get('file_path', 'Unknown')
+                        else:
+                            file_path = getattr(audio_metadata, 'file_path', 'Unknown')
                         file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
                         self.logger.info(f"      • {result['topic']}: {file_name}")
                     else:

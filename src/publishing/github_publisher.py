@@ -57,6 +57,18 @@ class GitHubPublisher:
         
         if not self.github_token:
             logger.warning("GITHUB_TOKEN not set; will attempt GH CLI fallback for publishing operations")
+        # Detect gh CLI availability/auth
+        self.gh_cli_ok = False
+        try:
+            import subprocess
+            chk = subprocess.run(['gh', '--version'], capture_output=True, text=True, timeout=5)
+            if chk.returncode == 0:
+                auth = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True, timeout=10)
+                self.gh_cli_ok = (auth.returncode == 0)
+            if not self.gh_cli_ok:
+                logger.warning("GitHub CLI not available or not authenticated; REST token will be required for publishing")
+        except Exception:
+            logger.warning("GitHub CLI not available; REST token will be required for publishing")
         
         if not self.repository:
             raise PodcastError("Repository not provided and GITHUB_REPOSITORY env var not set")
@@ -150,7 +162,10 @@ class GitHubPublisher:
             return github_release
             
         except Exception as e:
-            # Fallback to GH CLI create if REST fails due to credentials
+            # Fallback to GH CLI create if REST fails and gh CLI is authenticated
+            if not self.gh_cli_ok:
+                logger.error(f"Failed to create GitHub release: {e} (no GITHUB_TOKEN and GH CLI not authenticated)")
+                raise PodcastError(f"Failed to create GitHub release: {e}")
             try:
                 import subprocess
                 cmd = [
@@ -164,13 +179,12 @@ class GitHubPublisher:
                 if out.returncode != 0:
                     logger.error(f"GH CLI release create failed: {out.stderr.strip()}")
                     raise PodcastError(f"GH CLI release create failed: {out.stderr.strip()}")
-                # View release to return structured data
                 created = self.get_release_by_tag(tag_name)
                 if created:
                     logger.info(f"Created GitHub release via CLI: {created.id} ({created.name})")
                 return created
             except Exception as ce:
-                logger.error(f"Failed to create GitHub release: {e}; CLI fallback failed: {ce}")
+                logger.error(f"Failed to create GitHub release via CLI: {ce}")
                 raise PodcastError(f"Failed to create GitHub release: {ce}")
     
     def get_release_by_tag(self, tag_name: str) -> Optional[GitHubRelease]:
@@ -188,13 +202,13 @@ class GitHubPublisher:
             msg = str(e)
             if "404" in msg:
                 return None
-            # Fallback to GH CLI if token invalid/missing
+            # Fallback to GH CLI if available
             try:
                 import subprocess, json as _json
                 cmd = [
                     'gh', 'release', 'view', tag_name,
                     '--repo', self.repository,
-                    '--json', 'id,tagName,name,assets,url,createdAt,publishedAt,htmlUrl'
+                    '--json', 'id,tagName,name,assets,url,createdAt,publishedAt'
                 ]
                 out = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
                 if out.returncode != 0:
@@ -216,7 +230,7 @@ class GitHubPublisher:
                     created_at=datetime.fromisoformat(data.get('createdAt').replace('Z','+00:00')) if data.get('createdAt') else datetime.now(),
                     published_at=datetime.fromisoformat(data.get('publishedAt').replace('Z','+00:00')) if data.get('publishedAt') else datetime.now(),
                     assets=assets,
-                    html_url=data.get('htmlUrl', '')
+                    html_url=data.get('url', '')
                 )
             except Exception as ce:
                 logger.error(f"Failed to get release by tag {tag_name}: {e}; GH CLI fallback failed: {ce}")
