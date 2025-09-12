@@ -213,7 +213,7 @@ GITHUB_REPOSITORY=your-username/your-repo-name
 **Testing Strategy**: Comprehensive testing at end of each phase
 **Deployment**: Progressive rollout with validation checkpoints
 
-See `tasklist.md` for detailed phase breakdown and progress tracking.
+See `completed-phases1-7.md` for completed phases and `tasklist2.md` for the remaining plan (Web UI + automation).
 
 ---
 

@@ -50,7 +50,8 @@ podscrape2/
 ├── tests/                # Phase-specific test suites
 ├── docs/
 │   ├── podscrape2-prd.md # Product Requirements Document
-│   └── tasklist.md       # Development progress tracker
+│   └── completed-phases1-7.md  # Completed work log (Phases 1–7)
+│   └── tasklist2.md      # Remaining work (Web UI + Automation)
 └── daily_digest.py      # Main orchestrator
 ```
 
@@ -265,7 +266,7 @@ python src/utils/clear_cache.py
 ## 🛠️ Development
 
 ### Phase-Based Development
-See `docs/tasklist.md` for detailed development progress and phase breakdown.
+See `completed-phases1-7.md` for completed phases and `tasklist2.md` for remaining work and Web UI plan.
 
 **Current Status**: Phase 0 - Project Setup  
 **Next Phase**: Phase 1 - Foundation & Data Layer
@@ -273,7 +274,7 @@ See `docs/tasklist.md` for detailed development progress and phase breakdown.
 ### Contributing
 1. Follow phase-based development approach
 2. Run phase tests before proceeding  
-3. Update `tasklist.md` with progress
+3. Update `tasklist2.md` with progress
 4. Maintain comprehensive test coverage
 
 ### Code Style
@@ -285,7 +286,8 @@ See `docs/tasklist.md` for detailed development progress and phase breakdown.
 ## 📚 Documentation
 
 - **[Product Requirements](docs/podscrape2-prd.md)**: Complete project specification
-- **[Task List](docs/tasklist.md)**: Development progress and testing
+- **[Completed Phases](completed-phases1-7.md)**: Work completed to date
+- **[Remaining Work](tasklist2.md)**: Web UI + automation plan
 - **[Topic Instructions](digest_instructions/)**: AI generation guidelines
 - **[API Integration Guide](docs/gpt5-implementation-learnings.md)**: GPT-5 implementation details
 
@@ -316,7 +318,7 @@ See `docs/tasklist.md` for detailed development progress and phase breakdown.
 For questions or issues:
 1. Check existing logs in `data/logs/`
 2. Run health check: `python src/utils/health_check.py`
-3. Review phase testing in `docs/tasklist.md`
+3. Review phase testing in `completed-phases1-7.md` and remaining items in `tasklist2.md`
 4. Check API key configuration in `.env`
 
 **Project Status**: 🔄 Active Development  
