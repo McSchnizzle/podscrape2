@@ -131,28 +131,17 @@ class VercelDeployer:
         # Create vercel.json configuration
         vercel_config = {
             "version": 2,
-            "name": "podcast-paulrbrown-org",
-            "routes": [
-                {
-                    "src": "/daily-digest2.xml",
-                    "headers": {
-                        "Content-Type": "application/rss+xml; charset=utf-8",
-                        "Cache-Control": "s-maxage=3600, stale-while-revalidate"
-                    },
-                    "dest": "/daily-digest2.xml"
-                },
-                {
-                    "src": "/(.*)",
-                    "dest": "/$1"
-                }
-            ],
             "headers": [
                 {
-                    "source": "/(.*\\.xml)",
+                    "source": "/daily-digest2.xml",
                     "headers": [
                         {
                             "key": "Content-Type",
                             "value": "application/rss+xml; charset=utf-8"
+                        },
+                        {
+                            "key": "Cache-Control", 
+                            "value": "s-maxage=3600, stale-while-revalidate"
                         }
                     ]
                 }
@@ -250,14 +239,12 @@ class VercelDeployer:
         """Run vercel deploy command"""
         try:
             # Build vercel deploy command
-            cmd = ['vercel', 'deploy']
+            cmd = ['vercel', 'deploy', '--yes']
             
             if production:
                 cmd.append('--prod')
             
-            # Add project name if specified
-            if self.project_name:
-                cmd.extend(['--name', self.project_name])
+            # Project name is now handled by vercel.json configuration
             
             # Set working directory to temp deployment directory
             logger.debug(f"Running command: {' '.join(cmd)} (cwd: {temp_path})")

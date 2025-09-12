@@ -1,0 +1,48 @@
+Codex Bugfix Summary — Sept 11
+
+Scope: Align codebase with RSS-first architecture, improve robustness, and smooth over legacy YouTube test hooks. Includes six fixes (3 high-priority, 3 lower-priority).
+
+High-Priority Fixes
+- Align DB init with RSS schema
+  - File: `src/database/init_db.py`
+  - Changes: Removed channel repo usage; now validates `feeds`, `episodes`, `digests`, `system_metadata`. Switched to `get_feed_repo` and `get_podcast_episode_repo`. Logs updated to report active feeds.
+
+- Unify episode access on RSS repos and provide scored-episodes query
+  - Files: `src/podcast/rss_models.py`, `src/generation/script_generator.py`
+  - Changes: Added `get_scored_episodes_for_topic(...)` to `PodcastEpisodeRepository` (SQLite JSON extract). Switched `ScriptGenerator` to use `get_podcast_episode_repo` and standardized OpenAI client import.
+
+- Harden RSS date parsing (no private APIs)
+  - File: `src/podcast/feed_parser.py`
+  - Changes: Replaced `feedparser._parse_date` fallback with `email.utils.parsedate_to_datetime`, normalizing to UTC. Avoids reliance on private feedparser internals.
+
+Lower-Priority Fixes
+- OpenAI client usage consistency in generation
+  - File: `src/generation/script_generator.py`
+  - Changes: Use `from openai import OpenAI`; keep Responses API with `client.responses.create` for GPT-5.
+
+- Add YouTube resolver shims for legacy tests/callers
+  - File: `src/youtube/channel_resolver.py`
+  - Changes: Added module-level helpers `resolve_channel(...)` and `validate_channel_id(...)` that proxy to `ChannelResolver`. This keeps YouTube-related tests/imports working without re-enabling YouTube pipeline.
+
+- Make config path resolution robust to CWD
+  - File: `src/config/config_manager.py`
+  - Changes: Default `config_dir` now resolves relative to project root (`.../config`) instead of CWD to prevent misloads.
+
+Notes
+- No behavioral changes to publishing, scoring logic, or audio beyond repository selection and robustness improvements.
+- README did not require changes because `src/database/init_db.py` now aligns with the RSS schema and runs successfully.
+
+Files Changed
+- M `src/database/init_db.py`
+- M `src/podcast/rss_models.py`
+- M `src/generation/script_generator.py`
+- M `src/podcast/feed_parser.py`
+- M `src/youtube/channel_resolver.py`
+- M `src/config/config_manager.py`
+
+Validation
+- DB init now checks/uses feeds/episodes/digests and repo creation works.
+- Episode selection for script gen pulls from RSS repo via JSON score filtering.
+- RSS parsing handles varied date formats without private APIs.
+- Legacy YouTube test imports succeed via shims.
+

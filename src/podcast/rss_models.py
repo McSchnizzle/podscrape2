@@ -185,6 +185,31 @@ class PodcastEpisodeRepository:
             query += f" LIMIT {limit}"
         rows = self.db.execute_query(query, (feed_id,))
         return [self._row_to_episode(row) for row in rows]
+
+    def get_scored_episodes_for_topic(self, topic: str, min_score: float = 0.65,
+                                      start_date: date = None, end_date: date = None) -> List[PodcastEpisode]:
+        """Get episodes scored above threshold for a specific topic (RSS pipeline).
+
+        Uses SQLite JSON extraction on the scores JSON column.
+        """
+        json_path = f'$."{topic}"'
+        query = (
+            "SELECT * FROM episodes "
+            "WHERE status = 'scored' "
+            "AND scores IS NOT NULL "
+            "AND json_extract(scores, ?) >= ?"
+        )
+        params: List[Any] = [json_path, min_score]
+        if start_date:
+            query += " AND date(published_date) >= ?"
+            params.append(start_date.isoformat())
+        if end_date:
+            query += " AND date(published_date) <= ?"
+            params.append(end_date.isoformat())
+        query += " ORDER BY json_extract(scores, ?) DESC, published_date DESC"
+        params.append(json_path)
+        rows = self.db.execute_query(query, tuple(params))
+        return [self._row_to_episode(row) for row in rows]
     
     def update_status(self, episode_guid: str, status: str):
         """Update episode status"""

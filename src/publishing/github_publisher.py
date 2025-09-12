@@ -28,6 +28,7 @@ class GitHubRelease:
     created_at: datetime
     published_at: datetime
     assets: List[Dict[str, Any]]
+    html_url: str
 
 @dataclass
 class GitHubAsset:
@@ -62,9 +63,10 @@ class GitHubPublisher:
         
         self.api_base = "https://api.github.com"
         self.headers = {
-            'Authorization': f'token {self.github_token}',
-            'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'RSS-Podcast-Digest-System/1.0'
+            'Authorization': f'Bearer {self.github_token}',
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': 'RSS-Podcast-Digest-System/1.0',
+            'X-GitHub-Api-Version': '2022-11-28'
         }
         
         logger.info(f"GitHub Publisher initialized for repository: {self.repository}")
@@ -226,7 +228,8 @@ These audio files are generated from podcast transcripts that scored above our r
                 'download_url': asset['browser_download_url'],
                 'size': asset['size'],
                 'created_at': asset['created_at']
-            } for asset in data.get('assets', [])]
+            } for asset in data.get('assets', [])],
+            html_url=data['html_url']
         )
     
     def list_releases(self, limit: int = 30) -> List[GitHubRelease]:

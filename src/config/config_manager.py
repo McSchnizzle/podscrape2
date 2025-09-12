@@ -15,7 +15,12 @@ class ConfigManager:
     """Manages application configuration from JSON files"""
     
     def __init__(self, config_dir: str = "config"):
-        self.config_dir = Path(config_dir)
+        # Resolve to project-root-relative config by default to avoid CWD issues
+        if config_dir == "config":
+            project_root = Path(__file__).parent.parent.parent
+            self.config_dir = project_root / config_dir
+        else:
+            self.config_dir = Path(config_dir)
         self._topics_config = None
         
     def _load_topics_config(self) -> Dict[str, Any]:

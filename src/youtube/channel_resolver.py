@@ -239,6 +239,23 @@ class ChannelResolver:
         except Exception:
             return False
 
+# Convenience module-level helpers for legacy callers/tests
+def resolve_channel(input_str: str) -> Optional[ChannelInfo]:
+    """Resolve a channel input (URL/handle/name) to ChannelInfo or None."""
+    try:
+        resolver = ChannelResolver()
+        return resolver.resolve_channel_id(input_str)
+    except Exception:
+        return None
+
+def validate_channel_id(channel_id: str) -> bool:
+    """Lightweight check whether a channel ID appears valid/reachable."""
+    try:
+        resolver = ChannelResolver()
+        return resolver.validate_channel_exists(channel_id)
+    except Exception:
+        return False
+
 def resolve_channel(input_str: str) -> Optional[ChannelInfo]:
     """
     Convenience function to resolve a channel from any input format.

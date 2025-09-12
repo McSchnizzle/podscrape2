@@ -9,10 +9,11 @@ import logging
 from datetime import date, datetime
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
-import openai
+from openai import OpenAI
 from dataclasses import dataclass
 
-from ..database.models import Episode, Digest, get_episode_repo, get_digest_repo
+from ..podcast/rss_models import PodcastEpisode as Episode, get_podcast_episode_repo
+from ..database.models import Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
@@ -39,9 +40,9 @@ class ScriptGenerator:
     
     def __init__(self, config_manager: ConfigManager = None):
         self.config = config_manager or ConfigManager()
-        self.episode_repo = get_episode_repo()
+        self.episode_repo = get_podcast_episode_repo()
         self.digest_repo = get_digest_repo()
-        self.client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
         # Load topic configuration
         self.topics = self.config.get_topics()

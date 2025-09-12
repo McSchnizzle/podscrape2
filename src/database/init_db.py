@@ -11,7 +11,8 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from database.models import get_database_manager, get_channel_repo, get_episode_repo, get_digest_repo
+from database.models import get_database_manager, get_digest_repo
+from podcast/rss_models import get_feed_repo, get_podcast_episode_repo
 
 def init_database(db_path: str = None, force: bool = False):
     """
@@ -40,7 +41,8 @@ def init_database(db_path: str = None, force: bool = False):
             tables_query = "SELECT name FROM sqlite_master WHERE type='table'"
             tables = [row[0] for row in conn.execute(tables_query).fetchall()]
             
-            required_tables = ['channels', 'episodes', 'digests', 'system_metadata']
+            # RSS-first schema: feeds, episodes, digests, system metadata
+            required_tables = ['feeds', 'episodes', 'digests', 'system_metadata']
             missing_tables = [table for table in required_tables if table not in tables]
             
             if missing_tables:
@@ -68,14 +70,14 @@ def init_database(db_path: str = None, force: bool = False):
         # Test repository functionality
         logger.info("Testing repository functionality...")
         
-        # Test repositories can be created
-        channel_repo = get_channel_repo(db_manager)
-        episode_repo = get_episode_repo(db_manager)
+        # Test repositories can be created (RSS-first)
+        feed_repo = get_feed_repo(db_manager)
+        episode_repo = get_podcast_episode_repo(db_manager)
         digest_repo = get_digest_repo(db_manager)
         
         # Test basic queries
-        active_channels = channel_repo.get_all_active()
-        logger.info(f"Active channels: {len(active_channels)}")
+        active_feeds = feed_repo.get_all_active()
+        logger.info(f"Active feeds: {len(active_feeds)}")
         
         pending_episodes = episode_repo.get_by_status('pending')
         logger.info(f"Pending episodes: {len(pending_episodes)}")

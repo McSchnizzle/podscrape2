@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import re
 
 from ..utils.error_handling import retry_with_backoff, PodcastError
+from email.utils import parsedate_to_datetime
 from ..utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -168,16 +169,15 @@ class FeedParser:
                 except (ValueError, TypeError):
                     continue
         
-        # Try string parsing as fallback
+        # Try string parsing as fallback using public stdlib
         date_strings = [entry.get('published'), entry.get('updated')]
         for date_str in date_strings:
             if date_str:
                 try:
-                    # feedparser should have already parsed this, but try manual parsing
-                    parsed = feedparser._parse_date(date_str)
-                    if parsed:
-                        return datetime(*parsed[:6], tzinfo=timezone.utc)
-                except:
+                    dt = parsedate_to_datetime(date_str)
+                    if dt is not None:
+                        return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                except Exception:
                     continue
         
         return None

@@ -1,13 +1,19 @@
 {
   "version": 2,
   "public": true,
-  "routes": [
+  "headers": [
     {
-      "src": "/daily-digest2.xml",
-      "headers": {
-        "Content-Type": "application/rss+xml; charset=utf-8",
-        "Cache-Control": "public, max-age=300"
-      }
+      "source": "/daily-digest2.xml",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/rss+xml; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control", 
+          "value": "public, max-age=300"
+        }
+      ]
     }
   ]
 }
