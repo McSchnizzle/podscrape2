@@ -56,7 +56,7 @@ class GitHubPublisher:
         self.repository = repository or os.getenv('GITHUB_REPOSITORY')
         
         if not self.github_token:
-            raise PodcastError("GitHub token not provided and GITHUB_TOKEN env var not set")
+            logger.warning("GITHUB_TOKEN not set; will attempt GH CLI fallback for publishing operations")
         
         if not self.repository:
             raise PodcastError("Repository not provided and GITHUB_REPOSITORY env var not set")
@@ -150,8 +150,28 @@ class GitHubPublisher:
             return github_release
             
         except Exception as e:
-            logger.error(f"Failed to create GitHub release: {e}")
-            raise PodcastError(f"Failed to create GitHub release: {e}")
+            # Fallback to GH CLI create if REST fails due to credentials
+            try:
+                import subprocess
+                cmd = [
+                    'gh', 'release', 'create', tag_name,
+                    *mp3_files,
+                    '-t', release_name,
+                    '-n', release_body,
+                    '--repo', self.repository
+                ]
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                if out.returncode != 0:
+                    logger.error(f"GH CLI release create failed: {out.stderr.strip()}")
+                    raise PodcastError(f"GH CLI release create failed: {out.stderr.strip()}")
+                # View release to return structured data
+                created = self.get_release_by_tag(tag_name)
+                if created:
+                    logger.info(f"Created GitHub release via CLI: {created.id} ({created.name})")
+                return created
+            except Exception as ce:
+                logger.error(f"Failed to create GitHub release: {e}; CLI fallback failed: {ce}")
+                raise PodcastError(f"Failed to create GitHub release: {ce}")
     
     def get_release_by_tag(self, tag_name: str) -> Optional[GitHubRelease]:
         """Get release by tag name"""
@@ -165,10 +185,42 @@ class GitHubPublisher:
             return self._parse_release_data(response.json())
             
         except Exception as e:
-            if "404" in str(e):
+            msg = str(e)
+            if "404" in msg:
                 return None
-            logger.error(f"Failed to get release by tag {tag_name}: {e}")
-            raise PodcastError(f"Failed to get release: {e}")
+            # Fallback to GH CLI if token invalid/missing
+            try:
+                import subprocess, json as _json
+                cmd = [
+                    'gh', 'release', 'view', tag_name,
+                    '--repo', self.repository,
+                    '--json', 'id,tagName,name,assets,url,createdAt,publishedAt,htmlUrl'
+                ]
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+                if out.returncode != 0:
+                    logger.error(f"GH CLI view failed: {out.stderr.strip()}")
+                    return None
+                data = _json.loads(out.stdout)
+                assets = [{
+                    'id': a.get('id'),
+                    'name': a.get('name'),
+                    'browser_download_url': a.get('url'),
+                    'size': a.get('size', 0),
+                    'created_at': a.get('createdAt')
+                } for a in data.get('assets', [])]
+                return GitHubRelease(
+                    id=str(data.get('id')),
+                    tag_name=data.get('tagName', tag_name),
+                    name=data.get('name', tag_name),
+                    body='',
+                    created_at=datetime.fromisoformat(data.get('createdAt').replace('Z','+00:00')) if data.get('createdAt') else datetime.now(),
+                    published_at=datetime.fromisoformat(data.get('publishedAt').replace('Z','+00:00')) if data.get('publishedAt') else datetime.now(),
+                    assets=assets,
+                    html_url=data.get('htmlUrl', '')
+                )
+            except Exception as ce:
+                logger.error(f"Failed to get release by tag {tag_name}: {e}; GH CLI fallback failed: {ce}")
+                raise PodcastError(f"Failed to get release: {e}")
     
     @retry_with_backoff(max_retries=2, backoff_factor=1.5)
     def _upload_asset(self, release_id: str, file_path: str):

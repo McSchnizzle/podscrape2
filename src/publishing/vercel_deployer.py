@@ -150,7 +150,7 @@ class VercelDeployer:
                 {
                     "source": "/daily-digest2.xml",
                     "destination": "/daily-digest.xml",
-                    "permanent": true
+                    "permanent": True
                 }
             ]
         }

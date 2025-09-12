@@ -659,8 +659,11 @@ class FullPipelineRunner:
                 elif result.get('success'):
                     audio_metadata = result.get('audio_metadata')
                     if audio_metadata:
-                        # Handle AudioMetadata object (has .file_path attribute)
-                        file_path = getattr(audio_metadata, 'file_path', 'Unknown')
+                        # Handle both dict and object forms
+                        if isinstance(audio_metadata, dict):
+                            file_path = audio_metadata.get('file_path', 'Unknown')
+                        else:
+                            file_path = getattr(audio_metadata, 'file_path', 'Unknown')
                         file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
                         self.logger.info(f"   ✅ Generated successfully: {file_name}")
                     else:
@@ -816,11 +819,14 @@ class FullPipelineRunner:
             
             # Phase 7: Publishing Pipeline
             # Delegate publishing to the publishing pipeline to avoid divergence
+            publishing_results = {"skipped": True}
             try:
                 from run_publishing_pipeline import PublishingPipelineRunner
                 self.logger.info("\n🔗 Handing off to publishing pipeline for Phase 7...")
                 publisher = PublishingPipelineRunner(dry_run=False)
-                publisher.run_complete_pipeline(days_back=30)
+                ok = publisher.run_complete_pipeline(days_back=30)
+                publishing_results = {"skipped": False, "published": 0, "rss_generated": ok, "deployed": ok,
+                                       "rss_url": "https://podcast.paulrbrown.org/daily-digest.xml" if ok else None}
             except Exception as e:
                 self.logger.warning(f"Publishing pipeline handoff failed, falling back: {e}")
                 publishing_results = self.publish_digests(refreshed_digests)
