@@ -46,3 +46,37 @@ Validation
 - RSS parsing handles varied date formats without private APIs.
 - Legacy YouTube test imports succeed via shims.
 
+---
+
+Follow‑up Updates (later Sep 11)
+
+Standardize canonical RSS to daily-digest.xml
+- vercel.json: switched headers to `/daily-digest.xml` and added a permanent redirect from `/daily-digest2.xml` to `/daily-digest.xml`.
+- src/publishing/vercel_deployer.py: writes `public/daily-digest.xml`, updates links/validation to canonical URL.
+- run_publishing_pipeline.py and run_full_pipeline.py: write RSS to `public/daily-digest.xml` after generation so Vercel auto-serves the latest.
+- README.md, podscrape2-prd.md, public/index.html: updated references to canonical feed.
+
+Deduplicate MP3 path resolution and fix publishing misses
+- src/audio/audio_manager.py: added `resolve_existing_mp3_path(...)` utility.
+- run_full_pipeline.py and run_publishing_pipeline.py: use the shared resolver and persist normalized absolute `mp3_path` to DB.
+- src/publishing/github_publisher.py: when a daily release already exists, upload any missing MP3 assets and refresh release data to prevent 404s.
+
+Eliminate divergence and harden hand‑offs
+- run_full_pipeline.py: Phase 7 now hands off to `PublishingPipelineRunner` (with fallback) to keep one publishing path.
+- Added `RetentionManager.cleanup_all(...)` alias to match orchestration calls.
+
+Fixes for regressions and quick QA checks
+- Fixed indentation error in `run_full_pipeline.py` under `if vercel_deployed`.
+- Added quick local validation steps (used during this patch cycle):
+  - Python syntax check: `py_compile` on modified Python files (passed).
+  - Live RSS checks: `curl` 200 for `/daily-digest.xml` and validator returned True.
+  - Enclosure URLs: verified GitHub assets return 302 to CDN (no 404s).
+
+New docs and task management
+- Added `tasklist2.md` (Phases A–F) for Web UI + automation work.
+- Renamed `tasklist.md` → `completed-phases1-7.md`; updated README and PRD references.
+
+Net effect
+- Canonical feed served at `/daily-digest.xml` with redirect in place.
+- Publishing pipeline uploads missing assets to existing releases (fixes podcast client download failures).
+- Reduced duplication (shared MP3 resolver, publishing hand‑off), improved reliability.
