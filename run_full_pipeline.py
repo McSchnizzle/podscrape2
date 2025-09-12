@@ -1107,7 +1107,7 @@ class FullPipelineRunner:
             self.logger.info(f"   🚀 Vercel deployed: {'✅' if vercel_deployed else '❌'}")
             
             if vercel_deployed:
-            self.logger.info(f"   🔗 RSS feed URL: https://podcast.paulrbrown.org/daily-digest.xml")
+                self.logger.info(f"   🔗 RSS feed URL: https://podcast.paulrbrown.org/daily-digest.xml")
             
             return {
                 "published": len(published_digests),
