@@ -5,7 +5,7 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Wed, 10 Sep 2025 08:46:48 +0000</lastBuildDate>
+    <lastBuildDate>Thu, 11 Sep 2025 20:34:27 +0000</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <itunes:title>Daily AI &amp; Tech Digest</itunes:title>
     <itunes:description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</itunes:description>
@@ -20,6 +20,28 @@
       <itunes:email>paul@paulrbrown.org</itunes:email>
     </itunes:owner>
     <copyright>© 2025 Paul Brown</copyright>
+    <item>
+      <title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</title>
+      <description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/AI_and_Technology_20250909_213521.mp3" length="11704991" type="audio/mpeg"/>
+      <itunes:title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</itunes:title>
+      <itunes:description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</itunes:description>
+      <itunes:duration>14:24</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Organizing Digest — Sep 09, 2025</title>
+      <description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Social_Movements_and_Community_Organizing_20250909_213546.mp3" length="33028851" type="audio/mpeg"/>
+      <itunes:title>Daily Organizing Digest — Sep 09, 2025</itunes:title>
+      <itunes:description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</itunes:description>
+      <itunes:duration>20:35</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
     <item>
       <title>AI &amp; Tech Daily Digest — Sep 10, 2025</title>
       <description>Today: AI-written code tops 50% in some teams, Microsoft’s $17.4B Nebius compute bet, Databricks’ AI revenue surge, Google Gemini momentum, and an OpenAI-backed feature film experiment.</description>
@@ -43,25 +65,25 @@
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
-      <title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</title>
-      <description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</description>
-      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
-      <guid isPermaLink="false">digest-2025-09-09-ai-and-technology</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/AI_and_Technology_20250909_213521.mp3" length="11704991" type="audio/mpeg"/>
-      <itunes:title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</itunes:title>
-      <itunes:description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</itunes:description>
-      <itunes:duration>14:24</itunes:duration>
+      <title>Daily Digest — Community Defense &amp; Assemblies (Sep 11, 2025)</title>
+      <description>Quick briefing: how neighborhood assemblies, immigrant defense, and anti-displacement tactics are building local power against authoritarian encroachments. Practical steps for organizers and civic leaders.</description>
+      <pubDate>Thu, 11 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/Social_Movements_and_Community_Organizing_20250911_195342.mp3" length="27894222" type="audio/mpeg"/>
+      <itunes:title>Daily Digest — Community Defense &amp; Assemblies (Sep 11, 2025)</itunes:title>
+      <itunes:description>Quick briefing: how neighborhood assemblies, immigrant defense, and anti-displacement tactics are building local power against authoritarian encroachments. Practical steps for organizers and civic leaders.</itunes:description>
+      <itunes:duration>20:34</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
-      <title>Daily Organizing Digest — Sep 09, 2025</title>
-      <description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</description>
-      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
-      <guid isPermaLink="false">digest-2025-09-09-social-movements-and-community-organizing</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Social_Movements_and_Community_Organizing_20250909_213546.mp3" length="33028851" type="audio/mpeg"/>
-      <itunes:title>Daily Organizing Digest — Sep 09, 2025</itunes:title>
-      <itunes:description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</itunes:description>
-      <itunes:duration>20:35</itunes:duration>
+      <title>AI &amp; Tech Digest — Sep 11, 2025: Production-Grade AI</title>
+      <description>Today: AI moves from demos to production—MCP write-actions, YouTube dubbing, custom chips, Anthropic settlement, and agents reshaping work. Quick takeaways for builders and leaders.</description>
+      <pubDate>Thu, 11 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/AI_and_Technology_20250911_195433.mp3" length="17624129" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Digest — Sep 11, 2025: Production-Grade AI</itunes:title>
+      <itunes:description>Today: AI moves from demos to production—MCP write-actions, YouTube dubbing, custom chips, Anthropic settlement, and agents reshaping work. Quick takeaways for builders and leaders.</itunes:description>
+      <itunes:duration>21:14</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
   </channel>
