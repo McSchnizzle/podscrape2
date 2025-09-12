@@ -133,11 +133,33 @@ class PublishingPipelineRunner:
                     'rss_published_at': row[8]
                 }
                 
-                # Check if MP3 file actually exists
-                mp3_path = Path(digest['mp3_path'])
-                if not mp3_path.exists():
-                    self.logger.warning(f"MP3 file not found: {mp3_path}")
+                # Resolve MP3 path if only a filename or missing
+                def _resolve_mp3_path(p: str) -> Optional[Path]:
+                    if not p:
+                        return None
+                    candidate = Path(p)
+                    if candidate.is_file():
+                        return candidate
+                    base = Path('data') / 'completed-tts'
+                    for folder in [base / 'current', base]:
+                        cand = folder / candidate.name
+                        if cand.is_file():
+                            return cand
+                    return None
+
+                resolved = _resolve_mp3_path(digest['mp3_path'])
+                if not resolved:
+                    self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
                     continue
+                else:
+                    digest['mp3_path'] = str(resolved)
+                    # Persist normalized path for future runs
+                    try:
+                        with self.db_manager.get_connection() as conn:
+                            conn.execute("UPDATE digests SET mp3_path = ? WHERE id = ?", (digest['mp3_path'], digest['id']))
+                            conn.commit()
+                    except Exception:
+                        pass
                 
                 digests.append(digest)
         
@@ -162,7 +184,7 @@ class PublishingPipelineRunner:
                 self.logger.info("  DRY RUN: Would publish to GitHub")
                 return True
             
-            # Upload to GitHub
+            # Upload to GitHub (ensure resolved path)
             mp3_files = [digest['mp3_path']]
             digest_date = date.fromisoformat(digest['digest_date'])
             

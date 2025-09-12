@@ -931,15 +931,40 @@ class FullPipelineRunner:
             # Step 1: Publish each digest to GitHub
             self.logger.info(f"📤 Publishing {len(digests)} digests to GitHub...")
             
+            def _resolve_mp3_path(p: str) -> Optional[Path]:
+                """Resolve a possibly relative MP3 path to an existing file."""
+                if not p:
+                    return None
+                candidate = Path(p)
+                if candidate.is_file():
+                    return candidate
+                # Search common locations
+                base = Path('data') / 'completed-tts'
+                for folder in [base / 'current', base]:
+                    cand = folder / candidate.name
+                    if cand.is_file():
+                        return cand
+                return None
+
             for i, digest in enumerate(digests, 1):
                 try:
                     self.logger.info(f"[{i}/{len(digests)}] Publishing: {digest.topic}")
                     
-                    # Check if digest has MP3 file
-                    if not digest.mp3_path or not Path(digest.mp3_path).exists():
+                    # Resolve MP3 file path
+                    resolved_path = _resolve_mp3_path(digest.mp3_path)
+                    if resolved_path is None:
                         self.logger.warning(f"  ⚠️  No MP3 file found for {digest.topic}")
                         failed_digests.append(digest)
                         continue
+                    else:
+                        # Normalize path in-memory and persist to DB for future runs
+                        digest.mp3_path = str(resolved_path)
+                        try:
+                            with self.digest_repo.db_manager.get_connection() as conn:
+                                conn.execute("UPDATE digests SET mp3_path = ? WHERE id = ?", (digest.mp3_path, digest.id))
+                                conn.commit()
+                        except Exception:
+                            pass
                     
                     # Upload to GitHub
                     mp3_files = [digest.mp3_path]
@@ -985,7 +1010,7 @@ class FullPipelineRunner:
                         episode = PodcastEpisode(
                             title=digest.mp3_title or f"{digest.topic} - {digest.digest_date}",
                             description=digest.mp3_summary or f"Daily digest for {digest.topic}",
-                            mp3_url=mp3_url,
+                            audio_url=mp3_url,
                             pub_date=datetime.combine(digest.digest_date, datetime.min.time().replace(hour=12)),
                             duration_seconds=digest.mp3_duration_seconds or 0,
                             file_size=Path(digest.mp3_path).stat().st_size if Path(digest.mp3_path).exists() else 0,
@@ -1002,8 +1027,8 @@ class FullPipelineRunner:
                         email="paul@paulrbrown.org"
                     )
                     
-                    # Generate RSS XML
-                    rss_content = self.rss_generator.generate_rss_feed(episodes, podcast_meta)
+                    # Generate RSS XML (metadata supplied at generator construction)
+                    rss_content = self.rss_generator.generate_rss_feed(episodes)
                     
                     # Save RSS feed locally
                     rss_file = Path("data") / "rss" / "daily-digest.xml"

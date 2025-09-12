@@ -313,6 +313,11 @@ class RetentionManager:
                 }
         
         return stats
+
+    # Backward-compatible alias used by orchestration scripts
+    def cleanup_all(self, dry_run: bool = False) -> CleanupStats:
+        """Alias for run_cleanup to match pipeline usage."""
+        return self.run_cleanup(dry_run)
     
     def cleanup_specific_date(self, cleanup_date: date, dry_run: bool = False) -> CleanupStats:
         """

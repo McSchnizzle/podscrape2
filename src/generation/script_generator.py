@@ -12,7 +12,7 @@ from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
 
-from ..podcast/rss_models import PodcastEpisode as Episode, get_podcast_episode_repo
+from ..podcast.rss_models import PodcastEpisode as Episode, get_podcast_episode_repo
 from ..database.models import Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
 
