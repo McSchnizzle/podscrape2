@@ -74,7 +74,7 @@ def main():
         title="Daily AI & Tech Digest",
         description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
         author="Paul Brown", 
-        email="paul@paulrbrown.org",
+        email="brownpr0@gmail.com",
         category="Technology",
         subcategory="Tech News",
         website_url="https://podcast.paulrbrown.org",

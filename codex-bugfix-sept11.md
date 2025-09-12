@@ -76,6 +76,9 @@ New docs and task management
 - Added `tasklist2.md` (Phases A–F) for Web UI + automation work.
 - Renamed `tasklist.md` → `completed-phases1-7.md`; updated README and PRD references.
 
+Contact metadata correction
+- Updated contact email used in generated RSS metadata from `paul@paulrbrown.org` to `brownpr0@gmail.com` across code and public feed.
+
 Net effect
 - Canonical feed served at `/daily-digest.xml` with redirect in place.
 - Publishing pipeline uploads missing assets to existing releases (fixes podcast client download failures).
