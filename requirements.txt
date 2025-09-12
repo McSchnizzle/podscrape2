@@ -32,6 +32,7 @@ feedgen>=0.9.0                 # RSS feed generation
 # Web & Network
 aiohttp>=3.8.0                 # Async HTTP client
 httpx>=0.24.0                  # Modern HTTP client
+Flask>=2.3.0                   # Web UI framework
 
 # Development & Testing
 pytest>=7.4.0                  # Testing framework
