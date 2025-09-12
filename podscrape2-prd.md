@@ -116,7 +116,7 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
 ### Publishing & Distribution
 - **GitHub Integration**: Automated MP3 upload and release management
 - **RSS Compliance**: Full RSS 2.0 specification with podcast extensions
-- **Vercel Hosting**: Static RSS XML served at podcast.paulrbrown.org/daily-digest2.xml
+ - **Vercel Hosting**: Static RSS XML served at podcast.paulrbrown.org/daily-digest.xml
 - **Retention Management**: Automated cleanup after retention periods
 - **Metadata Rich**: Include timestamps, summaries, and topic categorization
 

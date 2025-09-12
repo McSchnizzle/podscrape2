@@ -217,7 +217,9 @@ python tests/test_performance.py
 
 ## 📱 RSS Feed
 
-**Feed URL**: https://podcast.paulrbrown.org/daily-digest2.xml
+**Feed URL**: https://podcast.paulrbrown.org/daily-digest.xml
+
+Note: As of Sep 2025, the project standardized on `daily-digest.xml` (retiring `daily-digest2.xml`). A redirect from `/daily-digest2.xml` to `/daily-digest.xml` is configured in `vercel.json` for backward compatibility.
 
 ### Features
 - Full RSS 2.0 compliance with podcast extensions

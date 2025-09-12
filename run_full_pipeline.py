@@ -815,7 +815,15 @@ class FullPipelineRunner:
                     refreshed_digests.append(digest)  # Fall back to original
             
             # Phase 7: Publishing Pipeline
-            publishing_results = self.publish_digests(refreshed_digests)
+            # Delegate publishing to the publishing pipeline to avoid divergence
+            try:
+                from run_publishing_pipeline import PublishingPipelineRunner
+                self.logger.info("\n🔗 Handing off to publishing pipeline for Phase 7...")
+                publisher = PublishingPipelineRunner(dry_run=False)
+                publisher.run_complete_pipeline(days_back=30)
+            except Exception as e:
+                self.logger.warning(f"Publishing pipeline handoff failed, falling back: {e}")
+                publishing_results = self.publish_digests(refreshed_digests)
             
             # Final Summary
             elapsed = datetime.now() - start_time
@@ -946,12 +954,13 @@ class FullPipelineRunner:
                         return cand
                 return None
 
+            from src.audio.audio_manager import AudioManager
             for i, digest in enumerate(digests, 1):
                 try:
                     self.logger.info(f"[{i}/{len(digests)}] Publishing: {digest.topic}")
                     
-                    # Resolve MP3 file path
-                    resolved_path = _resolve_mp3_path(digest.mp3_path)
+                    # Resolve MP3 file path using shared AudioManager utility
+                    resolved_path = AudioManager.resolve_existing_mp3_path(digest.mp3_path)
                     if resolved_path is None:
                         self.logger.warning(f"  ⚠️  No MP3 file found for {digest.topic}")
                         failed_digests.append(digest)
@@ -1038,6 +1047,12 @@ class FullPipelineRunner:
                         f.write(rss_content)
                     
                     self.logger.info(f"  ✅ RSS feed generated: {rss_file}")
+                    # Also write to public for Vercel auto-deploy
+                    public_file = Path("public") / "daily-digest.xml"
+                    public_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(public_file, 'w', encoding='utf-8') as f:
+                        f.write(rss_content)
+                    self.logger.info(f"  ✅ Wrote public RSS: {public_file}")
                     
                 except Exception as e:
                     self.logger.error(f"  ❌ Failed to generate RSS feed: {e}")
@@ -1092,14 +1107,14 @@ class FullPipelineRunner:
             self.logger.info(f"   🚀 Vercel deployed: {'✅' if vercel_deployed else '❌'}")
             
             if vercel_deployed:
-                self.logger.info(f"   🔗 RSS feed URL: https://podcast.paulrbrown.org/daily-digest2.xml")
+            self.logger.info(f"   🔗 RSS feed URL: https://podcast.paulrbrown.org/daily-digest.xml")
             
             return {
                 "published": len(published_digests),
                 "failed": len(failed_digests),
                 "rss_generated": bool(rss_content),
                 "deployed": vercel_deployed,
-                "rss_url": "https://podcast.paulrbrown.org/daily-digest2.xml" if vercel_deployed else None
+                "rss_url": "https://podcast.paulrbrown.org/daily-digest.xml" if vercel_deployed else None
             }
             
         except Exception as e:

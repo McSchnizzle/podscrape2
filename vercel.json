@@ -3,7 +3,7 @@
   "public": true,
   "headers": [
     {
-      "source": "/daily-digest2.xml",
+      "source": "/daily-digest.xml",
       "headers": [
         {
           "key": "Content-Type",
@@ -15,5 +15,8 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    { "source": "/daily-digest2.xml", "destination": "/daily-digest.xml", "permanent": true }
   ]
 }

@@ -123,8 +123,8 @@ class VercelDeployer:
         public_dir = temp_path / "public"
         public_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save RSS feed as daily-digest2.xml (matching the expected URL)
-        rss_file = public_dir / "daily-digest2.xml"
+        # Save RSS feed as daily-digest.xml
+        rss_file = public_dir / "daily-digest.xml"
         with open(rss_file, 'w', encoding='utf-8') as f:
             f.write(rss_content)
         
@@ -133,7 +133,7 @@ class VercelDeployer:
             "version": 2,
             "headers": [
                 {
-                    "source": "/daily-digest2.xml",
+                    "source": "/daily-digest.xml",
                     "headers": [
                         {
                             "key": "Content-Type",
@@ -144,6 +144,13 @@ class VercelDeployer:
                             "value": "s-maxage=3600, stale-while-revalidate"
                         }
                     ]
+                }
+            ],
+            "redirects": [
+                {
+                    "source": "/daily-digest2.xml",
+                    "destination": "/daily-digest.xml",
+                    "permanent": true
                 }
             ]
         }
@@ -205,19 +212,19 @@ class VercelDeployer:
     
     <h2>RSS Feed</h2>
     <div class="rss-link">
-        <strong>RSS URL:</strong> <a href="/daily-digest2.xml">https://podcast.paulrbrown.org/daily-digest2.xml</a>
+        <strong>RSS URL:</strong> <a href="/daily-digest.xml">https://podcast.paulrbrown.org/daily-digest.xml</a>
     </div>
     
     <p>Subscribe in your favorite podcast app:</p>
     
     <div>
-        <a href="https://podcasts.apple.com/podcast/id?feed=https://podcast.paulrbrown.org/daily-digest2.xml" class="podcast-badge">
+        <a href="https://podcasts.apple.com/podcast/id?feed=https://podcast.paulrbrown.org/daily-digest.xml" class="podcast-badge">
             📱 Apple Podcasts
         </a>
-        <a href="https://open.spotify.com/show?feed=https://podcast.paulrbrown.org/daily-digest2.xml" class="podcast-badge">
+        <a href="https://open.spotify.com/show?feed=https://podcast.paulrbrown.org/daily-digest.xml" class="podcast-badge">
             🎵 Spotify
         </a>
-        <a href="https://pocketcasts.com/submit/?url=https://podcast.paulrbrown.org/daily-digest2.xml" class="podcast-badge">
+        <a href="https://pocketcasts.com/submit/?url=https://podcast.paulrbrown.org/daily-digest.xml" class="podcast-badge">
             📻 Pocket Casts
         </a>
     </div>
@@ -345,7 +352,7 @@ class VercelDeployer:
             import requests
             
             # Use provided URL or default to production domain
-            test_url = expected_url or "https://podcast.paulrbrown.org/daily-digest2.xml"
+            test_url = expected_url or "https://podcast.paulrbrown.org/daily-digest.xml"
             
             logger.info(f"Validating deployment: {test_url}")
             

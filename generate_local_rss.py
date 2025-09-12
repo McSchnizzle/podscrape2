@@ -94,7 +94,7 @@ def main():
     rss_xml = rss_generator.generate_rss_feed(episodes)
     
     # Write to file
-    output_file = "daily-digest2.xml"
+    output_file = "daily-digest.xml"
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(rss_xml)
     

@@ -224,7 +224,7 @@
 - [x] RSS XML validates against RSS 2.0 and podcast specification standards (valid XML, iTunes compatible)
 - [x] File retention system correctly removes old files according to policy (components built)
 - [x] RSS feed loads properly in major podcast clients (Apple Podcasts, Spotify, etc.) - Ready for subscription
-- [x] Vercel integration serves RSS feed correctly at podcast.paulrbrown.org/daily-digest2.xml (HTTP 200, live feed)
+- [x] Vercel integration serves RSS feed correctly at podcast.paulrbrown.org/daily-digest.xml (HTTP 200, live feed)
 - [x] MP3 path resolution fixed between Phase 6 and Phase 7 (digest refresh from database)
 - [x] Local RSS generation tool created for testing without API costs (generate_local_rss.py)
 - [x] **Test Script**: `test_phase7.py` - GitHub uploads, RSS validation, retention cleanup (22/22 tests pass)
@@ -366,7 +366,7 @@ python test_performance.py
 - **Result**: Production-ready script generation system that correctly filters content and generates topic-focused digest scripts
 
 ### Phase 7 - Publishing Pipeline (Sep 10, 2025) - MAJOR MILESTONE
-- ✅ **RSS FEED LIVE**: https://podcast.paulrbrown.org/daily-digest2.xml (HTTP 200, ready for subscription)
+- ✅ **RSS FEED LIVE**: https://podcast.paulrbrown.org/daily-digest.xml (HTTP 200, ready for subscription)
 - ✅ Fixed critical MP3 path resolution issue between Phase 6 and Phase 7 (database refresh pattern)
 - ✅ Created complete GitHub publisher with MP3 upload and release management (API permissions pending)
 - ✅ Built RSS 2.0 compliant XML generator with iTunes podcast extensions (validated, iTunes compatible)

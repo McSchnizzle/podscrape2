@@ -134,20 +134,8 @@ class PublishingPipelineRunner:
                 }
                 
                 # Resolve MP3 path if only a filename or missing
-                def _resolve_mp3_path(p: str) -> Optional[Path]:
-                    if not p:
-                        return None
-                    candidate = Path(p)
-                    if candidate.is_file():
-                        return candidate
-                    base = Path('data') / 'completed-tts'
-                    for folder in [base / 'current', base]:
-                        cand = folder / candidate.name
-                        if cand.is_file():
-                            return cand
-                    return None
-
-                resolved = _resolve_mp3_path(digest['mp3_path'])
+                from src.audio.audio_manager import AudioManager
+                resolved = AudioManager.resolve_existing_mp3_path(digest['mp3_path'])
                 if not resolved:
                     self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
                     continue
@@ -262,6 +250,12 @@ class PublishingPipelineRunner:
                 f.write(rss_content)
             
             self.logger.info(f"✅ RSS feed generated: {rss_file}")
+            # Also write to public for Vercel auto-deploy
+            public_file = Path("public") / "daily-digest.xml"
+            public_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(public_file, 'w', encoding='utf-8') as f:
+                f.write(rss_content)
+            self.logger.info(f"✅ Wrote public RSS: {public_file}")
             return rss_content
             
         except Exception as e:
@@ -356,7 +350,7 @@ class PublishingPipelineRunner:
             duration = (datetime.now() - start_time).total_seconds()
             self.logger.info("="*100)
             self.logger.info(f"🎉 Publishing pipeline completed successfully in {duration:.1f}s")
-            self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest2.xml")
+        self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
             self.logger.info("="*100)
             
             return True
