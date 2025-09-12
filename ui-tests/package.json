@@ -1,0 +1,12 @@
+{
+  "name": "podscrape2-ui-tests",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "install:browsers": "playwright install --with-deps"
+  }
+}
+
