@@ -104,6 +104,22 @@ class GitHubPublisher:
         existing_release = self.get_release_by_tag(tag_name)
         if existing_release:
             logger.info(f"Release already exists: {tag_name}")
+            # Ensure required assets are present; upload any missing
+            try:
+                existing_asset_names = {a.get('name') for a in existing_release.assets or []}
+                missing_files = [f for f in mp3_files if Path(f).name not in existing_asset_names]
+                if missing_files:
+                    logger.info(f"Uploading {len(missing_files)} missing asset(s) to existing release")
+                    for mp3_file in missing_files:
+                        self._upload_asset(existing_release.id, mp3_file)
+                    # Refresh release data to include newly uploaded assets
+                    url = f"{self.api_base}/repos/{self.repository}/releases/{existing_release.id}"
+                    refreshed = self._make_request('GET', url).json()
+                    existing_release = self._parse_release_data(refreshed)
+                else:
+                    logger.info("All assets already present on existing release")
+            except Exception as e:
+                logger.warning(f"Failed to ensure assets on existing release: {e}")
             return existing_release
         
         # Create release body

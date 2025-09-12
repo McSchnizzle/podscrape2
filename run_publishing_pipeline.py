@@ -350,7 +350,7 @@ class PublishingPipelineRunner:
             duration = (datetime.now() - start_time).total_seconds()
             self.logger.info("="*100)
             self.logger.info(f"🎉 Publishing pipeline completed successfully in {duration:.1f}s")
-        self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
+            self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
             self.logger.info("="*100)
             
             return True
