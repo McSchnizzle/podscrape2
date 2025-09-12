@@ -18,7 +18,7 @@ pydub>=0.25.1                  # Audio manipulation
 mutagen>=1.47.0                # Audio metadata
 
 # Database & Data
-sqlite3                        # SQLite database (built-in)
+# sqlite3 is part of the Python standard library; do not install via pip
 pandas>=2.0.0                  # Data manipulation (optional)
 
 # Configuration & Validation
