@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4">
+  <h2 class="text-xl font-medium mb-4">Script Lab</h2>
+  <form method="post" class="space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+      <div class="md:col-span-3">
+        <label class="block text-xs text-gray-600 mb-1">Topic</label>
+        <select name="topic" class="border rounded w-full px-3 py-2">
+          {% for t in topics %}
+            <option value="{{ t }}" {% if t==selected %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-3">
+        <label class="block text-xs text-gray-600 mb-1">Type of Show</label>
+        <select name="type_of_show" class="border rounded w-full px-3 py-2">
+          {% for opt in ['newscast','dialog','narrative story','critical analysis'] %}
+            <option value="{{ opt }}" {% if opt==type_of_show %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-3">
+        <label class="block text-xs text-gray-600 mb-1">Voice</label>
+        <select name="voice_label" class="border rounded w-full px-3 py-2">
+          {% for v in ['American news anchor','British man','Black woman','energetic millennial'] %}
+            <option value="{{ v }}" {% if v==voice_label %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-1">
+        <label class="block text-xs text-gray-600 mb-1">Tone</label>
+        <select name="tone" class="border rounded w-full px-3 py-2">
+          {% for t in ['neutral','inspirational','critical','investigative'] %}
+            <option value="{{ t }}" {% if t==tone %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs text-gray-600 mb-1">Pace</label>
+        <select name="pace" class="border rounded w-full px-3 py-2">
+          {% for p in ['fast','moderate','reflective'] %}
+            <option value="{{ p }}" {% if p==pace %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-12 flex gap-2">
+        <button name="action" value="rewrite" class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Apply Knobs</button>
+        <button name="action" value="save" class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Save Instructions</button>
+        <button name="action" value="preview" class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Generate Preview Script</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Digest Instructions (Markdown)</label>
+        <textarea name="content" rows="24" class="w-full border rounded p-2 font-mono text-xs">{{ content }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Preview Script</label>
+        <pre class="w-full border rounded p-2 bg-gray-50 text-xs" style="min-height: 26rem; white-space: pre-wrap">{{ preview or '—' }}</pre>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

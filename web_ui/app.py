@@ -547,6 +547,177 @@ def create_app():
             flash(f'Failed to load publishing page: {e}', 'error')
             return render_template('publishing.html', items=[], days=days)
 
+    # --------------
+    # Script Lab
+    # --------------
+    def _editor_key(topic: str, key: str) -> str:
+        return f"{topic}:{key}"
+
+    def _load_topic_instructions(topic_name: str) -> str:
+        try:
+            from config.config_manager import ConfigManager as _CM
+            cm = _CM()
+            for t in cm.get_all_topics():
+                if t.get('name') == topic_name:
+                    fname = t.get('instruction_file')
+                    if fname:
+                        p = PROJECT_ROOT / 'digest_instructions' / fname
+                        if p.exists():
+                            return p.read_text(encoding='utf-8')
+        except Exception:
+            pass
+        return ''
+
+    def _save_topic_instructions(topic_name: str, content: str) -> None:
+        from config.config_manager import ConfigManager as _CM
+        cm = _CM()
+        topics = cm.get_all_topics()
+        for t in topics:
+            if t.get('name') == topic_name:
+                fname = t.get('instruction_file')
+                if not fname:
+                    # default file
+                    safe = topic_name.replace(' ', '_') + '.md'
+                    t['instruction_file'] = safe
+                    fname = safe
+                p = PROJECT_ROOT / 'digest_instructions' / fname
+                p.write_text(content, encoding='utf-8')
+                cm.save_topics(topics)
+                return
+
+    def _map_voice_label_to_id(label: str) -> str:
+        # Try to find a voice by label using available voices; fallback to known IDs
+        try:
+            from src.audio.voice_manager import VoiceManager
+            vm = VoiceManager()
+            voices = vm.get_available_voices()
+            by_name = {v.name.lower(): v for v in voices}
+            want = label.lower()
+            # heuristic selection
+            if 'news' in want:
+                for name in by_name:
+                    if 'news' in name or 'anchor' in name:
+                        return by_name[name].voice_id
+            if 'british' in want:
+                for name in by_name:
+                    if 'british' in name or 'uk' in name:
+                        return by_name[name].voice_id
+            if 'black' in want:
+                # no reliable metadata; prefer distinct female voice
+                for name in by_name:
+                    if 'bella' in name or 'domi' in name or 'female' in name:
+                        return by_name[name].voice_id
+            if 'millennial' in want or 'energetic' in want:
+                for name in by_name:
+                    if 'domi' in name or 'bella' in name or 'young' in name:
+                        return by_name[name].voice_id
+            # gender hints
+            if 'man' in want or 'male' in want:
+                for name in by_name:
+                    if 'josh' in name or 'adam' in name or 'brian' in name or 'male' in name:
+                        return by_name[name].voice_id
+            if 'woman' in want or 'female' in want:
+                for name in by_name:
+                    if 'rachel' in name or 'bella' in name or 'elli' in name or 'female' in name:
+                        return by_name[name].voice_id
+            # fallback to first available
+            if voices:
+                return voices[0].voice_id
+        except Exception:
+            pass
+        # fallback known IDs from config
+        return '21m00Tcm4TlvDq8ikWAM'
+
+    @app.route('/script-lab', methods=['GET', 'POST'])
+    def script_lab():
+        # Topics list
+        topics = config_manager.get_all_topics()
+        topic_names = [t['name'] for t in topics]
+        selected = request.values.get('topic') or (topic_names[0] if topic_names else None)
+        if not selected:
+            flash('No topics configured', 'error')
+            return render_template('script_lab.html', topics=[], selected=None)
+        # Load current instructions
+        content = request.values.get('content') or _load_topic_instructions(selected)
+        # Knobs
+        type_of_show = request.values.get('type_of_show') or web_config.get_setting('editor', _editor_key(selected, 'type_of_show'), 'newscast')
+        voice_label = request.values.get('voice_label') or web_config.get_setting('editor', _editor_key(selected, 'voice_label'), 'American news anchor')
+        tone = request.values.get('tone') or web_config.get_setting('editor', _editor_key(selected, 'tone'), 'neutral')
+        pace = request.values.get('pace') or web_config.get_setting('editor', _editor_key(selected, 'pace'), 'moderate')
+        preview = None
+        action = request.values.get('action')
+        if request.method == 'POST':
+            if action == 'rewrite':
+                # Call OpenAI to rewrite instructions per knobs
+                try:
+                    from openai import OpenAI
+                    client = OpenAI()
+                    sys_prompt = f"Rewrite the following Markdown digest instructions to reflect: type_of_show={type_of_show}, voice={voice_label}, tone={tone}, pace={pace}. Keep structure clear and headings intact. Return Markdown only."
+                    user = content
+                    resp = client.responses.create(
+                        model="gpt-5",
+                        input=[
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": user}
+                        ],
+                        max_output_tokens=8000,
+                        reasoning={"effort": "medium"}
+                    )
+                    content = resp.output_text or content
+                    flash('Instructions updated from knobs', 'success')
+                except Exception as e:
+                    flash(f'OpenAI rewrite failed: {e}', 'error')
+            elif action == 'save':
+                # Save instructions and update voice mapping for topic
+                try:
+                    _save_topic_instructions(selected, content)
+                    # Update voice_id for selected topic
+                    vid = _map_voice_label_to_id(voice_label)
+                    ts = config_manager.get_all_topics()
+                    for t in ts:
+                        if t['name'] == selected:
+                            t['voice_id'] = vid
+                            break
+                    config_manager.save_topics(ts)
+                    # Persist knobs
+                    web_config.set_setting('editor', _editor_key(selected, 'type_of_show'), type_of_show)
+                    web_config.set_setting('editor', _editor_key(selected, 'voice_label'), voice_label)
+                    web_config.set_setting('editor', _editor_key(selected, 'tone'), tone)
+                    web_config.set_setting('editor', _editor_key(selected, 'pace'), pace)
+                    flash('Instructions and voice saved', 'success')
+                except Exception as e:
+                    flash(f'Failed to save: {e}', 'error')
+            elif action == 'preview':
+                # Generate script preview using current instructions and scored episodes
+                try:
+                    from src.generation.script_generator import ScriptGenerator
+                    sg = ScriptGenerator(web_config=web_config)
+                    # Override instruction content in-memory
+                    if selected in sg.topic_instructions:
+                        ti = sg.topic_instructions[selected]
+                        ti.content = content
+                    # Get scored episodes and generate script
+                    eps = sg.get_qualifying_episodes(selected)
+                    if not eps:
+                        preview = "No scored episodes qualify at the current threshold."
+                    else:
+                        from datetime import date as _date
+                        script, wc = sg.generate_script(selected, eps, _date.today())
+                        preview = script
+                except Exception as e:
+                    preview = f"Error generating preview: {e}"
+        return render_template(
+            'script_lab.html',
+            topics=topic_names,
+            selected=selected,
+            type_of_show=type_of_show,
+            voice_label=voice_label,
+            tone=tone,
+            pace=pace,
+            content=content,
+            preview=preview,
+        )
+
     @app.post('/publishing/<int:digest_id>/publish')
     def publishing_publish(digest_id: int):
         # Start background publish (ensure asset) and stream log
