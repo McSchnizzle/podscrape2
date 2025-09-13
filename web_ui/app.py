@@ -80,6 +80,86 @@ def create_app():
         logs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return logs[:limit]
 
+    def _parse_phase_info(log_path: Path):
+        info = {
+            'timings': {},  # key->seconds
+            'publishing': None,
+        }
+        try:
+            import re
+            from datetime import datetime as _dt
+            ts_re = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})")
+            def parse_ts(line: str):
+                m = ts_re.match(line)
+                if not m:
+                    return None
+                try:
+                    return _dt.strptime(m.group(1), '%Y-%m-%d %H:%M:%S,%f')
+                except Exception:
+                    return None
+            starts = {
+                'discovery': None,
+                'audio': None,
+                'scoring': None,
+                'digests': None,
+                'tts': None,
+                'publishing': None,
+            }
+            end_ts = None
+            rss_ok = None
+            vercel_ok = None
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as fh:
+                for line in fh:
+                    ts = parse_ts(line)
+                    low = line.lower()
+                    if ts is None:
+                        continue
+                    if ('phase 1' in low and 'discover' in low) and starts['discovery'] is None:
+                        starts['discovery'] = ts
+                    elif ('phase 2' in low and 'audio processing' in low) and starts['audio'] is None:
+                        starts['audio'] = ts
+                    elif ('phase 3' in low and 'scoring' in low) and starts['scoring'] is None:
+                        starts['scoring'] = ts
+                    elif (('phase 4' in low and 'digest' in low) or 'digest generation for all' in low) and starts['digests'] is None:
+                        starts['digests'] = ts
+                    elif ('phase 6' in low and 'tts' in low) and starts['tts'] is None:
+                        starts['tts'] = ts
+                    elif (('phase 7' in low and 'publishing' in low) or 'handing off to publishing pipeline' in low) and starts['publishing'] is None:
+                        starts['publishing'] = ts
+                    elif 'pipeline execution complete' in low:
+                        end_ts = ts
+                    # Publishing status lines
+                    if 'publishing results' in low:
+                        # subsequent lines contain statuses; handled via flags below
+                        pass
+                    if 'rss feed:' in low:
+                        rss_ok = ('✅' in line) or ('generated' in low and '❌' not in low)
+                    if 'vercel deployment:' in low:
+                        vercel_ok = ('✅' in line) or ('deployed' in low and '❌' not in low)
+            # Compute durations
+            def diff(a, b):
+                if a and b:
+                    return max(0, int((b - a).total_seconds()))
+                return None
+            # Discovery ends at audio start
+            info['timings']['discovery'] = diff(starts['discovery'], starts['audio'])
+            info['timings']['audio'] = diff(starts['audio'], starts['scoring'])
+            info['timings']['scoring'] = diff(starts['scoring'], starts['digests'])
+            info['timings']['digests'] = diff(starts['digests'], starts['tts'])
+            info['timings']['tts'] = diff(starts['tts'], starts['publishing'])
+            info['timings']['publishing'] = diff(starts['publishing'], end_ts)
+            # Publishing one-liner
+            if rss_ok is not None or vercel_ok is not None:
+                parts = []
+                if rss_ok is not None:
+                    parts.append(f"RSS {'OK' if rss_ok else 'FAIL'}")
+                if vercel_ok is not None:
+                    parts.append(f"Vercel {'OK' if vercel_ok else 'FAIL'}")
+                info['publishing'] = '; '.join(parts)
+        except Exception:
+            pass
+        return info
+
     def _parse_log_summary(log_path: Path):
         summary = {
             'episodes': [],  # list of {title, feed, scores: {topic: score}, qualifying: [topic]}
@@ -221,6 +301,13 @@ def create_app():
                 })
             except Exception:
                 # Leave modified/size unset; summary can still render
+                pass
+            # Parse phase timings and publishing one-liner
+            try:
+                phase_info = _parse_phase_info(latest_log)
+                last_run['phase_timings'] = phase_info.get('timings', {})
+                last_run['publishing_status'] = phase_info.get('publishing')
+            except Exception:
                 pass
 
         # Canonical RSS items from public/daily-digest.xml
@@ -877,7 +964,7 @@ def create_app():
         if file_arg:
             from pathlib import Path as _P
             base = _P(file_arg).name
-            if base.startswith(('pipeline_run_', 'publishing_pipeline_')) and base.endswith('.log'):
+            if base.startswith(('pipeline_run_', 'publishing_pipeline_', 'maintenance_')) and base.endswith('.log'):
                 candidate = PROJECT_ROOT / base
                 if candidate.exists():
                     latest = candidate
@@ -943,10 +1030,18 @@ def create_app():
                 ORDER BY published_date DESC
                 """
             )
+            # Build set of episode IDs that appear in any digest
+            dig_rows = dbm.execute_query("SELECT episode_ids FROM digests WHERE episode_ids IS NOT NULL")
+            import json as _json
+            in_digests = set()
+            for dr in dig_rows:
+                try:
+                    ids = _json.loads(dr['episode_ids']) if dr['episode_ids'] else []
+                    in_digests.update(ids)
+                except Exception:
+                    continue
             root = PROJECT_ROOT / 'data' / 'transcripts'
-            fixed = 0
-            reset = 0
-            ok = 0
+            fixed = reset = ok = marked = 0
             with open(log_path, 'a', encoding='utf-8') as fh:
                 fh.write(f"Reconciling {len(rows)} episodes...\n")
                 for r in rows:
@@ -956,6 +1051,15 @@ def create_app():
                     status = r['status'] or ''
                     tpath = r['transcript_path']
                     fh.write(f"Episode {eid} [{status}]: {title[:60]}\n")
+                    # If episode appears in any digest, ensure status is 'digested'
+                    if eid in in_digests and status != 'digested':
+                        try:
+                            dbm.execute_update("UPDATE episodes SET status='digested' WHERE id=?", (eid,))
+                            status = 'digested'
+                            marked += 1
+                            fh.write("  status→digested (in digest table)\n")
+                        except Exception as ex:
+                            fh.write(f"  WARN failed to set digested: {ex}\n")
                     # If we already have a valid transcript file, mark OK
                     if tpath and os.path.exists(tpath):
                         # Ensure digested placement for digested status
@@ -1004,7 +1108,7 @@ def create_app():
                         fh.write("  RESET → pending (no transcript found)\n")
                     except Exception as ex:
                         fh.write(f"  ERROR resetting: {ex}\n")
-                fh.write(f"Done. ok={ok}, fixed={fixed}, reset={reset}\n")
+                fh.write(f"Done. ok={ok}, fixed={fixed}, reset={reset}, marked_digested={marked}\n")
         log_path = _start_maintenance_task('reconcile_episodes', worker)
         return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
 

@@ -1,0 +1,36 @@
+{
+  "topics": [
+    {
+      "name": "AI and Technology",
+      "instruction_file": "AI and Technology.md",
+      "voice_id": "21m00Tcm4TlvDq8ikWAM",
+      "active": true,
+      "description": "AI developments, machine learning breakthroughs, AI product launches, technology industry news, tech company developments, digital culture"
+    },
+    {
+      "name": "Social Movements and Community Organizing",
+      "instruction_file": "Social Movements and Community Organizing.md",
+      "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+      "active": true,
+      "description": "Community organizing strategies, grassroots movements, activism, social movements, cultural shifts, societal transformation"
+    },
+    {
+      "name": "Psychedelics and Spirituality",
+      "instruction_file": "Psychedelics and Spirituality.md",
+      "voice_id": "21m00Tcm4TlvDq8ikWAM",
+      "active": true,
+      "description": "References to religion, Buddhism, meditation practices, and spiritual traditions; discussion of psychedelics such as psilocybin, ayahuasca, MDMA, LSD; mystical experiences, astrology, consciousness, and energetic connection between people and the universe"
+    }
+  ],
+  "settings": {
+    "score_threshold": 0.65,
+    "max_words_per_script": 25000,
+    "default_voice_settings": {
+      "stability": 0.75,
+      "similarity_boost": 0.75,
+      "style": 0.0,
+      "use_speaker_boost": true
+    }
+  },
+  "last_updated": "2025-09-09T09:48:33.350272"
+}
