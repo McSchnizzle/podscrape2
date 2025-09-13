@@ -931,6 +931,106 @@ def create_app():
                 pass
         return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
 
+    @app.post('/maintenance/reconcile_episodes')
+    def reconcile_episodes():
+        def worker(log_path: Path):
+            from database.models import get_database_manager
+            dbm = get_database_manager()
+            rows = dbm.execute_query(
+                """
+                SELECT id, title, episode_guid, status, transcript_path, published_date
+                FROM episodes
+                ORDER BY published_date DESC
+                """
+            )
+            root = PROJECT_ROOT / 'data' / 'transcripts'
+            fixed = 0
+            reset = 0
+            ok = 0
+            with open(log_path, 'a', encoding='utf-8') as fh:
+                fh.write(f"Reconciling {len(rows)} episodes...\n")
+                for r in rows:
+                    eid = r['id']
+                    title = r['title']
+                    guid = r['episode_guid'] or ''
+                    status = r['status'] or ''
+                    tpath = r['transcript_path']
+                    fh.write(f"Episode {eid} [{status}]: {title[:60]}\n")
+                    # If we already have a valid transcript file, mark OK
+                    if tpath and os.path.exists(tpath):
+                        # Ensure digested placement for digested status
+                        try:
+                            if status == 'digested' and Path(tpath).parent.name != 'digested':
+                                p = Path(tpath)
+                                dig_dir = p.parent / 'digested'
+                                dig_dir.mkdir(exist_ok=True)
+                                new_p = dig_dir / p.name
+                                if not new_p.exists():
+                                    p.replace(new_p)
+                                episode_repo.update_transcript_path(eid, str(new_p))
+                                fh.write(f"  Moved to digested: {new_p}\n")
+                                fixed += 1
+                            else:
+                                ok += 1
+                                fh.write("  OK (has transcript)\n")
+                        except Exception as ex:
+                            fh.write(f"  WARN failed to adjust: {ex}\n")
+                        continue
+                    # Try to locate a transcript by short GUID
+                    short = guid.replace('-', '')[:6]
+                    found = None
+                    try:
+                        if short and root.exists():
+                            for candidate in root.rglob(f"*{short}*.txt"):
+                                found = candidate
+                                break
+                    except Exception:
+                        found = None
+                    if found and found.exists():
+                        try:
+                            episode_repo.update_transcript_path(eid, str(found))
+                            ok += 1
+                            fh.write(f"  Linked transcript: {found}\n")
+                        except Exception as ex:
+                            fh.write(f"  WARN failed to link transcript: {ex}\n")
+                        continue
+                    # No transcript: reset to pending for re-processing
+                    try:
+                        dbm.execute_update(
+                            "UPDATE episodes SET status='pending', transcript_path=NULL, transcript_word_count=NULL, chunk_count=0 WHERE id=?",
+                            (eid,)
+                        )
+                        reset += 1
+                        fh.write("  RESET → pending (no transcript found)\n")
+                    except Exception as ex:
+                        fh.write(f"  ERROR resetting: {ex}\n")
+                fh.write(f"Done. ok={ok}, fixed={fixed}, reset={reset}\n")
+        log_path = _start_maintenance_task('reconcile_episodes', worker)
+        return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
+
+    @app.post('/maintenance/retention_cleanup')
+    def retention_cleanup():
+        dry = True if (request.form.get('dry') == '1') else False
+        def worker(log_path: Path):
+            try:
+                from src.publishing.retention_manager import create_retention_manager
+                rm = create_retention_manager()
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Running retention cleanup (dry_run={dry})...\n")
+                stats = rm.run_cleanup(dry_run=dry)
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Deleted files: {stats.files_deleted}, freed bytes: {stats.bytes_freed}\n")
+                    fh.write(f"Deleted GitHub releases: {stats.github_releases_deleted}\n")
+                    if stats.errors:
+                        fh.write(f"Errors: {len(stats.errors)}\n")
+                        for e in stats.errors[:20]:
+                            fh.write(f"  {e}\n")
+            except Exception as e:
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Error: {e}\n")
+        log_path = _start_maintenance_task('retention_cleanup', worker)
+        return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
+
     # -----------------
     # Feeds Management
     # -----------------

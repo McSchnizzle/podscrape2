@@ -12,7 +12,17 @@
     <form method="post" action="/maintenance/repair_publishing">
       <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Ensure GitHub release assets, regenerate RSS, and deploy">Repair Publishing (Ensure Assets)</button>
     </form>
+    <form method="post" action="/maintenance/reconcile_episodes">
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Match episodes to transcripts or reset to pending">Reconcile Episodes ↔ Transcripts</button>
+    </form>
+    <form method="post" action="/maintenance/retention_cleanup">
+      <input type="hidden" name="dry" value="1" />
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Preview retention cleanup without deleting anything">Retention Cleanup (Dry Run)</button>
+    </form>
+    <form method="post" action="/maintenance/retention_cleanup" onsubmit="return confirm('Run retention cleanup now? This will delete old files/releases based on settings.');">
+      <input type="hidden" name="dry" value="0" />
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Run retention cleanup now">Retention Cleanup (Run)</button>
+    </form>
   </div>
 </div>
 {% endblock %}
-
