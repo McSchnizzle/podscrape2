@@ -61,16 +61,27 @@ class CompleteAudioProcessor:
                 results['skip_reason'] = "No qualifying episodes (score < 0.65)"
                 return results
             
-            # Step 2: Check if audio already exists
+            # Step 2: Check if audio already exists; if script is newer, regenerate
             if digest.mp3_path and Path(digest.mp3_path).exists():
-                logger.info(f"Audio already exists for digest {digest.id}: {digest.mp3_path}")
-                results['success'] = True
-                results['audio_metadata'] = {
-                    'file_path': digest.mp3_path,
-                    'title': digest.mp3_title,
-                    'summary': digest.mp3_summary
-                }
-                return results
+                mp3_p = Path(digest.mp3_path)
+                script_p = Path(digest.script_path) if digest.script_path else None
+                try:
+                    if script_p and script_p.exists() and script_p.stat().st_mtime > mp3_p.stat().st_mtime:
+                        logger.info(
+                            f"Existing audio is older than script (mp3: {mp3_p.stat().st_mtime}, script: {script_p.stat().st_mtime}); regenerating"
+                        )
+                    else:
+                        logger.info(f"Audio already exists for digest {digest.id}: {digest.mp3_path}")
+                        results['success'] = True
+                        results['audio_metadata'] = {
+                            'file_path': digest.mp3_path,
+                            'title': digest.mp3_title,
+                            'summary': digest.mp3_summary
+                        }
+                        return results
+                except Exception:
+                    # If stats fail, fall through to regenerate
+                    logger.info("Could not compare timestamps; regenerating audio as a safe fallback")
             
             if not digest.script_path or not Path(digest.script_path).exists():
                 error_msg = f"Script file not found for digest {digest.id}: {digest.script_path}"
@@ -93,9 +104,19 @@ class CompleteAudioProcessor:
             # Step 4: Generate TTS audio
             logger.info(f"Generating TTS audio for digest {digest.id}")
             try:
+                # Extract timestamp from script filename to keep MP3 and script aligned
+                import re as _re
+                ts = None
+                try:
+                    m = _re.search(r"_(\d{8}_\d{6})\.md$", str(Path(digest.script_path).name))
+                    if m:
+                        ts = m.group(1)
+                except Exception:
+                    ts = None
                 audio_metadata = self.audio_generator.generate_audio_for_script(
                     digest.script_path,
-                    digest.topic
+                    digest.topic,
+                    timestamp=ts
                 )
                 results['audio_metadata'] = audio_metadata
                 logger.info(f"Generated audio: {Path(audio_metadata.file_path).name}")

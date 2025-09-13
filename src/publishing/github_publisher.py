@@ -63,7 +63,11 @@ class GitHubPublisher:
             import subprocess
             chk = subprocess.run(['gh', '--version'], capture_output=True, text=True, timeout=5)
             if chk.returncode == 0:
-                auth = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True, timeout=10)
+                # Ensure we don't let env tokens override local gh auth status
+                env_nt = os.environ.copy()
+                env_nt.pop('GITHUB_TOKEN', None)
+                env_nt.pop('GH_TOKEN', None)
+                auth = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True, timeout=10, env=env_nt)
                 self.gh_cli_ok = (auth.returncode == 0)
             if not self.gh_cli_ok:
                 logger.warning("GitHub CLI not available or not authenticated; REST token will be required for publishing")
@@ -123,7 +127,33 @@ class GitHubPublisher:
                 if missing_files:
                     logger.info(f"Uploading {len(missing_files)} missing asset(s) to existing release")
                     for mp3_file in missing_files:
-                        self._upload_asset(existing_release.id, mp3_file)
+                        try:
+                            self._upload_asset(existing_release.id, mp3_file)
+                        except Exception as e:
+                            logger.warning(f"REST upload failed for {Path(mp3_file).name}: {e}")
+                            # Fallback to GH CLI if available/authenticated
+                            if self.gh_cli_ok:
+                                try:
+                                    import subprocess
+                                    env_nt = os.environ.copy()
+                                    env_nt.pop('GITHUB_TOKEN', None)
+                                    env_nt.pop('GH_TOKEN', None)
+                                    cmd = [
+                                        'gh','release','upload', tag_name,
+                                        mp3_file,
+                                        '--repo', self.repository,
+                                        '--clobber'
+                                    ]
+                                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env_nt)
+                                    if out.returncode != 0:
+                                        logger.error(f"GH CLI asset upload failed: {out.stderr.strip()}")
+                                        raise PodcastError(f"GH CLI asset upload failed: {out.stderr.strip()}")
+                                    logger.info(f"Uploaded via GH CLI: {Path(mp3_file).name}")
+                                except Exception as ce:
+                                    logger.error(f"Failed to upload asset via GH CLI: {ce}")
+                                    raise
+                            else:
+                                raise
                     # Refresh release data to include newly uploaded assets
                     url = f"{self.api_base}/repos/{self.repository}/releases/{existing_release.id}"
                     refreshed = self._make_request('GET', url).json()
@@ -168,6 +198,9 @@ class GitHubPublisher:
                 raise PodcastError(f"Failed to create GitHub release: {e}")
             try:
                 import subprocess
+                env_nt = os.environ.copy()
+                env_nt.pop('GITHUB_TOKEN', None)
+                env_nt.pop('GH_TOKEN', None)
                 cmd = [
                     'gh', 'release', 'create', tag_name,
                     *mp3_files,
@@ -175,7 +208,7 @@ class GitHubPublisher:
                     '-n', release_body,
                     '--repo', self.repository
                 ]
-                out = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env_nt)
                 if out.returncode != 0:
                     logger.error(f"GH CLI release create failed: {out.stderr.strip()}")
                     raise PodcastError(f"GH CLI release create failed: {out.stderr.strip()}")
@@ -205,12 +238,15 @@ class GitHubPublisher:
             # Fallback to GH CLI if available
             try:
                 import subprocess, json as _json
+                env_nt = os.environ.copy()
+                env_nt.pop('GITHUB_TOKEN', None)
+                env_nt.pop('GH_TOKEN', None)
                 cmd = [
                     'gh', 'release', 'view', tag_name,
                     '--repo', self.repository,
                     '--json', 'id,tagName,name,assets,url,createdAt,publishedAt'
                 ]
-                out = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=20, env=env_nt)
                 if out.returncode != 0:
                     logger.error(f"GH CLI view failed: {out.stderr.strip()}")
                     return None

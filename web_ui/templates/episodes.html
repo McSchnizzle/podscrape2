@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4">
+  <h2 class="text-xl font-medium mb-4">Episodes</h2>
+  <form method="get" class="mb-3 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+    <div class="md:col-span-5">
+      <label class="block text-xs text-gray-600 mb-1">Search</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Search title or feed" class="border px-3 py-2 rounded w-full" />
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-xs text-gray-600 mb-1">Status</label>
+      <select name="status" class="border px-2 py-2 rounded w-full">
+        <option value="" {% if not status %}selected{% endif %}>Any</option>
+        {% for s in ['pending','downloading','chunking','transcribing','transcribed','scoring','scored','digested','failed'] %}
+          <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-xs text-gray-600 mb-1">Sort By</label>
+      <select name="sort_by" class="border px-2 py-2 rounded w-full">
+        <option value="scored_at" {% if sort_by=='scored_at' %}selected{% endif %}>Scored</option>
+        <option value="published" {% if sort_by=='published' %}selected{% endif %}>Published</option>
+        <option value="title" {% if sort_by=='title' %}selected{% endif %}>Title</option>
+        <option value="feed" {% if sort_by=='feed' %}selected{% endif %}>Feed</option>
+        <option value="status" {% if sort_by=='status' %}selected{% endif %}>Status</option>
+      </select>
+    </div>
+    <div class="md:col-span-1">
+      <label class="block text-xs text-gray-600 mb-1">Dir</label>
+      <select name="sort_dir" class="border px-2 py-2 rounded w-full">
+        <option value="desc" {% if sort_dir=='desc' %}selected{% endif %}>Desc</option>
+        <option value="asc" {% if sort_dir=='asc' %}selected{% endif %}>Asc</option>
+      </select>
+    </div>
+    <div class="md:col-span-2">
+      <button class="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 w-full" type="submit">Apply</button>
+    </div>
+  </form>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-2 pr-4">Title</th>
+          <th class="py-2 pr-4">Feed</th>
+          <th class="py-2 pr-4">Published</th>
+          <th class="py-2 pr-4">Status</th>
+          <th class="py-2 pr-4">Scores</th>
+          <th class="py-2 pr-4">Included In</th>
+          <th class="py-2 pr-4">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ep in items %}
+        <tr class="border-b align-top">
+          <td class="py-2 pr-4">{{ ep.title }}</td>
+          <td class="py-2 pr-4 text-gray-600">
+            <span class="font-mono text-xs">{{ ep.feed_title_display }}</span>
+          </td>
+          <td class="py-2 pr-4 text-gray-600"><span class="font-mono text-xs">{{ (ep.published_date or '')[:10] }}</span></td>
+          <td class="py-2 pr-4"><span class="font-mono text-xs">{{ ep.status }}</span></td>
+          <td class="py-2 pr-4 text-gray-700"><span class="font-mono text-xs">{{ ep.score_labels }}</span></td>
+          <td class="py-2 pr-4 text-gray-700">
+            {% if ep.included and ep.included|length > 0 %}
+              <span class="font-mono text-xs">{{ ep.included[0].topic }} — {{ ep.included[0].date }}</span>
+            {% else %}
+              <span class="text-xs text-gray-500">—</span>
+            {% endif %}
+          </td>
+          <td class="py-2 pr-4">
+            <form method="post" action="/episodes/{{ ep.id }}/undigest" class="inline">
+              <button class="text-blue-700 text-xs" type="submit" title="Reset to scored and restore transcript if archived">Reset to Scored</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="py-4 text-center text-gray-500">No episodes found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

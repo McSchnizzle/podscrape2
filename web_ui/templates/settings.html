@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+<form method="post" class="bg-white shadow rounded p-4 space-y-6">
+  <h2 class="text-xl font-medium">Settings</h2>
+  <div class="p-3 bg-blue-50 text-blue-800 rounded text-sm">
+    Transcription limits control how many chunks per episode are processed. If "Transcribe all chunks" is checked, all generated chunks are transcribed. If unchecked, only the first N chunks ("Max chunks per episode") are transcribed. These settings apply when running the full pipeline.
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h3 class="font-semibold mb-2">Content Filtering</h3>
+      <label class="block text-sm">Score Threshold (0.0–1.0)</label>
+      <input name="score_threshold" type="number" step="0.01" min="0" max="1" class="border rounded w-full p-2" value="{{ current.content_filtering.score_threshold }}">
+
+      <label class="block text-sm mt-3">Max Episodes per Digest (1–20)</label>
+      <input name="max_episodes_per_digest" type="number" min="1" max="20" class="border rounded w-full p-2" value="{{ current.content_filtering.max_episodes_per_digest }}">
+    </div>
+    <div>
+      <h3 class="font-semibold mb-2">Audio Processing</h3>
+      <label class="block text-sm">Chunk Duration Minutes (1–30)</label>
+      <input name="chunk_duration_minutes" type="number" min="1" max="30" class="border rounded w-full p-2" value="{{ current.audio_processing.chunk_duration_minutes }}">
+
+      <div class="mt-4">
+        <label class="inline-flex items-center space-x-2">
+          <input name="transcribe_all_chunks" type="checkbox" {% if current.audio_processing.transcribe_all_chunks %}checked{% endif %} class="mr-2">
+          <span class="text-sm">Transcribe all chunks</span>
+        </label>
+      </div>
+      <div class="mt-2">
+        <label class="block text-sm">Max chunks per episode (used when not "all")</label>
+        <input name="max_chunks_per_episode" type="number" min="1" max="50" class="border rounded w-full p-2" value="{{ current.audio_processing.max_chunks_per_episode }}">
+        <p class="text-xs text-gray-500 mt-1">If "Transcribe all chunks" is checked, this value is ignored.</p>
+      </div>
+    </div>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h3 class="font-semibold mb-2">Pipeline</h3>
+      <label class="block text-sm">Max episodes per full run (1–20)</label>
+      <input name="max_episodes_per_run" type="number" min="1" max="20" class="border rounded w-full p-2" value="{{ current.pipeline.max_episodes_per_run }}">
+    </div>
+  </div>
+  <div>
+    <button class="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Save</button>
+    <a class="ml-3 text-gray-600" href="/">Cancel</a>
+  </div>
+</form>
+{% endblock %}

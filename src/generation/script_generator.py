@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from ..podcast.rss_models import PodcastEpisode as Episode, get_podcast_episode_repo
 from ..database.models import Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
+from ..config.web_config import WebConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,19 @@ class ScriptGenerator:
     Loads instructions from digest_instructions/ directory and enforces word limits.
     """
     
-    def __init__(self, config_manager: ConfigManager = None):
-        self.config = config_manager or ConfigManager()
+    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None):
+        self.web_config = web_config
+        self.config = config_manager or ConfigManager(web_config=web_config)
         self.episode_repo = get_podcast_episode_repo()
         self.digest_repo = get_digest_repo()
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        # Per-digest episode cap (from web config if available)
+        self.max_episodes_per_digest = 5
+        if self.web_config:
+            try:
+                self.max_episodes_per_digest = int(self.web_config.get_setting('content_filtering', 'max_episodes_per_digest', 5))
+            except Exception:
+                pass
         
         # Load topic configuration
         self.topics = self.config.get_topics()
@@ -101,7 +110,7 @@ class ScriptGenerator:
         return instructions
     
     def get_qualifying_episodes(self, topic: str, start_date: date = None, 
-                              end_date: date = None, max_episodes: int = 5) -> List[Episode]:
+                              end_date: date = None, max_episodes: int = None) -> List[Episode]:
         """
         Get episodes that qualify for digest generation (score >= threshold)
         Limited to max_episodes per topic to maintain digest quality
@@ -113,16 +122,18 @@ class ScriptGenerator:
             end_date=end_date
         )
         
-        # If we have more than max_episodes, take the highest scoring ones
-        if len(all_qualifying) > max_episodes:
+        # Determine cap
+        cap = max_episodes if isinstance(max_episodes, int) and max_episodes > 0 else self.max_episodes_per_digest
+        # If we have more than cap, take the highest scoring ones
+        if cap and len(all_qualifying) > cap:
             # Sort by score (highest first) and take top max_episodes
             sorted_episodes = sorted(
                 all_qualifying, 
                 key=lambda ep: ep.scores.get(topic, 0.0), 
                 reverse=True
             )
-            logger.info(f"Limiting {topic} episodes from {len(all_qualifying)} to {max_episodes} (saving {len(all_qualifying) - max_episodes} for future digests)")
-            return sorted_episodes[:max_episodes]
+            logger.info(f"Limiting {topic} episodes from {len(all_qualifying)} to {cap} (saving {len(all_qualifying) - cap} for future digests)")
+            return sorted_episodes[:cap]
         
         return all_qualifying
     
@@ -241,7 +252,9 @@ Thank you for your understanding, and we'll see you tomorrow!
     
     def save_script(self, topic: str, digest_date: date, content: str, word_count: int) -> str:
         """Save script to file and return file path"""
-        filename = f"{topic.replace(' ', '_')}_{digest_date.strftime('%Y%m%d')}.md"
+        from datetime import datetime as _dt
+        timestamp = _dt.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{topic.replace(' ', '_')}_{digest_date.strftime('%Y%m%d')}_{timestamp}.md"
         script_path = self.scripts_dir / filename
         
         try:
@@ -263,11 +276,8 @@ Thank you for your understanding, and we'll see you tomorrow!
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
         
-        # Check if digest already exists
+        # Check if digest already exists (we will update it rather than returning early)
         existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
-        if existing_digest and existing_digest.script_path:
-            logger.info(f"Digest already exists for {topic} on {digest_date}")
-            return existing_digest
         
         # Find qualifying episodes
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)

@@ -136,7 +136,7 @@ class AudioGenerator:
         
         return text
     
-    def generate_audio_for_script(self, script_path: str, topic: str) -> AudioMetadata:
+    def generate_audio_for_script(self, script_path: str, topic: str, timestamp: str = None) -> AudioMetadata:
         """Generate audio from a script file"""
         logger.info(f"Generating audio for script: {script_path}")
         
@@ -158,8 +158,9 @@ class AudioGenerator:
         
         logger.info(f"Using voice {voice_id} for topic '{topic}'")
         
-        # Generate filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Generate filename (allow caller to supply an exact timestamp to match script)
+        if not timestamp:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         safe_topic = topic.replace(' ', '_').replace('&', 'and')
         filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
@@ -292,7 +293,17 @@ class AudioGenerator:
         logger.info(f"Generating audio for digest {digest.id}: {digest.topic}")
         
         # Generate audio
-        audio_metadata = self.generate_audio_for_script(digest.script_path, digest.topic)
+        # Try to extract timestamp from script filename to keep MP3 in lockstep
+        from pathlib import Path as _P
+        import re as _re
+        ts = None
+        try:
+            m = _re.search(r"_(\d{8}_\d{6})\.md$", str(_P(digest.script_path).name))
+            if m:
+                ts = m.group(1)
+        except Exception:
+            ts = None
+        audio_metadata = self.generate_audio_for_script(digest.script_path, digest.topic, timestamp=ts)
         
         # Update digest record with audio information
         self.digest_repo.update_audio(

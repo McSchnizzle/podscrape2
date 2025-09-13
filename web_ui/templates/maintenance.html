@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4">
+  <h2 class="text-xl font-medium mb-4">Maintenance</h2>
+  <div class="space-y-4">
+    <form method="post" action="/maintenance/repair_digested">
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Archive transcripts for episodes included in digests (marks DB + moves files)">Archive Digested Transcripts</button>
+    </form>
+    <form method="post" action="/maintenance/repair_feeds">
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Repair episode feed associations based on transcript headers">Repair Feed Associations</button>
+    </form>
+    <form method="post" action="/maintenance/repair_publishing">
+      <button class="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Ensure GitHub release assets, regenerate RSS, and deploy">Repair Publishing (Ensure Assets)</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Podcast Digest Web UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  </head>
+  <body class="bg-gray-50 text-gray-900">
+    <div class="max-w-4xl mx-auto p-6">
+      <header class="mb-6">
+        <h1 class="text-2xl font-semibold">Podcast Digest Web UI</h1>
+        <nav class="mt-2 text-sm text-blue-600">
+          <a href="/" class="mr-4">Dashboard</a>
+          <a href="/settings" class="mr-4">Settings</a>
+          <a href="/feeds" class="mr-4">Feeds</a>
+          <a href="/topics" class="mr-4">Topics</a>
+          <a href="/episodes" class="mr-4">Episodes</a>
+          <a href="/maintenance">Maintenance</a>
+          <a href="/episodes">Episodes</a>
+        </nav>
+      </header>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="space-y-2 mb-4">
+            {% for category, message in messages %}
+              <div class="p-3 rounded {{ 'bg-green-100 text-green-800' if category=='success' else 'bg-red-100 text-red-800' }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+  </html>

@@ -36,19 +36,14 @@ class PublishingPipelineRunner:
     """
     
     def __init__(self, log_file: str = None, dry_run: bool = False):
-        # Set up comprehensive logging
-        if log_file is None:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_file = f"publishing_pipeline_{timestamp}.log"
-        
-        # Configure logging to both console and file
+        # Set up logging: console only unless a log_file is provided
+        handlers = [logging.StreamHandler(sys.stdout)]
+        if log_file:
+            handlers.insert(0, logging.FileHandler(log_file))
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout)
-            ]
+            handlers=handlers
         )
         
         self.logger = logging.getLogger(__name__)
@@ -58,7 +53,8 @@ class PublishingPipelineRunner:
         self.logger.info("="*100)
         self.logger.info("RSS PODCAST PUBLISHING PIPELINE - COMPLETE WORKFLOW")
         self.logger.info("="*100)
-        self.logger.info(f"Logging to: {log_file}")
+        if log_file:
+            self.logger.info(f"Logging to: {log_file}")
         self.logger.info(f"Dry run mode: {'ON' if dry_run else 'OFF'}")
         
         # Verify environment variables
@@ -91,18 +87,30 @@ class PublishingPipelineRunner:
         self.logger.info("Publishing pipeline initialized successfully")
     
     def _verify_environment(self):
-        """Verify required environment variables"""
-        required_vars = ['GITHUB_TOKEN', 'GITHUB_REPOSITORY']
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
-        
-        if missing_vars:
-            self.logger.error(f"Missing required environment variables: {missing_vars}")
-            self.logger.error("Please set these in your .env file:")
-            for var in missing_vars:
-                self.logger.error(f"  {var}=your_value_here")
-            raise EnvironmentError(f"Missing environment variables: {missing_vars}")
-        
-        self.logger.info("Environment variables verified")
+        """Verify environment for publishing.
+
+        Requires repository name, and either a GITHUB_TOKEN or GH CLI auth.
+        """
+        repo = os.getenv('GITHUB_REPOSITORY')
+        token = os.getenv('GITHUB_TOKEN')
+        if not repo:
+            self.logger.error("Missing required environment variable: GITHUB_REPOSITORY")
+            raise EnvironmentError("Missing GITHUB_REPOSITORY")
+        # If token missing, attempt to detect GH CLI auth (non-fatal)
+        if not token:
+            try:
+                import subprocess
+                env_nt = os.environ.copy()
+                env_nt.pop('GITHUB_TOKEN', None)
+                env_nt.pop('GH_TOKEN', None)
+                r = subprocess.run(['gh','auth','status'], capture_output=True, text=True, timeout=10, env=env_nt)
+                if r.returncode != 0:
+                    self.logger.warning("No GITHUB_TOKEN and GH CLI not authenticated — publishing may fail")
+                else:
+                    self.logger.info("Using GH CLI authentication for publishing")
+            except Exception as e:
+                self.logger.warning(f"GH CLI check failed: {e}")
+        self.logger.info("Environment variables verified (repository set)")
     
     def find_unpublished_digests(self, days_back: int = 30) -> List[Dict[str, Any]]:
         """Find digests that have MP3 files but haven't been published"""
@@ -163,22 +171,31 @@ class PublishingPipelineRunner:
         try:
             self.logger.info(f"Publishing digest: {digest['topic']} ({digest['digest_date']})")
             
-            # Skip if already published
-            if digest['github_url']:
-                self.logger.info(f"  Already published: {digest['github_url']}")
-                return True
-            
             if self.dry_run:
                 self.logger.info("  DRY RUN: Would publish to GitHub")
                 return True
             
             # Upload to GitHub (ensure resolved path)
-            mp3_files = [digest['mp3_path']]
+            mp3_path = digest['mp3_path']
+            try:
+                size = Path(mp3_path).stat().st_size
+                self.logger.info(f"  Local MP3 ready: {Path(mp3_path).name} ({size} bytes)")
+            except Exception as e:
+                self.logger.error(f"  Local MP3 not accessible: {mp3_path} ({e})")
+                return False
+            mp3_files = [mp3_path]
             digest_date = date.fromisoformat(digest['digest_date'])
             
+            # Always call create_daily_release; it uploads missing assets when a release exists
             release = self.github_publisher.create_daily_release(digest_date, mp3_files)
             
             if release:
+                # Log assets on the release to aid debugging
+                try:
+                    asset_names = [a.get('name') for a in (release.assets or [])]
+                    self.logger.info(f"  Release assets now: {asset_names}")
+                except Exception:
+                    pass
                 # Update database with GitHub URL
                 with self.db_manager.get_connection() as conn:
                     conn.execute("""
@@ -315,18 +332,15 @@ class PublishingPipelineRunner:
                 self.logger.info("No digests found to publish")
                 return True
             
-            # 2. Publish unpublished digests to GitHub
-            published_count = 0
-            failed_count = 0
-            
+            # 2. Ensure releases and assets for all digests (idempotent)
+            ensured = 0
+            failures = 0
             for digest in digests:
-                if not digest.get('github_url'):  # Only publish unpublished ones
-                    if self.publish_digest(digest):
-                        published_count += 1
-                    else:
-                        failed_count += 1
-            
-            self.logger.info(f"Publishing results: {published_count} published, {failed_count} failed")
+                if self.publish_digest(digest):
+                    ensured += 1
+                else:
+                    failures += 1
+            self.logger.info(f"Ensured GitHub releases for {ensured} digests (failures: {failures})")
             
             # 3. Generate RSS feed (include all digests, published and newly published)
             rss_content = self.generate_rss_feed(digests)
