@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4">
+  <h2 class="text-xl font-medium mb-4">Publishing</h2>
+  <form method="get" class="mb-3 flex items-end gap-2">
+    <div>
+      <label class="block text-xs text-gray-600">Days</label>
+      <input type="number" min="1" max="60" name="days" value="{{ days }}" class="border rounded px-3 py-2 w-24" />
+    </div>
+    <button class="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Apply</button>
+  </form>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-2 pr-4">Date</th>
+          <th class="py-2 pr-4">Topic</th>
+          <th class="py-2 pr-4">MP3</th>
+          <th class="py-2 pr-4">Duration</th>
+          <th class="py-2 pr-4">Asset</th>
+          <th class="py-2 pr-4">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in items %}
+          <tr class="border-b">
+            <td class="py-2 pr-4 font-mono text-xs">{{ d.digest_date }}</td>
+            <td class="py-2 pr-4">{{ d.topic }}</td>
+            <td class="py-2 pr-4">
+              <span class="font-mono text-xs">{{ d.mp3_file or '—' }}</span>
+            </td>
+            <td class="py-2 pr-4 text-gray-600">{{ d.mp3_duration_seconds or 0 }}s</td>
+            <td class="py-2 pr-4">
+              {% if d.asset_present is none %}
+                <span class="text-gray-500">unknown</span>
+              {% elif d.asset_present %}
+                <span class="text-green-700">Present</span>
+              {% else %}
+                <span class="text-red-700">Missing</span>
+              {% endif %}
+            </td>
+            <td class="py-2 pr-4">
+              <form method="post" action="/publishing/{{ d.id }}/publish" class="inline">
+                <button class="text-blue-700 text-xs" type="submit">Publish/Ensure</button>
+              </form>
+              <form method="post" action="/publishing/{{ d.id }}/unpublish" class="inline ml-2" onsubmit="return confirm('Remove asset from release and update RSS?')">
+                <button class="text-red-700 text-xs" type="submit">Unpublish</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="py-4 text-center text-gray-500">No digests</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

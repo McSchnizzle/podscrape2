@@ -46,7 +46,8 @@ class RetentionManager:
     """
     
     def __init__(self, retention_policies: List[RetentionPolicy] = None,
-                 github_publisher: GitHubPublisher = None):
+                 github_publisher: GitHubPublisher = None,
+                 github_release_days: int = None):
         """
         Initialize retention manager
         
@@ -56,6 +57,7 @@ class RetentionManager:
         """
         self.retention_policies = retention_policies or self._get_default_policies()
         self.github_publisher = github_publisher or create_github_publisher()
+        self.github_release_retention_days = github_release_days or 14
         
         logger.info(f"Retention Manager initialized with {len(self.retention_policies)} policies")
     
@@ -117,7 +119,7 @@ class RetentionManager:
             
             # Run GitHub cleanup
             if self.github_publisher:
-                github_stats = self._cleanup_github_releases(dry_run)
+                github_stats = self._cleanup_github_releases(dry_run, retention_days=self.github_release_retention_days)
                 self._merge_stats(stats, github_stats)
             
             # Summary
@@ -402,8 +404,38 @@ class RetentionManager:
 
 def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
                            github_publisher: GitHubPublisher = None) -> RetentionManager:
-    """Factory function to create retention manager"""
-    return RetentionManager(retention_policies, github_publisher)
+    """Factory function to create retention manager with WebConfig overrides if available"""
+    # Try to pull retention days from WebConfig
+    github_days = 14
+    try:
+        from ..config.web_config import WebConfigManager
+        wc = WebConfigManager()
+        github_days = int(wc.get_setting('retention', 'github_releases_days', 14))
+        # Override local policies if none provided
+        if retention_policies is None:
+            rm = RetentionManager(None, github_publisher, github_days)
+            # Update default policies' days from web settings
+            for p in rm.retention_policies:
+                key = None
+                if p.name == 'Local MP3 Files':
+                    key = 'local_mp3_days'
+                elif p.name == 'Audio Cache':
+                    key = 'audio_cache_days'
+                elif p.name == 'Audio Chunks':
+                    key = 'audio_chunks_days'
+                elif p.name == 'Old Logs':
+                    key = 'logs_days'
+                elif p.name == 'Old Scripts':
+                    key = 'scripts_days'
+                if key:
+                    try:
+                        p.retention_days = int(wc.get_setting('retention', key, p.retention_days))
+                    except Exception:
+                        pass
+            return rm
+    except Exception:
+        pass
+    return RetentionManager(retention_policies, github_publisher, github_days)
 
 
 # CLI testing functionality

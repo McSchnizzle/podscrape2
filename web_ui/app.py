@@ -357,6 +357,7 @@ def create_app():
             'content_filtering': web_config.get_category('content_filtering'),
             'audio_processing': web_config.get_category('audio_processing'),
             'pipeline': web_config.get_category('pipeline'),
+            'retention': web_config.get_category('retention'),
         }
         if request.method == 'POST':
             errors = []
@@ -391,6 +392,16 @@ def create_app():
                 web_config.set_setting('pipeline', 'max_episodes_per_run', max_run_eps)
             except Exception as e:
                 errors.append(f'max_episodes_per_run: {e}')
+            # Retention settings
+            try:
+                web_config.set_setting('retention', 'local_mp3_days', int(request.form.get('ret_local_mp3', current['retention'].get('local_mp3_days', 7))))
+                web_config.set_setting('retention', 'audio_cache_days', int(request.form.get('ret_audio_cache', current['retention'].get('audio_cache_days', 3))))
+                web_config.set_setting('retention', 'audio_chunks_days', int(request.form.get('ret_audio_chunks', current['retention'].get('audio_chunks_days', 1))))
+                web_config.set_setting('retention', 'logs_days', int(request.form.get('ret_logs', current['retention'].get('logs_days', 30))))
+                web_config.set_setting('retention', 'scripts_days', int(request.form.get('ret_scripts', current['retention'].get('scripts_days', 14))))
+                web_config.set_setting('retention', 'github_releases_days', int(request.form.get('ret_github_releases', current['retention'].get('github_releases_days', 14))))
+            except Exception as e:
+                errors.append(f'retention: {e}')
             if errors:
                 for msg in errors:
                     flash(msg, 'error')
@@ -402,6 +413,180 @@ def create_app():
     @app.get('/maintenance')
     def maintenance_page():
         return render_template('maintenance.html')
+
+    # --------------
+    # Publishing UI
+    # --------------
+    @app.route('/publishing', methods=['GET'])
+    def publishing_page():
+        days = int(request.args.get('days', 7))
+        try:
+            from database.models import get_database_manager
+            dbm = get_database_manager()
+            rows = dbm.execute_query(
+                """
+                SELECT id, topic, digest_date, mp3_path, mp3_title, mp3_summary, mp3_duration_seconds, github_url
+                FROM digests
+                WHERE digest_date >= date('now', '-' || ? || ' days')
+                ORDER BY digest_date DESC, topic ASC
+                """,
+                (days,)
+            )
+            # Build asset status via GitHub release lookup
+            items = []
+            try:
+                from src.publishing.github_publisher import create_github_publisher
+                gh = create_github_publisher()
+            except Exception:
+                gh = None
+            for r in rows:
+                d = dict(r)
+                fn = Path(d['mp3_path']).name if d['mp3_path'] else None
+                d['mp3_file'] = fn
+                d['asset_present'] = None
+                d['release_tag'] = f"daily-{d['digest_date']}"
+                if gh and fn:
+                    try:
+                        rel = gh.get_release_by_tag(d['release_tag'])
+                        if rel and rel.assets:
+                            d['asset_present'] = any((a.get('name') == fn) for a in rel.assets)
+                        else:
+                            d['asset_present'] = False
+                    except Exception:
+                        d['asset_present'] = False
+                items.append(d)
+            return render_template('publishing.html', items=items, days=days)
+        except Exception as e:
+            flash(f'Failed to load publishing page: {e}', 'error')
+            return render_template('publishing.html', items=[], days=days)
+
+    @app.post('/publishing/<int:digest_id>/publish')
+    def publishing_publish(digest_id: int):
+        # Start background publish (ensure asset) and stream log
+        def worker(log_path: Path):
+            try:
+                from database.models import get_database_manager
+                dbm = get_database_manager()
+                row = dbm.execute_query("SELECT * FROM digests WHERE id = ?", (digest_id,))
+                if not row:
+                    with open(log_path, 'a') as fh:
+                        fh.write('Digest not found\n')
+                    return
+                r = row[0]
+                d = {k: r[k] for k in r.keys()}
+                from run_publishing_pipeline import PublishingPipelineRunner
+                runner = PublishingPipelineRunner()
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Ensuring asset for digest {digest_id}: {d.get('topic')} {d.get('digest_date')}\n")
+                    fh.flush()
+                ok = runner.publish_digest(d)
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Result: {'OK' if ok else 'FAILED'}\n")
+            except Exception as e:
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Error: {e}\n")
+        log_path = _start_maintenance_task(f'publish_{digest_id}', worker)
+        return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
+
+    @app.post('/publishing/<int:digest_id>/unpublish')
+    def publishing_unpublish(digest_id: int):
+        def worker(log_path: Path):
+            try:
+                from database.models import get_database_manager
+                dbm = get_database_manager()
+                row = dbm.execute_query("SELECT * FROM digests WHERE id = ?", (digest_id,))
+                if not row:
+                    with open(log_path, 'a') as fh:
+                        fh.write('Digest not found\n')
+                        return
+                r = row[0]
+                topic = r['topic']
+                date_str = r['digest_date']
+                mp3 = Path(r['mp3_path']).name if r['mp3_path'] else None
+                tag = f"daily-{date_str}"
+                from src.publishing.github_publisher import create_github_publisher
+                gh = create_github_publisher()
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Unpublishing {topic} {date_str}: removing asset {mp3} from {tag}\n")
+                rel = gh.get_release_by_tag(tag)
+                if rel and mp3:
+                    asset_id = None
+                    for a in rel.assets or []:
+                        if a.get('name') == mp3:
+                            asset_id = a.get('id')
+                            break
+                    if asset_id:
+                        try:
+                            # DELETE asset
+                            import requests
+                            url = f"{gh.api_base}/repos/{gh.repository}/releases/assets/{asset_id}"
+                            headers = gh.headers.copy()
+                            headers['Accept'] = 'application/vnd.github+json'
+                            resp = requests.delete(url, headers=headers)
+                            if resp.status_code not in (200, 204):
+                                with open(log_path, 'a', encoding='utf-8') as fh:
+                                    fh.write(f"Failed to delete asset via REST: {resp.status_code} {resp.text}\n")
+                        except Exception as e:
+                            with open(log_path, 'a', encoding='utf-8') as fh:
+                                fh.write(f"Error deleting asset: {e}\n")
+                # Clear DB URL
+                with dbm.get_connection() as conn:
+                    conn.execute("UPDATE digests SET github_url = NULL WHERE id = ?", (digest_id,))
+                    conn.commit()
+                # Regenerate RSS and deploy
+                from src.publishing.rss_generator import create_rss_generator, PodcastMetadata
+                from src.publishing.vercel_deployer import create_vercel_deployer
+                # Minimal metadata for generator
+                md = PodcastMetadata(
+                    title="Daily AI & Tech Digest",
+                    description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
+                    author="Paul Brown",
+                    email="brownpr0@gmail.com",
+                    category="Technology",
+                    subcategory="Tech News",
+                    website_url="https://podcast.paulrbrown.org",
+                    copyright="© 2025 Paul Brown"
+                )
+                rss_gen = create_rss_generator(md)
+                # Load all published digests (github_url not null)
+                rows2 = dbm.execute_query("SELECT * FROM digests WHERE github_url IS NOT NULL ORDER BY digest_date DESC")
+                from datetime import datetime as _dt
+                episodes = []
+                for drow in rows2:
+                    # Construct episode data from row
+                    file_path = Path(drow['mp3_path']) if drow['mp3_path'] else None
+                    size = file_path.stat().st_size if file_path and file_path.exists() else 0
+                    # Compose asset URL from repo/tag/file
+                    repo = os.getenv('GITHUB_REPOSITORY')
+                    asset_url = f"https://github.com/{repo}/releases/download/daily-{drow['digest_date']}/{Path(drow['mp3_path']).name}"
+                    from src.publishing.rss_generator import PodcastEpisode
+                    ep = PodcastEpisode(
+                        title=drow['mp3_title'] or f"{drow['topic']} - {drow['digest_date']}",
+                        description=drow['mp3_summary'] or '',
+                        audio_url=asset_url,
+                        pub_date=_dt.fromisoformat(drow['digest_date'] + 'T12:00:00'),
+                        duration_seconds=drow['mp3_duration_seconds'] or 0,
+                        file_size=size,
+                        guid=f"digest-{drow['digest_date']}-{drow['topic'].lower().replace(' ', '-')}"
+                    )
+                    episodes.append(ep)
+                rss_content = rss_gen.generate_rss_feed(episodes) if episodes else ""
+                public_file = PROJECT_ROOT / 'public' / 'daily-digest.xml'
+                if episodes:
+                    public_file.parent.mkdir(parents=True, exist_ok=True)
+                    public_file.write_text(rss_content, encoding='utf-8')
+                    vd = create_vercel_deployer()
+                    res = vd.deploy_rss_feed(rss_content, production=True)
+                    with open(log_path, 'a', encoding='utf-8') as fh:
+                        fh.write(f"RSS regenerated and deployed: {'OK' if res.success else res.error}\n")
+                else:
+                    with open(log_path, 'a', encoding='utf-8') as fh:
+                        fh.write("No published digests remain; RSS not regenerated.\n")
+            except Exception as e:
+                with open(log_path, 'a', encoding='utf-8') as fh:
+                    fh.write(f"Error: {e}\n")
+        log_path = _start_maintenance_task(f'unpublish_{digest_id}', worker)
+        return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
 
     # --------------
     # Pipeline Actions

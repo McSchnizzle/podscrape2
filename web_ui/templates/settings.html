@@ -39,6 +39,26 @@
       <input name="max_episodes_per_run" type="number" min="1" max="20" class="border rounded w-full p-2" value="{{ current.pipeline.max_episodes_per_run }}">
     </div>
   </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h3 class="font-semibold mb-2">Retention (days)</h3>
+      <label class="block text-sm">Local MP3 files</label>
+      <input name="ret_local_mp3" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.local_mp3_days if current.retention else 7 }}">
+      <label class="block text-sm mt-3">Audio cache</label>
+      <input name="ret_audio_cache" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_cache_days if current.retention else 3 }}">
+      <label class="block text-sm mt-3">Audio chunks</label>
+      <input name="ret_audio_chunks" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_chunks_days if current.retention else 1 }}">
+    </div>
+    <div>
+      <h3 class="font-semibold mb-2">&nbsp;</h3>
+      <label class="block text-sm">Logs</label>
+      <input name="ret_logs" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.logs_days if current.retention else 30 }}">
+      <label class="block text-sm mt-3">Scripts</label>
+      <input name="ret_scripts" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.scripts_days if current.retention else 14 }}">
+      <label class="block text-sm mt-3">GitHub releases</label>
+      <input name="ret_github_releases" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.github_releases_days if current.retention else 14 }}">
+    </div>
+  </div>
   <div>
     <button class="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Save</button>
     <a class="ml-3 text-gray-600" href="/">Cancel</a>
