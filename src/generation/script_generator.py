@@ -544,14 +544,16 @@ Thank you for your understanding, and we'll see you tomorrow with fresh insights
         # Move transcript file to digested folder if it exists
         if episode.transcript_path and Path(episode.transcript_path).exists():
             transcript_path = Path(episode.transcript_path)
+            # Avoid nesting digested/digested when already archived
+            if transcript_path.parent.name == 'digested':
+                logger.debug("Transcript already in digested folder; leaving in place")
+                return
             digested_dir = transcript_path.parent / 'digested'
             digested_dir.mkdir(exist_ok=True)
-            
             new_path = digested_dir / transcript_path.name
-            
             try:
-                transcript_path.rename(new_path)
-                # Update transcript path in database
+                if transcript_path != new_path:
+                    transcript_path.replace(new_path)
                 self.episode_repo.update_transcript_path(episode.id, str(new_path))
                 logger.info(f"Moved transcript to: {new_path}")
             except Exception as e:

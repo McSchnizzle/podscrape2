@@ -652,30 +652,31 @@ def create_app():
     def repair_digested():
         def worker(log_path: Path):
             repaired = moved = errors = 0
-            try:
-                from database.models import get_database_manager
-                dbm = get_database_manager()
-                rows = dbm.execute_query("SELECT id, topic, episode_ids FROM digests")
-                import json as _json
-                all_ids = set()
-                for r in rows:
-                    ids = _json.loads(r['episode_ids']) if r['episode_ids'] else []
-                    all_ids.update(ids)
-                with open(log_path, 'a', encoding='utf-8') as fh:
-                    fh.write(f"Found {len(all_ids)} episodes across digests to repair\n")
-                    for eid in all_ids:
-                        ep = episode_repo.get_by_id(eid)
-                        if not ep:
-                            continue
-                        try:
-                            if getattr(ep, 'status', '') != 'digested':
-                                episode_repo.update_status_by_id(eid, 'digested')
-                                repaired += 1
-                                fh.write(f"  status→digested: episode {eid}\n")
-                            tpath = getattr(ep, 'transcript_path', None)
-                            if tpath and os.path.exists(tpath):
-                                from pathlib import Path as _P
-                                p = _P(tpath)
+            from database.models import get_database_manager
+            dbm = get_database_manager()
+            rows = dbm.execute_query("SELECT id, topic, episode_ids FROM digests")
+            import json as _json
+            all_ids = set()
+            for r in rows:
+                ids = _json.loads(r['episode_ids']) if r['episode_ids'] else []
+                all_ids.update(ids)
+            with open(log_path, 'a', encoding='utf-8') as fh:
+                fh.write(f"Found {len(all_ids)} episodes across digests to repair\n")
+                for eid in all_ids:
+                    ep = episode_repo.get_by_id(eid)
+                    if not ep:
+                        continue
+                    try:
+                        if getattr(ep, 'status', '') != 'digested':
+                            episode_repo.update_status_by_id(eid, 'digested')
+                            repaired += 1
+                            fh.write(f"  status→digested: episode {eid}\n")
+                        tpath = getattr(ep, 'transcript_path', None)
+                        if tpath and os.path.exists(tpath):
+                            from pathlib import Path as _P
+                            p = _P(tpath)
+                            # Avoid nesting digested/digested
+                            if p.parent.name != 'digested':
                                 dig_dir = p.parent / 'digested'
                                 dig_dir.mkdir(exist_ok=True)
                                 new_p = dig_dir / p.name
@@ -684,11 +685,12 @@ def create_app():
                                 episode_repo.update_transcript_path(eid, str(new_p))
                                 moved += 1
                                 fh.write(f"  moved transcript→{new_p}\n")
-                            fh.flush()
-                    fh.write(f"Done. repaired={repaired}, moved={moved}, errors={errors}\n")
-            except Exception as e:
-                with open(log_path, 'a', encoding='utf-8') as fh:
-                    fh.write(f"Error: {e}\n")
+                        fh.flush()
+                    except Exception as ex:
+                        errors += 1
+                        fh.write(f"  error episode {eid}: {ex}\n")
+                        fh.flush()
+                fh.write(f"Done. repaired={repaired}, moved={moved}, errors={errors}\n")
         log_path = _start_maintenance_task('repair_digested', worker)
         return redirect(url_for('dashboard', autostream=1, stream_file=log_path.name))
 
