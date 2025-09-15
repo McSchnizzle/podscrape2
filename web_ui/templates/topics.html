@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="bg-white shadow rounded p-4 space-y-4">
+  <h2 class="text-xl font-medium">Topics</h2>
+  <p class="text-sm text-gray-600">Upload instruction files (.md/.txt) or reference existing files under <code>digest_instructions/</code>.</p>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full border">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="text-left p-2 border">Active</th>
+          <th class="text-left p-2 border">Name</th>
+          <th class="text-left p-2 border">Voice ID</th>
+          <th class="text-left p-2 border">Instruction File</th>
+          <th class="text-left p-2 border">Upload New</th>
+          <th class="text-left p-2 border">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in topics %}
+        <tr class="border-t align-top">
+          <td class="p-2">
+            <input type="checkbox" name="active" value="{{ loop.index0 }}" {% if t.active %}checked{% endif %}>
+          </td>
+          <td class="p-2">
+            <input name="name" value="{{ t.name }}" class="border rounded w-48 p-1" required>
+          </td>
+          <td class="p-2">
+            <input name="voice_id" value="{{ t.voice_id }}" class="border rounded w-56 p-1">
+          </td>
+          <td class="p-2">
+            <input name="instruction_file" value="{{ t.instruction_file }}" class="border rounded w-64 p-1" placeholder="e.g., AI and Technology.md">
+          </td>
+          <td class="p-2">
+            <input type="file" name="instruction_upload_{{ loop.index0 }}" accept=".md,.txt" class="text-sm">
+          </td>
+          <td class="p-2">
+            <textarea name="description" class="border rounded w-72 p-1" rows="2">{{ t.description }}</textarea>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <button class="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Save Topics</button>
+    <a class="ml-3 text-gray-600" href="/">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+

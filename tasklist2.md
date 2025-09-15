@@ -92,26 +92,17 @@ Deliverables:
 - `routes/publishing.py`, `templates/publishing.html`
 - Wire to `GitHubPublisher`, `RetentionManager`
 
-Status: In Progress
-- Completed
-  - Publishing runner: "ensure assets" for daily releases (upload missing assets), with REST→GH CLI fallback and post‑upload asset listing.
-  - Full pipeline: final verification logs GitHub release assets for today's tag.
-  - Web UI Maintenance: "Repair Publishing (Ensure Assets)" button with streaming logs (auto opens in Live Status).
-  - Removed separate publishing log files; publishing logs to console/Live Status.
-- Remaining
-  - /publishing UI page
-    - List digests (date, topic) with MP3 metadata (filename, size, duration) and links (local path, GitHub release asset).
-    - Asset status column (Present/Missing), "Re‑upload missing" action per‑row and bulk.
-    - Publish/Unpublish toggles (Unpublish: remove asset from release and clear DB URL; Publish: attach asset and set URL).
-    - Date filter and pagination; link to RSS entry if present.
-  - Retention controls UI
-    - Configure keep days per asset class (logs, scripts, local MP3s, old releases – if scoped) and save in settings.
-    - Dry‑run preview (counts + bytes to delete) and run cleanup; stream results to Live Status.
-  - Tests
-    - Playwright coverage for listing, status badges, publish/unpublish flows, and retention dry‑run confirmation.
-  - Optional (nice‑to‑have)
-    - Per‑phase timings surfaced in Last Run.
-    - One‑line publishing status on dashboard.
+Status: Completed
+- Implemented
+  - Publishing runner: "ensure assets" on daily releases (upload missing assets), REST→GH CLI fallback, and post‑upload asset listing.
+  - Full pipeline: final verification step logs today’s GitHub release assets (name + size).
+  - Web UI
+    - New Publishing page: lists digests (date/topic/MP3), shows asset status, and provides Publish/Ensure + Unpublish actions; wired to Live Status.
+    - Retention settings added to Settings page; Retention Cleanup (Dry Run/Run) actions added under Maintenance with streaming logs.
+    - Maintenance tab streams logs for all actions; added Reconcile Episodes ↔ Transcripts.
+  - Logging simplification: removed separate publishing log files; publishing logs stream to Live Status.
+  - Dashboard polish: per‑phase timings and one‑line publishing status added to Last Run block.
+  - Tests: Playwright coverage for Publishing page render and Retention settings round‑trip.
 
 ## Phase E: Automation & Orchestration (Phase 8)
 - Orchestrator: Monday 72hr vs weekday 24hr lookback

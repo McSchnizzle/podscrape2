@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4">
+  <h2 class="text-xl font-medium mb-4">Dashboard</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">Content Filtering</h3>
+      <p>Score Threshold: <span class="font-mono">{{ settings.content_filtering.score_threshold }}</span></p>
+      <p>Max Episodes per Digest: <span class="font-mono">{{ settings.content_filtering.max_episodes_per_digest }}</span></p>
+    </div>
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">Audio Processing</h3>
+      <p>Chunk Duration (minutes): <span class="font-mono">{{ settings.audio_processing.chunk_duration_minutes }}</span></p>
+      <p>Transcribe All Chunks: <span class="font-mono">{{ 'Yes' if settings.audio_processing.transcribe_all_chunks else 'No' }}</span></p>
+      <p>Max Chunks per Episode: <span class="font-mono">{{ settings.audio_processing.max_chunks_per_episode }}</span></p>
+    </div>
+    <div class="border rounded p-3 md:col-span-2">
+      <h3 class="font-semibold mb-2">Pipeline</h3>
+      <p>Max Episodes per Run: <span class="font-mono">{{ settings.pipeline.max_episodes_per_run }}</span></p>
+    </div>
+  </div>
+  
+
+  <!-- Live Status (SSE + Phase Indicator) -->
+  <div class="mt-4 border rounded p-3" x-data="phaseRunner({{ 'true' if autostream else 'false' }}, '{{ stream_file or '' }}')">
+    <div class="flex items-center justify-between">
+      <h3 class="font-semibold">Live Status</h3>
+      <div class="space-x-2">
+        <button class="bg-gray-700 text-white px-3 py-1 rounded" x-show="!running" @click="start()">Start</button>
+        <button class="bg-gray-400 text-white px-3 py-1 rounded" x-show="running" @click="stop()">Stop</button>
+        <button class="bg-gray-500 text-white px-3 py-1 rounded" @click="clearLog()" data-testid="clear-log">Clear</button>
+        <button class="bg-gray-600 text-white px-3 py-1 rounded" @click="copy()" :disabled="!lines || lines.length===0" data-testid="copy-log">Copy Log</button>
+        <form method="post" action="/pipeline/run" class="inline">
+          <input type="hidden" name="kind" value="full">
+          <button class="px-3 py-1 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit" title="Run the full pipeline end-to-end">Run Full Pipeline</button>
+        </form>
+      </div>
+    </div>
+    <div class="mt-2 flex flex-wrap gap-2">
+      <template x-for="p in phases" :key="p.key">
+        <span class="px-2 py-1 rounded text-xs"
+              :class="p.state==='done' ? 'bg-green-200 text-green-900' : (p.state==='in' ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700')"
+              x-text="p.label"></span>
+      </template>
+    </div>
+    <pre class="mt-2 h-48 overflow-auto bg-gray-50 p-2 text-xs" x-ref="log" x-text="lines" data-testid="live-log"></pre>
+  </div>
+
+  <script>
+    function phaseRunner(autoStart=false, fileName='') {
+      return {
+        es: null,
+        running: false,
+        lines: '',
+        phases: [
+          { key: 'discovery', label: 'Discovery', state: 'pending' },
+          { key: 'audio', label: 'Audio', state: 'pending' },
+          { key: 'scoring', label: 'Scoring', state: 'pending' },
+          { key: 'digest', label: 'Digests', state: 'pending' },
+          { key: 'tts', label: 'TTS', state: 'pending' },
+          { key: 'publishing', label: 'Publishing', state: 'pending' },
+        ],
+        reset() {
+          this.lines = '';
+          this.phases.forEach(p => p.state = 'pending');
+          this.$nextTick(() => { if (this.$refs.log) this.$refs.log.scrollTop = 0; });
+        },
+        clearLog() {
+          this.lines = '';
+          this.$nextTick(() => { if (this.$refs.log) this.$refs.log.scrollTop = 0; });
+        },
+        setPhase(key) {
+          const cur = this.phases.find(p => p.state === 'in');
+          if (cur) cur.state = 'done';
+          const nxt = this.phases.find(p => p.key === key);
+          if (nxt) nxt.state = 'in';
+        },
+        markComplete() {
+          const cur = this.phases.find(p => p.state === 'in');
+          if (cur) cur.state = 'done';
+        },
+        async copy() {
+          const content = (this.lines && this.lines.length > 0)
+            ? this.lines
+            : (this.$refs.log?.innerText || '');
+          try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(content);
+            } else {
+              // Fallback for non-secure contexts and older browsers
+              const ta = document.createElement('textarea');
+              ta.value = content;
+              ta.style.position = 'fixed';
+              ta.style.left = '-9999px';
+              document.body.appendChild(ta);
+              ta.focus();
+              ta.select();
+              try { ta.setSelectionRange(0, ta.value.length); } catch (_) {}
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            }
+            // Lightweight visual feedback by appending a line
+            this.lines = (this.lines || '') + '\n[web-ui] Log copied to clipboard.';
+          } catch (e) {
+            console.error('Copy failed', e);
+            this.lines = (this.lines || '') + `\n[web-ui] Copy failed: ${e}`;
+          }
+        },
+        parse(line) {
+          if (line.includes('PHASE 1:') || line.includes('DISCOVER NEW EPISODES')) this.setPhase('discovery');
+          else if (line.includes('PHASE 2:') || line.includes(' — AUDIO')) this.setPhase('audio');
+          else if (line.includes('PHASE 3:') || line.includes(' — SCORING')) this.setPhase('scoring');
+          else if (line.includes('PHASE 4:') || line.includes('DIGEST GENERATION FOR ALL')) this.setPhase('digest');
+          else if (line.includes('PHASE 6: TTS')) this.setPhase('tts');
+          else if (line.includes('PHASE 7:') || line.includes('PUBLISHING PIPELINE')) this.setPhase('publishing');
+          else if (line.includes('PIPELINE EXECUTION COMPLETE') || line.includes('PUBLISHING SUMMARY') || line.includes('PIPELINE SUCCESS')) this.markComplete();
+        },
+        start() {
+          this.reset();
+          const url = fileName ? `/logs/stream?file=${encodeURIComponent(fileName)}` : '/logs/stream';
+          this.es = new EventSource(url);
+          this.running = true;
+          this.es.onmessage = (e) => { this.lines += e.data + '\n'; this.parse(e.data); this.$nextTick(() => { if (this.$refs.log) this.$refs.log.scrollTop = this.$refs.log.scrollHeight; }); };
+          this.es.onerror = (e) => { this.running = false; this.es && this.es.close(); };
+        },
+        stop() { this.running = false; this.es && this.es.close(); },
+        init() { if (autoStart) this.start(); }
+      };
+    }
+  </script>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">RSS Items (public/daily-digest.xml)</h3>
+      <ul class="text-sm space-y-1">
+        {% for item in rss_items %}
+          <li>
+            <span class="font-medium">{{ item.title }}</span>
+            <span class="text-gray-600">— {{ item.date or 'Unknown date' }}</span>
+          </li>
+        {% else %}
+          <li class="text-gray-500">No items found</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">System Health</h3>
+      <div class="text-sm">
+        <div class="font-medium mb-1">Tools</div>
+        <ul class="space-y-1">
+          {% for t in health.tools %}
+            <li>
+              <span class="inline-block w-2 h-2 rounded-full mr-2 {{ 'bg-green-500' if t.ok else 'bg-red-500' }}"></span>
+              <span class="font-mono">{{ t.name }}</span>
+              <span class="text-gray-600">— {{ t.detail }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <div class="font-medium mt-3 mb-1">APIs/Auth</div>
+        <ul class="space-y-1">
+          {% for a in health.apis %}
+            <li>
+              <span class="inline-block w-2 h-2 rounded-full mr-2 {{ 'bg-green-500' if a.ok else 'bg-red-500' }}"></span>
+              <span class="font-mono">{{ a.name }}</span>
+              <span class="text-gray-600">— {{ a.detail }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">Last Run</h3>
+      {% if last_run and (last_run.size_kb or last_run.modified) %}
+        <p class="text-sm">Log: <a class="text-blue-700" href="/logs/latest">{{ last_run.name }}</a> ({{ last_run.size_kb or '?' }} KB, {{ last_run.modified or 'time unknown' }})</p>
+        {% if last_run.phase_timings %}
+          <p class="text-xs text-gray-700 mt-1">Phase timings:
+            {% set t = last_run.phase_timings %}
+            <span class="font-mono">disc={{ t.discovery or '—' }}s</span>,
+            <span class="font-mono">audio={{ t.audio or '—' }}s</span>,
+            <span class="font-mono">score={{ t.scoring or '—' }}s</span>,
+            <span class="font-mono">digest={{ t.digests or '—' }}s</span>,
+            <span class="font-mono">tts={{ t.tts or '—' }}s</span>,
+            <span class="font-mono">publish={{ t.publishing or '—' }}s</span>
+          </p>
+        {% endif %}
+        {% if last_run.publishing_status %}
+          <p class="text-xs text-gray-700 mt-1">Publishing: {{ last_run.publishing_status }}</p>
+        {% endif %}
+      {% elif log_summary %}
+        <p class="text-sm">Log: <a class="text-blue-700" href="/logs/latest">latest</a></p>
+      {% else %}
+        <p class="text-sm text-gray-600">No recent logs found</p>
+      {% endif %}
+      {% if log_summary %}
+        <div class="mt-3">
+          <h4 class="font-medium">Episodes Scored</h4>
+      <ul class="text-sm space-y-1">
+        {% for ep in log_summary.episodes[:6] %}
+          <li>
+            <span class="font-medium">{{ ep.title }}</span>
+            {% if ep.feed %}<span class="text-gray-600">— {{ ep.feed }}</span>{% endif %}
+            {% if ep.qualifying and ep.qualifying|length > 0 %}
+              <span class="ml-2 text-green-700">Qualifies: {{ ep.qualifying|join(', ') }}</span>
+            {% endif %}
+          </li>
+        {% else %}
+          <li class="text-gray-500">No episodes found</li>
+        {% endfor %}
+      </ul>
+        </div>
+        <div class="mt-3">
+          <h4 class="font-medium">Digests Created</h4>
+          <ul class="text-sm space-y-1">
+            {% for d in log_summary.digests %}
+              <li>
+                <span class="font-medium">{{ d.topic }}</span>
+                {% if d.episode_titles %}
+                  <span class="text-gray-600">— from {{ d.episode_titles|join('; ') }}</span>
+                {% elif d.episode_count is defined %}
+                  <span class="text-gray-600">— {{ d.episode_count }} episodes</span>
+                {% endif %}
+                {% if d.mp3_hms %}
+                  <span class="ml-2 text-blue-700">MP3: {{ d.mp3_hms }}</span>
+                {% endif %}
+              </li>
+            {% else %}
+              <li class="text-gray-500">No digests found</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% if log_summary.errors and log_summary.errors|length > 0 %}
+          <div class="mt-2 text-xs text-red-700">{{ log_summary.errors|join('; ') }}</div>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="border rounded p-3">
+      <h3 class="font-semibold mb-2">Transcribed Not Yet Digested</h3>
+      <ul class="text-sm space-y-2">
+        {% for ep in undigested %}
+          <li>
+            <span class="font-medium">{{ ep.title }}</span>
+            {% if ep.feed_title %}
+              <span class="text-gray-600">— {{ ep.feed_title }}</span>
+            {% endif %}
+            <div class="text-gray-600 text-xs">
+              <span>(status: {{ ep.status }})</span>
+              {% if ep.score_labels %}
+                <span class="ml-2 font-mono">{{ ep.score_labels }}</span>
+              {% endif %}
+            </div>
+            {% if ep.feed_id %}
+            <form method="post" action="/feeds/{{ ep.feed_id }}/toggle" class="inline ml-2" onsubmit="return confirm('Deactivate this feed?');">
+              <button class="text-red-700 text-xs" type="submit" title="Deactivate feed">Deactivate feed</button>
+            </form>
+            {% endif %}
+          </li>
+        {% else %}
+          <li class="text-gray-500">No pending items</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="border rounded p-3 mt-6">
+    <h3 class="font-semibold mb-2">Failed Episodes</h3>
+    <ul class="text-sm space-y-2">
+      {% for ep in failed_eps %}
+        <li>
+          <span class="font-medium">{{ ep.title }}</span>
+          <form method="post" action="/episodes/{{ ep.id }}/retry" class="inline">
+            <button class="ml-2 text-blue-700" type="submit">Retry</button>
+          </form>
+        </li>
+      {% else %}
+        <li class="text-gray-500">No failed episodes</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <p class="text-xs text-gray-500 mt-4">Server running at 127.0.0.1:5001</p>
+</div>
+{% endblock %}

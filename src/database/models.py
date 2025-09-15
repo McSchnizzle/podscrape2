@@ -111,6 +111,7 @@ class DatabaseManager:
             logger.error(f"Database connection test failed: {e}")
             return False
 
+
 class FeedRepository:
     """Repository for Feed database operations using SQLAlchemy"""
 
@@ -195,6 +196,52 @@ class FeedRepository:
             except SQLAlchemyError as e:
                 session.rollback()
                 logger.error(f"Failed to reset failures for feed {feed_id}: {e}")
+                raise
+
+    def get_all(self) -> List[Feed]:
+        """Get all feeds regardless of active state"""
+        with self.db.get_session() as session:
+            feed_models = session.query(FeedModel).order_by(FeedModel.title).all()
+            return [self._model_to_feed(model) for model in feed_models]
+
+    def get_by_id(self, feed_id: int) -> Optional[Feed]:
+        """Get feed by ID"""
+        with self.db.get_session() as session:
+            feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
+            return self._model_to_feed(feed_model) if feed_model else None
+
+    def get_by_title(self, title: str) -> Optional[Feed]:
+        """Get feed by title"""
+        with self.db.get_session() as session:
+            feed_model = session.query(FeedModel).filter(FeedModel.title == title).first()
+            return self._model_to_feed(feed_model) if feed_model else None
+
+    def set_active(self, feed_id: int, active: bool):
+        """Set feed active status"""
+        with self.db.get_session() as session:
+            try:
+                feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
+                if feed_model:
+                    feed_model.active = active
+                    feed_model.updated_at = datetime.now(UTC)
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to set active status for feed {feed_id}: {e}")
+                raise
+
+    def update_title(self, feed_id: int, title: str):
+        """Update feed title"""
+        with self.db.get_session() as session:
+            try:
+                feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
+                if feed_model:
+                    feed_model.title = title
+                    feed_model.updated_at = datetime.now(UTC)
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to update title for feed {feed_id}: {e}")
                 raise
 
     def _model_to_feed(self, model: FeedModel) -> Feed:
@@ -421,6 +468,55 @@ class EpisodeRepository:
                 logger.error(f"Failed to update episode {episode_id} status: {e}")
                 raise
 
+    def get_by_status(self, status: str) -> List[Episode]:
+        """Get episodes by status"""
+        with self.db.get_session() as session:
+            episode_models = session.query(EpisodeModel).filter(EpisodeModel.status == status).all()
+            return [self._model_to_episode(model) for model in episode_models]
+
+    def get_by_id(self, episode_id: int) -> Optional[Episode]:
+        """Get episode by ID"""
+        with self.db.get_session() as session:
+            episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
+            return self._model_to_episode(episode_model) if episode_model else None
+
+    def update_transcript_path(self, episode_id: int, transcript_path: str):
+        """Update episode transcript path"""
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
+                if episode_model:
+                    episode_model.transcript_path = transcript_path
+                    episode_model.updated_at = datetime.now(UTC)
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to update transcript path for episode {episode_id}: {e}")
+                raise
+
+    def update_feed_id(self, episode_id: int, feed_id: int):
+        """Update episode feed ID"""
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
+                if episode_model:
+                    episode_model.feed_id = feed_id
+                    episode_model.updated_at = datetime.now(UTC)
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to update feed ID for episode {episode_id}: {e}")
+                raise
+
+    def get_by_feed_id(self, feed_id: int, limit: int = None) -> List[Episode]:
+        """Get episodes by feed ID"""
+        with self.db.get_session() as session:
+            query = session.query(EpisodeModel).filter(EpisodeModel.feed_id == feed_id)
+            if limit:
+                query = query.limit(limit)
+            episode_models = query.all()
+            return [self._model_to_episode(model) for model in episode_models]
+
     def _model_to_episode(self, model: EpisodeModel) -> Episode:
         """Convert SQLAlchemy model to dataclass"""
         return Episode(
@@ -560,6 +656,37 @@ class DigestRepository:
                 .order_by(DigestModel.digest_date.desc(), DigestModel.topic)\
                 .all()
             return [self._model_to_digest(model) for model in digest_models]
+
+    def get_latest_digest_date(self) -> Optional[date]:
+        """Get the most recent digest date"""
+        with self.db.get_session() as session:
+            result = session.query(DigestModel.digest_date)\
+                .order_by(DigestModel.digest_date.desc())\
+                .first()
+            return result[0] if result else None
+
+    def get_published_digests(self) -> List[Digest]:
+        """Get all digests that have GitHub URLs (are published)"""
+        with self.db.get_session() as session:
+            digest_models = session.query(DigestModel)\
+                .filter(DigestModel.github_url.isnot(None))\
+                .order_by(DigestModel.digest_date.desc())\
+                .all()
+            return [self._model_to_digest(model) for model in digest_models]
+
+    def clear_github_url(self, digest_id: int):
+        """Clear the GitHub URL for a digest (unpublish)"""
+        with self.db.get_session() as session:
+            try:
+                digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
+                if digest_model:
+                    digest_model.github_url = None
+                    digest_model.published_at = None
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to clear GitHub URL for digest {digest_id}: {e}")
+                raise
 
     def _model_to_digest(self, model: DigestModel) -> Digest:
         """Convert SQLAlchemy model to dataclass"""

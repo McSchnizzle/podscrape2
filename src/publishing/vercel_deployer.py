@@ -87,26 +87,26 @@ class VercelDeployer:
         start_time = datetime.now()
         
         try:
-            # Create temporary deployment directory
-            with tempfile.TemporaryDirectory(prefix="rss_deploy_") as temp_dir:
-                temp_path = Path(temp_dir)
-                
-                # Create static site structure for RSS feed
-                self._create_deployment_structure(temp_path, rss_content)
-                
-                # Deploy using Vercel CLI
-                deployment_result = self._run_vercel_deploy(temp_path, production)
-                
-                duration = (datetime.now() - start_time).total_seconds()
-                deployment_result.duration_seconds = duration
-                
-                if deployment_result.success:
-                    logger.info(f"Deployment successful in {duration:.1f}s: {deployment_result.url}")
-                else:
-                    logger.error(f"Deployment failed after {duration:.1f}s: {deployment_result.error}")
-                
-                return deployment_result
-                
+            # Prefer deploying from the project root so the custom domain alias updates correctly
+            project_root = Path(__file__).parent.parent.parent
+            if not (project_root / 'vercel.json').exists():
+                logger.warning("vercel.json not found at project root; falling back to temp deploy structure")
+                with tempfile.TemporaryDirectory(prefix="rss_deploy_") as temp_dir:
+                    temp_path = Path(temp_dir)
+                    self._create_deployment_structure(temp_path, rss_content)
+                    deployment_result = self._run_vercel_deploy(temp_path, production)
+            else:
+                # Ensure the public/daily-digest.xml is up to date (already written by publisher)
+                deployment_result = self._run_vercel_deploy(project_root, production)
+
+            duration = (datetime.now() - start_time).total_seconds()
+            deployment_result.duration_seconds = duration
+            if deployment_result.success:
+                logger.info(f"Deployment successful in {duration:.1f}s: {deployment_result.url}")
+            else:
+                logger.error(f"Deployment failed after {duration:.1f}s: {deployment_result.error}")
+            return deployment_result
+
         except Exception as e:
             error_msg = f"RSS deployment failed: {e}"
             logger.error(error_msg)
@@ -242,7 +242,7 @@ class VercelDeployer:
 </body>
 </html>"""
     
-    def _run_vercel_deploy(self, temp_path: Path, production: bool) -> DeploymentResult:
+    def _run_vercel_deploy(self, working_dir: Path, production: bool) -> DeploymentResult:
         """Run vercel deploy command"""
         try:
             # Build vercel deploy command
@@ -254,12 +254,12 @@ class VercelDeployer:
             # Project name is now handled by vercel.json configuration
             
             # Set working directory to temp deployment directory
-            logger.debug(f"Running command: {' '.join(cmd)} (cwd: {temp_path})")
+            logger.debug(f"Running command: {' '.join(cmd)} (cwd: {working_dir})")
             
             # Run deployment
             result = subprocess.run(
                 cmd,
-                cwd=temp_path,
+                cwd=working_dir,
                 capture_output=True,
                 text=True,
                 timeout=300  # 5 minute timeout

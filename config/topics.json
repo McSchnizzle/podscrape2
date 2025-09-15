@@ -10,7 +10,7 @@
     {
       "name": "Social Movements and Community Organizing",
       "instruction_file": "Social Movements and Community Organizing.md",
-      "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
       "active": true,
       "description": "Community organizing strategies, grassroots movements, activism, social movements, cultural shifts, societal transformation"
     },
@@ -32,5 +32,5 @@
       "use_speaker_boost": true
     }
   },
-  "last_updated": "2025-09-09T09:48:33.350272"
+  "last_updated": "2025-09-13T22:37:58.406986"
 }

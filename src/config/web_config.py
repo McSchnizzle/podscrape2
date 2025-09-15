@@ -3,12 +3,29 @@ WebConfigManager: DB-backed settings for the Web UI.
 Provides typed get/set with basic validation and integrates with the pipeline optionally.
 """
 
-import sqlite3
 from datetime import datetime
 from typing import Any, Dict, Optional
 from pathlib import Path
+from sqlalchemy import text, Column, Integer, String, DateTime, UniqueConstraint
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.dialects.postgresql import insert
 
 from database.models import get_database_manager
+
+Base = declarative_base()
+
+class WebSettingModel(Base):
+    __tablename__ = 'web_settings'
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    setting_key = Column(String, nullable=False)
+    setting_value = Column(String, nullable=False)
+    value_type = Column(String, nullable=False, default='string')
+    description = Column(String)
+    updated_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (UniqueConstraint('category', 'setting_key', name='unique_category_setting'),)
 
 
 DEFAULTS = {
@@ -29,80 +46,76 @@ DEFAULTS = {
 
 
 class WebConfigManager:
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_manager = get_database_manager(db_path)
+    def __init__(self):
+        self.db_manager = get_database_manager()
         self._ensure_table()
         self._seed_defaults()
 
     def _ensure_table(self):
-        with self.db_manager.get_connection() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS web_settings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category TEXT NOT NULL,
-                    setting_key TEXT NOT NULL,
-                    setting_value TEXT NOT NULL,
-                    value_type TEXT NOT NULL DEFAULT 'string',
-                    description TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(category, setting_key)
-                )
-                """
-            )
+        # Create table using SQLAlchemy
+        Base.metadata.create_all(self.db_manager.engine)
 
     def _seed_defaults(self):
-        with self.db_manager.get_connection() as conn:
+        with self.db_manager.get_session() as session:
             for (cat, key), meta in DEFAULTS.items():
-                cur = conn.execute(
-                    "SELECT setting_value FROM web_settings WHERE category=? AND setting_key=?",
-                    (cat, key),
-                )
-                if cur.fetchone() is None:
-                    conn.execute(
-                        "INSERT INTO web_settings (category, setting_key, setting_value, value_type) VALUES (?,?,?,?)",
-                        (cat, key, str(meta["default"]), meta["type"]),
+                existing = session.query(WebSettingModel).filter(
+                    WebSettingModel.category == cat,
+                    WebSettingModel.setting_key == key
+                ).first()
+                if existing is None:
+                    new_setting = WebSettingModel(
+                        category=cat,
+                        setting_key=key,
+                        setting_value=str(meta["default"]),
+                        value_type=meta["type"]
                     )
-                    conn.commit()
+                    session.add(new_setting)
+            session.commit()
 
     def get_setting(self, category: str, key: str, default: Any = None) -> Any:
-        with self.db_manager.get_connection() as conn:
-            cur = conn.execute(
-                "SELECT setting_value, value_type FROM web_settings WHERE category=? AND setting_key=?",
-                (category, key),
-            )
-            row = cur.fetchone()
-            if not row:
+        with self.db_manager.get_session() as session:
+            setting = session.query(WebSettingModel).filter(
+                WebSettingModel.category == category,
+                WebSettingModel.setting_key == key
+            ).first()
+            if not setting:
                 return default
-            raw, vtype = row[0], row[1]
-            return self._cast_value(raw, vtype)
+            return self._cast_value(setting.setting_value, setting.value_type)
 
     def set_setting(self, category: str, key: str, value: Any) -> None:
         # Validate if we have a definition
         meta = DEFAULTS.get((category, key))
         vtype = meta["type"] if meta else self._infer_type(value)
         casted = self._coerce_and_validate(value, vtype, meta)
-        with self.db_manager.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO web_settings (category, setting_key, setting_value, value_type, updated_at)
-                VALUES (?,?,?,?,?)
-                ON CONFLICT(category, setting_key)
-                DO UPDATE SET setting_value=excluded.setting_value, value_type=excluded.value_type, updated_at=excluded.updated_at
-                """,
-                (category, key, str(casted), vtype, datetime.now().isoformat()),
+
+        with self.db_manager.get_session() as session:
+            # Use upsert for PostgreSQL
+            stmt = insert(WebSettingModel).values(
+                category=category,
+                setting_key=key,
+                setting_value=str(casted),
+                value_type=vtype,
+                updated_at=datetime.now()
             )
-            conn.commit()
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['category', 'setting_key'],
+                set_={
+                    'setting_value': stmt.excluded.setting_value,
+                    'value_type': stmt.excluded.value_type,
+                    'updated_at': stmt.excluded.updated_at
+                }
+            )
+            session.execute(stmt)
+            session.commit()
 
     def get_category(self, category: str) -> Dict[str, Any]:
-        with self.db_manager.get_connection() as conn:
-            cur = conn.execute(
-                "SELECT setting_key, setting_value, value_type FROM web_settings WHERE category=?",
-                (category,),
-            )
+        with self.db_manager.get_session() as session:
+            settings = session.query(WebSettingModel).filter(
+                WebSettingModel.category == category
+            ).all()
             result = {}
-            for key, val, vtype in cur.fetchall():
-                result[key] = self._cast_value(val, vtype)
+            for setting in settings:
+                result[setting.setting_key] = self._cast_value(setting.setting_value, setting.value_type)
             return result
 
     def _cast_value(self, raw: str, vtype: str) -> Any:

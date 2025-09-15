@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ConfigManager:
     """Manages application configuration from JSON files"""
     
-    def __init__(self, config_dir: str = "config"):
+    def __init__(self, config_dir: str = "config", web_config: Any = None):
         # Resolve to project-root-relative config by default to avoid CWD issues
         if config_dir == "config":
             project_root = Path(__file__).parent.parent.parent
@@ -22,6 +22,8 @@ class ConfigManager:
         else:
             self.config_dir = Path(config_dir)
         self._topics_config = None
+        # Optional WebConfigManager injection
+        self.web_config = web_config
         
     def _load_topics_config(self) -> Dict[str, Any]:
         """Load topics configuration from JSON file"""
@@ -45,9 +47,22 @@ class ConfigManager:
         """Get list of active topics"""
         config = self._load_topics_config()
         return [topic for topic in config.get("topics", []) if topic.get("active", True)]
+
+    def get_all_topics(self) -> List[Dict[str, Any]]:
+        """Get list of all topics (including inactive).
+
+        For Web UI management screens where inactive topics must be visible.
+        """
+        config = self._load_topics_config()
+        return list(config.get("topics", []))
     
     def get_score_threshold(self) -> float:
         """Get minimum score threshold for episode inclusion"""
+        if getattr(self, 'web_config', None):
+            try:
+                return float(self.web_config.get_setting('content_filtering', 'score_threshold', 0.65))
+            except Exception:
+                pass
         config = self._load_topics_config()
         return config.get("settings", {}).get("score_threshold", 0.65)
     
@@ -88,4 +103,23 @@ class ConfigManager:
             logger.info("Updated topics configuration timestamp")
         except Exception as e:
             logger.error(f"Failed to update topics config: {e}")
+            raise
+
+    def save_topics(self, topics: List[Dict[str, Any]]) -> None:
+        """Persist the provided list of topics to topics.json.
+
+        Also updates the last_updated timestamp and clears the in-memory cache.
+        """
+        config = self._load_topics_config()
+        config["topics"] = topics
+        config["last_updated"] = datetime.now().isoformat()
+        topics_path = self.config_dir / "topics.json"
+        try:
+            with open(topics_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+            # Clear cached config to force reload on next access
+            self._topics_config = None
+            logger.info("Saved topics configuration with %d topics", len(topics))
+        except Exception as e:
+            logger.error(f"Failed to save topics config: {e}")
             raise

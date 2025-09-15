@@ -17,10 +17,12 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from openai import OpenAI
+from ..config.config_manager import ConfigManager
+from ..config.web_config import WebConfigManager
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -46,7 +48,7 @@ class ContentScorer:
     with 0.0-1.0 scoring scale for each configured topic.
     """
     
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str = None, config_manager: ConfigManager = None, web_config: Any = None):
         """
         Initialize content scorer with OpenAI API and topic configuration.
         
@@ -59,25 +61,26 @@ class ContentScorer:
             timeout=30.0  # 30 second timeout for testing
         )
         
-        # Load topic configuration
-        if config_path is None:
-            project_root = Path(__file__).parent.parent.parent
-            config_path = project_root / 'config' / 'topics.json'
-        
-        self.config = self._load_config(config_path)
-        self.topics = [topic for topic in self.config['topics'] if topic.get('active', True)]
-        self.score_threshold = self.config['settings']['score_threshold']
+        # Determine config directory
+        config_dir = None
+        if config_path is not None:
+            config_dir = str(Path(config_path).parent)
+
+        # Initialize WebConfig and ConfigManager
+        self.web_config = web_config or self._safe_create_web_config()
+        self.config_manager = config_manager or ConfigManager(config_dir=config_dir or 'config', web_config=self.web_config)
+
+        # Load topics and score threshold via ConfigManager (Web UI settings override JSON where applicable)
+        self.topics = self.config_manager.get_topics()
+        self.score_threshold = self.config_manager.get_score_threshold()
         
         logger.info(f"ContentScorer initialized with {len(self.topics)} active topics")
     
-    def _load_config(self, config_path: Path) -> dict:
-        """Load topics configuration from JSON file"""
+    def _safe_create_web_config(self) -> Optional[WebConfigManager]:
         try:
-            with open(config_path, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load config from {config_path}: {e}")
-            raise
+            return WebConfigManager()
+        except Exception:
+            return None
     
     def _create_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
         """

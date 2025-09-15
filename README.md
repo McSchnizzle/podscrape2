@@ -1,6 +1,6 @@
-# YouTube Transcript Digest System
+# RSS Podcast Digest System (with Web UI)
 
-An automated daily podcast digest system that intelligently curates YouTube content, scores it for topic relevancy, and generates high-quality AI-powered audio summaries.
+Generate daily, topic‑based podcast digests from RSS feeds. The system discovers new episodes, transcribes when available, scores content against topics, generates scripts, produces MP3s, and publishes a canonical RSS feed. Includes an optional local Web UI for configuration and operations.
 
 ## 🎯 Overview
 
@@ -14,15 +14,15 @@ This system automatically:
 ## 🏗️ Architecture
 
 ```
-YouTube Videos → Transcript Extraction → AI Scoring → Script Generation → TTS → RSS Feed
+RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription → AI Scoring → Script Generation → TTS → RSS Feed
 ```
 
 ### Core Components
-- **Database**: SQLite for episodes, channels, and digests
-- **AI Scoring**: GPT-5-mini for relevancy scoring (0.0-1.0)
-- **Script Generation**: GPT-5 for topic-based content synthesis  
-- **Audio Production**: ElevenLabs TTS with configurable voices
-- **Publishing**: GitHub + Vercel for RSS delivery
+- SQLite DB: feeds, episodes, digests
+- Scoring/Generation: GPT‑based scoring and topic scripts
+- Audio/TTS: ElevenLabs with per‑topic voice config
+- Publishing: GitHub Releases (assets), Vercel (canonical RSS)
+- Web UI (optional): Flask app on 127.0.0.1:5001 for settings, feeds/topics, and dashboard
 
 ## 📁 Project Structure
 
@@ -30,12 +30,14 @@ YouTube Videos → Transcript Extraction → AI Scoring → Script Generation �
 podscrape2/
 ├── src/                    # Source code
 │   ├── database/          # Database models and migrations
-│   ├── channels/          # YouTube channel management
-│   ├── transcripts/       # Transcript fetching and processing
+│   ├── podcast/           # RSS feeds, episodes, audio
+│   ├── transcripts/       # Transcript processing
 │   ├── scoring/           # AI-powered content scoring
 │   ├── generation/        # Script generation
 │   ├── audio/             # TTS and audio processing
 │   └── publishing/        # GitHub and RSS publishing
+├── web_ui/                # Optional Flask Web UI (port 5001)
+├── ui-tests/              # Playwright end-to-end tests for the Web UI
 ├── data/
 │   ├── database/          # SQLite database files
 │   ├── transcripts/       # Raw transcript files
@@ -52,7 +54,7 @@ podscrape2/
 │   ├── podscrape2-prd.md # Product Requirements Document
 │   └── completed-phases1-7.md  # Completed work log (Phases 1–7)
 │   └── tasklist2.md      # Remaining work (Web UI + Automation)
-└── daily_digest.py      # Main orchestrator
+└── run_full_pipeline.py / run_publishing_pipeline.py  # Pipeline runners
 ```
 
 ## 🚀 Quick Start
@@ -173,6 +175,39 @@ python src/channels/manage.py health
 python src/database/status.py
 ```
 
+## 🖥️ Web UI (Optional)
+
+The local Web UI runs on 127.0.0.1:5001 and provides:
+
+- **Settings**: DB‑backed controls for:
+  - content_filtering.score_threshold
+  - content_filtering.max_episodes_per_digest
+  - audio_processing.chunk_duration_minutes
+  - audio_processing.transcribe_all_chunks / max_chunks_per_episode
+- **Feeds**:
+  - List/group (RSS vs YouTube), latest episode + published date (RSS)
+  - Add (URL validation, duplicate guard, title autofill), toggle active, soft delete
+  - “Check feed” verifies TLS and audio enclosure reachability (no pipeline run)
+- **Topics**:
+  - Edit voice_id, instruction_file (upload/validate under `digest_instructions/`), description, active
+- **Dashboard**:
+  - Key settings; 6 most recent RSS items
+  - Last Run summary (recent scored episodes with correct feed + qualifying topics; created digests and MP3 durations)
+  - Transcribed but not yet digested (accurate); retry failed episodes
+  - Run Publishing / Run Full Pipeline / per‑phase buttons
+  - Live Status: auto‑starts log streaming with phase badges
+  - System Health: ffmpeg, gh CLI + auth, parakeet‑mlx, API keys
+
+Run the UI:
+```bash
+bash scripts/run_web_ui.sh         # PORT=5002 to override
+```
+
+Web UI tests (with UI running):
+```bash
+cd ui-tests && npm install && npx playwright install && npx playwright test
+```
+
 ## 🧪 Testing
 
 Each development phase includes comprehensive testing:
@@ -218,16 +253,15 @@ python tests/test_performance.py
 
 ## 📱 RSS Feed
 
-**Feed URL**: https://podcast.paulrbrown.org/daily-digest.xml
+**Feed URL**: https://podcast.paulrbrown.org/daily-digest.xml (canonical)
 
 Note: As of Sep 2025, the project standardized on `daily-digest.xml` (retiring `daily-digest2.xml`). A redirect from `/daily-digest2.xml` to `/daily-digest.xml` is configured in `vercel.json` for backward compatibility.
 
 ### Features
-- Full RSS 2.0 compliance with podcast extensions
+- RSS 2.0 with podcast extensions
 - Daily episodes organized by topic
-- Rich metadata: titles, summaries, categories
-- Compatible with all major podcast clients
-- Automated 14-day retention management
+- Rich metadata; compatible with major podcast clients
+- 14‑day retention management
 
 ### Episode Naming
 - **MP3**: `{topic}_{YYYYMMDD}_{HHMMSS}.mp3`

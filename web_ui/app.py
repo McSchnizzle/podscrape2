@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 try:
-    from flask import Flask, render_template, request, redirect, url_for, flash
+    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 except ImportError as e:
     print("ERROR: Flask is not installed for this Python interpreter.")
     print("Install with one of these:")
@@ -29,7 +29,7 @@ sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
 from config.web_config import WebConfigManager, DEFAULTS
 from config.config_manager import ConfigManager
-from podcast.rss_models import get_feed_repo, get_podcast_episode_repo, PodcastFeed
+from database.models import get_feed_repo, get_episode_repo, get_digest_repo, Feed
 from web_ui.utils import is_valid_feed_url, save_instruction_upload, digest_instructions_dir
 
 try:
@@ -51,7 +51,8 @@ def create_app():
     web_config = WebConfigManager()
     config_manager = ConfigManager(web_config=web_config)
     feed_repo = get_feed_repo()
-    episode_repo = get_podcast_episode_repo()
+    episode_repo = get_episode_repo()
+    digest_repo = get_digest_repo()
 
     # Utility: start a background maintenance task that writes to a dedicated log
     def _start_maintenance_task(name: str, worker_func):
@@ -168,48 +169,27 @@ def create_app():
         }
         # Build recent scored episodes from DB to ensure correct feed association
         try:
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            # Time window: entries scored within last 6 hours of log mtime
-            try:
-                mtime = datetime.fromtimestamp(log_path.stat().st_mtime)
-                since = (mtime - timedelta(hours=6)).isoformat()
-            except Exception:
-                since = None
-            if since:
-                rows = dbm.execute_query(
-                    """
-                    SELECT e.id as e_id, e.title as e_title, e.scores, e.scored_at, e.transcript_path, f.title AS f_title
-                    FROM episodes e JOIN feeds f ON e.feed_id = f.id
-                    WHERE e.scores IS NOT NULL AND e.scored_at >= ?
-                    ORDER BY e.scored_at DESC LIMIT 10
-                    """,
-                    (since,)
-                )
-            else:
-                rows = dbm.execute_query(
-                    """
-                    SELECT e.id as e_id, e.title as e_title, e.scores, e.scored_at, e.transcript_path, f.title AS f_title
-                    FROM episodes e JOIN feeds f ON e.feed_id = f.id
-                    WHERE e.scores IS NOT NULL
-                    ORDER BY e.scored_at DESC LIMIT 10
-                    """
-                )
+            # Get recent scored episodes
+            scored_episodes = episode_repo.get_by_status('scored')[:10]
             # Threshold from ConfigManager/Web UI
             try:
                 threshold = float(web_config.get_setting('content_filtering', 'score_threshold', 0.65))
             except Exception:
                 threshold = 0.65
-            import json as _json
-            import os
-            for r in rows:
-                scores = _json.loads(r['scores']) if r['scores'] else {}
-                # Use DB feed title as-is; avoid mutating feed_id here
-                f_title = r['f_title']
-                tpath = r['transcript_path']
+
+            # Build feed cache for episode display
+            feed_cache = {}
+            for ep in scored_episodes:
+                # Get feed title
+                if ep.feed_id not in feed_cache:
+                    feed = feed_repo.get_by_id(ep.feed_id)
+                    feed_cache[ep.feed_id] = feed.title if feed else 'Unknown Feed'
+
+                f_title = feed_cache[ep.feed_id]
+                scores = ep.scores or {}
                 qualifying = [t for t, s in scores.items() if isinstance(s, (int, float)) and s >= threshold]
                 summary['episodes'].append({
-                    'title': r['e_title'],
+                    'title': ep.title,
                     'feed': f_title,
                     'scores': scores,
                     'qualifying': qualifying,
@@ -219,62 +199,55 @@ def create_app():
 
         # Digests created from DB (latest digest_date)
         try:
-            # Pick latest digest_date in DB to represent most recent run
-            # Fallback: use today
-            # We'll query by max date across digests
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            rows = dbm.execute_query("SELECT MAX(digest_date) as d FROM digests")
-            latest_date = None
-            if rows and rows[0]['d']:
-                latest_date = rows[0]['d']
+            # Get latest digest date and digests for that date
+            latest_date = digest_repo.get_latest_digest_date()
             if latest_date:
-                rows = dbm.execute_query("SELECT * FROM digests WHERE digest_date = ?", (latest_date,))
+                latest_digests = digest_repo.get_by_date(latest_date)
                 # Build map topic->digest info
-                digests_info = {r['topic']: r for r in rows}
+                digests_info = {d.topic: d for d in latest_digests}
                 # If no digests parsed from log, build from DB
                 if not summary['digests']:
-                    for topic, info in digests_info.items():
+                    for topic, digest in digests_info.items():
                         d = {
                             'topic': topic,
-                            'word_count': info['script_word_count'],
-                            'episode_count': info['episode_count'],
+                            'word_count': digest.script_word_count,
+                            'episode_count': digest.episode_count,
                         }
-                        d['mp3_duration'] = info['mp3_duration_seconds']
+                        d['mp3_duration'] = digest.mp3_duration_seconds
                         try:
                             secs = int(d['mp3_duration'] or 0)
                             d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
                         except Exception:
                             d['mp3_hms'] = None
-                        import json as _json
-                        ids = _json.loads(info['episode_ids']) if info['episode_ids'] else []
+
+                        # Get episode titles from episode IDs
                         titles = []
-                        if ids:
-                            placeholders = ','.join('?' for _ in ids)
-                            q = f"SELECT title FROM episodes WHERE id IN ({placeholders})"
-                            rows2 = dbm.execute_query(q, tuple(ids))
-                            titles = [row['title'] for row in rows2]
+                        if digest.episode_ids:
+                            for ep_id in digest.episode_ids:
+                                ep = episode_repo.get_by_id(ep_id)
+                                if ep:
+                                    titles.append(ep.title)
                         d['episode_titles'] = titles
                         summary['digests'].append(d)
                 else:
                     # Enrich parsed digests
                     for d in summary['digests']:
-                        info = digests_info.get(d['topic'])
-                        if info:
-                            d['mp3_duration'] = info['mp3_duration_seconds']
+                        digest = digests_info.get(d['topic'])
+                        if digest:
+                            d['mp3_duration'] = digest.mp3_duration_seconds
                             try:
                                 secs = int(d['mp3_duration'] or 0)
                                 d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
                             except Exception:
                                 d['mp3_hms'] = None
-                            import json as _json
-                            ids = _json.loads(info['episode_ids']) if info['episode_ids'] else []
+
+                            # Get episode titles from episode IDs
                             titles = []
-                            if ids:
-                                placeholders = ','.join('?' for _ in ids)
-                                q = f"SELECT title FROM episodes WHERE id IN ({placeholders})"
-                                rows2 = dbm.execute_query(q, tuple(ids))
-                                titles = [row['title'] for row in rows2]
+                            if digest.episode_ids:
+                                for ep_id in digest.episode_ids:
+                                    ep = episode_repo.get_by_id(ep_id)
+                                    if ep:
+                                        titles.append(ep.title)
                             d['episode_titles'] = titles
         except Exception as e:
             summary['errors'].append(f'Failed to enrich digest info: {e}')
@@ -508,17 +481,8 @@ def create_app():
     def publishing_page():
         days = int(request.args.get('days', 7))
         try:
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            rows = dbm.execute_query(
-                """
-                SELECT id, topic, digest_date, mp3_path, mp3_title, mp3_summary, mp3_duration_seconds, github_url
-                FROM digests
-                WHERE digest_date >= date('now', '-' || ? || ' days')
-                ORDER BY digest_date DESC, topic ASC
-                """,
-                (days,)
-            )
+            # Get recent digests
+            recent_digests = digest_repo.get_recent_digests(days)
             # Build asset status via GitHub release lookup
             items = []
             try:
@@ -526,8 +490,18 @@ def create_app():
                 gh = create_github_publisher()
             except Exception:
                 gh = None
-            for r in rows:
-                d = dict(r)
+
+            for digest in recent_digests:
+                d = {
+                    'id': digest.id,
+                    'topic': digest.topic,
+                    'digest_date': digest.digest_date,
+                    'mp3_path': digest.mp3_path,
+                    'mp3_title': digest.mp3_title,
+                    'mp3_summary': digest.mp3_summary,
+                    'mp3_duration_seconds': digest.mp3_duration_seconds,
+                    'github_url': digest.github_url
+                }
                 fn = Path(d['mp3_path']).name if d['mp3_path'] else None
                 d['mp3_file'] = fn
                 d['asset_present'] = None
@@ -718,20 +692,46 @@ def create_app():
             preview=preview,
         )
 
+    @app.get('/script-lab/instructions')
+    def script_lab_instructions():
+        topic = request.args.get('topic') or ''
+        if not topic:
+            return jsonify({ 'error': 'missing topic' }), 400
+        content = _load_topic_instructions(topic)
+        type_of_show = web_config.get_setting('editor', _editor_key(topic, 'type_of_show'), 'newscast')
+        voice_label = web_config.get_setting('editor', _editor_key(topic, 'voice_label'), 'American news anchor')
+        tone = web_config.get_setting('editor', _editor_key(topic, 'tone'), 'neutral')
+        pace = web_config.get_setting('editor', _editor_key(topic, 'pace'), 'moderate')
+        return jsonify({
+            'topic': topic,
+            'content': content,
+            'type_of_show': type_of_show,
+            'voice_label': voice_label,
+            'tone': tone,
+            'pace': pace,
+        })
+
     @app.post('/publishing/<int:digest_id>/publish')
     def publishing_publish(digest_id: int):
         # Start background publish (ensure asset) and stream log
         def worker(log_path: Path):
             try:
-                from database.models import get_database_manager
-                dbm = get_database_manager()
-                row = dbm.execute_query("SELECT * FROM digests WHERE id = ?", (digest_id,))
-                if not row:
+                digest = digest_repo.get_by_id(digest_id)
+                if not digest:
                     with open(log_path, 'a') as fh:
                         fh.write('Digest not found\n')
                     return
-                r = row[0]
-                d = {k: r[k] for k in r.keys()}
+                # Convert digest to dict format expected by publishing pipeline
+                d = {
+                    'id': digest.id,
+                    'topic': digest.topic,
+                    'digest_date': str(digest.digest_date),
+                    'mp3_path': digest.mp3_path,
+                    'mp3_title': digest.mp3_title,
+                    'mp3_summary': digest.mp3_summary,
+                    'mp3_duration_seconds': digest.mp3_duration_seconds,
+                    'github_url': digest.github_url
+                }
                 from run_publishing_pipeline import PublishingPipelineRunner
                 runner = PublishingPipelineRunner()
                 with open(log_path, 'a', encoding='utf-8') as fh:
@@ -750,17 +750,14 @@ def create_app():
     def publishing_unpublish(digest_id: int):
         def worker(log_path: Path):
             try:
-                from database.models import get_database_manager
-                dbm = get_database_manager()
-                row = dbm.execute_query("SELECT * FROM digests WHERE id = ?", (digest_id,))
-                if not row:
+                digest = digest_repo.get_by_id(digest_id)
+                if not digest:
                     with open(log_path, 'a') as fh:
                         fh.write('Digest not found\n')
                         return
-                r = row[0]
-                topic = r['topic']
-                date_str = r['digest_date']
-                mp3 = Path(r['mp3_path']).name if r['mp3_path'] else None
+                topic = digest.topic
+                date_str = str(digest.digest_date)
+                mp3 = Path(digest.mp3_path).name if digest.mp3_path else None
                 tag = f"daily-{date_str}"
                 from src.publishing.github_publisher import create_github_publisher
                 gh = create_github_publisher()
@@ -788,9 +785,7 @@ def create_app():
                             with open(log_path, 'a', encoding='utf-8') as fh:
                                 fh.write(f"Error deleting asset: {e}\n")
                 # Clear DB URL
-                with dbm.get_connection() as conn:
-                    conn.execute("UPDATE digests SET github_url = NULL WHERE id = ?", (digest_id,))
-                    conn.commit()
+                digest_repo.clear_github_url(digest_id)
                 # Regenerate RSS and deploy
                 from src.publishing.rss_generator import create_rss_generator, PodcastMetadata
                 from src.publishing.vercel_deployer import create_vercel_deployer
@@ -807,25 +802,25 @@ def create_app():
                 )
                 rss_gen = create_rss_generator(md)
                 # Load all published digests (github_url not null)
-                rows2 = dbm.execute_query("SELECT * FROM digests WHERE github_url IS NOT NULL ORDER BY digest_date DESC")
+                published_digests = digest_repo.get_published_digests()
                 from datetime import datetime as _dt
                 episodes = []
-                for drow in rows2:
-                    # Construct episode data from row
-                    file_path = Path(drow['mp3_path']) if drow['mp3_path'] else None
+                for digest in published_digests:
+                    # Construct episode data from digest
+                    file_path = Path(digest.mp3_path) if digest.mp3_path else None
                     size = file_path.stat().st_size if file_path and file_path.exists() else 0
                     # Compose asset URL from repo/tag/file
                     repo = os.getenv('GITHUB_REPOSITORY')
-                    asset_url = f"https://github.com/{repo}/releases/download/daily-{drow['digest_date']}/{Path(drow['mp3_path']).name}"
+                    asset_url = f"https://github.com/{repo}/releases/download/daily-{digest.digest_date}/{Path(digest.mp3_path).name}"
                     from src.publishing.rss_generator import PodcastEpisode
                     ep = PodcastEpisode(
-                        title=drow['mp3_title'] or f"{drow['topic']} - {drow['digest_date']}",
-                        description=drow['mp3_summary'] or '',
+                        title=digest.mp3_title or f"{digest.topic} - {digest.digest_date}",
+                        description=digest.mp3_summary or '',
                         audio_url=asset_url,
-                        pub_date=_dt.fromisoformat(drow['digest_date'] + 'T12:00:00'),
-                        duration_seconds=drow['mp3_duration_seconds'] or 0,
+                        pub_date=_dt.fromisoformat(str(digest.digest_date) + 'T12:00:00'),
+                        duration_seconds=digest.mp3_duration_seconds or 0,
                         file_size=size,
-                        guid=f"digest-{drow['digest_date']}-{drow['topic'].lower().replace(' ', '-')}"
+                        guid=f"digest-{digest.digest_date}-{digest.topic.lower().replace(' ', '-')}"
                     )
                     episodes.append(ep)
                 rss_content = rss_gen.generate_rss_feed(episodes) if episodes else ""
@@ -910,14 +905,12 @@ def create_app():
     def repair_digested():
         def worker(log_path: Path):
             repaired = moved = errors = 0
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            rows = dbm.execute_query("SELECT id, topic, episode_ids FROM digests")
-            import json as _json
+            # Get all digests and collect episode IDs
+            all_digests = digest_repo.get_recent_digests(days=90)  # Get broader range for repair
             all_ids = set()
-            for r in rows:
-                ids = _json.loads(r['episode_ids']) if r['episode_ids'] else []
-                all_ids.update(ids)
+            for digest in all_digests:
+                if digest.episode_ids:
+                    all_ids.update(digest.episode_ids)
             with open(log_path, 'a', encoding='utf-8') as fh:
                 fh.write(f"Found {len(all_ids)} episodes across digests to repair\n")
                 for eid in all_ids:
@@ -962,23 +955,23 @@ def create_app():
                 'Anchor Feed': None,
             }
             try:
-                from database.models import get_database_manager
-                dbm = get_database_manager()
-                rows = dbm.execute_query(
-                    """
-                    SELECT e.id AS e_id, e.transcript_path, f.title AS db_feed_title
-                    FROM episodes e JOIN feeds f ON e.feed_id = f.id
-                    WHERE e.transcript_path IS NOT NULL
-                    """
-                )
+                # Get episodes with transcripts and their feed info
+                # For now, get all episodes and filter - could be optimized with a joined query
+                all_episodes = episode_repo.get_recent_episodes(limit=1000)  # Get broader range
+                episodes_with_transcripts = [ep for ep in all_episodes if ep.transcript_path]
                 import os
                 with open(log_path, 'a', encoding='utf-8') as fh:
-                    for r in rows:
+                    for ep in episodes_with_transcripts:
                         checked += 1
-                        tpath = r['transcript_path']
+                        tpath = ep.transcript_path
                         if not tpath or not os.path.exists(tpath):
                             skipped += 1
                             continue
+
+                        # Get current feed title
+                        current_feed = feed_repo.get_by_id(ep.feed_id)
+                        current_feed_title = current_feed.title if current_feed else 'Unknown'
+
                         header_title = None
                         try:
                             with open(tpath, 'r', encoding='utf-8', errors='ignore') as th:
@@ -1003,18 +996,18 @@ def create_app():
                                 skipped += 1
                                 continue
                             header_title = corrected
-                        if header_title == r['db_feed_title']:
+                        if header_title == current_feed_title:
                             continue
                         f = feed_repo.get_by_title(header_title)
                         if f and f.id:
                             try:
-                                episode_repo.update_feed_id(r['e_id'], f.id)
+                                episode_repo.update_feed_id(ep.id, f.id)
                                 repaired += 1
-                                fh.write(f"episode {r['e_id']}: {r['db_feed_title']} -> {f.title}\n")
+                                fh.write(f"episode {ep.id}: {current_feed_title} -> {f.title}\n")
                                 fh.flush()
                             except Exception as ex:
                                 errors += 1
-                                fh.write(f"episode {r['e_id']}: failed to update: {ex}\n")
+                                fh.write(f"episode {ep.id}: failed to update: {ex}\n")
                                 fh.flush()
                         else:
                             skipped += 1
@@ -1042,47 +1035,61 @@ def create_app():
         order_col = sort_map.get(sort_by, 'e.scored_at')
         order_dir = 'ASC' if sort_dir.lower() == 'asc' else 'DESC'
         try:
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            wheres = []
-            params: list = []
-            if q:
-                wheres.append("(e.title LIKE ? OR f.title LIKE ?)")
-                params.extend([f"%{q}%", f"%{q}%"])
+            # Get episodes with filtering
+            episodes = []
             if status:
-                wheres.append("e.status = ?")
-                params.append(status)
-            where_clause = (" WHERE " + " AND ".join(wheres)) if wheres else ""
-            sql = (
-                "SELECT e.*, f.title AS feed_title FROM episodes e "
-                "JOIN feeds f ON e.feed_id = f.id "
-                + where_clause +
-                f" ORDER BY {order_col} {order_dir} LIMIT 100"
-            )
-            rows = dbm.execute_query(sql, tuple(params))
+                episodes = episode_repo.get_by_status(status)
+            else:
+                episodes = episode_repo.get_recent_episodes(limit=100)
+
+            # Apply text search if provided
+            if q:
+                episodes = [ep for ep in episodes if q.lower() in ep.title.lower()]
+
+            # Sort episodes
+            reverse = (sort_dir.lower() == 'desc')
+            if sort_by == 'title':
+                episodes.sort(key=lambda x: x.title.lower(), reverse=reverse)
+            elif sort_by == 'published':
+                episodes.sort(key=lambda x: x.published_date or datetime.min, reverse=reverse)
+            elif sort_by == 'status':
+                episodes.sort(key=lambda x: x.status or '', reverse=reverse)
+            elif sort_by == 'scored_at':
+                episodes.sort(key=lambda x: x.scored_at or datetime.min, reverse=reverse)
+
             # Build digest inclusion map (recent 14 days)
-            digests = dbm.execute_query("SELECT id, topic, digest_date, episode_ids FROM digests WHERE digest_date >= date('now','-14 days')")
+            recent_digests = digest_repo.get_recent_digests(days=14)
             incl_map = {}
-            import json as _json
-            for d in digests:
-                ids = _json.loads(d['episode_ids']) if d['episode_ids'] else []
-                for eid in ids:
-                    incl_map.setdefault(eid, []).append({ 'topic': d['topic'], 'date': d['digest_date'] })
+            for digest in recent_digests:
+                if digest.episode_ids:
+                    for eid in digest.episode_ids:
+                        incl_map.setdefault(eid, []).append({ 'topic': digest.topic, 'date': str(digest.digest_date) })
             items = []
-            for r in rows:
-                ep = dict(r)
-                ep['included'] = incl_map.get(r['id'], [])
-                # Display the DB feed title only
-                ep['feed_title_display'] = r['feed_title']
+            # Get feed cache for efficiency
+            feed_cache = {}
+            for ep in episodes:
+                # Get feed title
+                if ep.feed_id not in feed_cache:
+                    feed = feed_repo.get_by_id(ep.feed_id)
+                    feed_cache[ep.feed_id] = feed.title if feed else 'Unknown Feed'
+
+                ep_dict = {
+                    'id': ep.id,
+                    'title': ep.title,
+                    'status': ep.status,
+                    'scored_at': ep.scored_at,
+                    'published_date': ep.published_date,
+                    'scores': ep.scores or {}
+                }
+                ep_dict['included'] = incl_map.get(ep.id, [])
+                ep_dict['feed_title_display'] = feed_cache[ep.feed_id]
+
                 # Compact scores string
-                try:
-                    scores = _json.loads(r['scores']) if r['scores'] else {}
-                except Exception:
-                    scores = {}
+                scores = ep.scores or {}
                 labels = {'AI and Technology': 'Tech', 'Social Movements and Community Organizing': 'Organizing'}
                 score_labels = ', '.join(f"{labels.get(k, k.split()[0])}={float(v):.2f}" for k,v in scores.items()) if scores else ''
-                ep['score_labels'] = score_labels
-                items.append(ep)
+                ep_dict['score_labels'] = score_labels
+                items.append(ep_dict)
             return render_template('episodes.html', q=q, status=status, sort_by=sort_by, sort_dir=sort_dir, items=items)
         except Exception as e:
             flash(f'Failed to load episodes: {e}', 'error')
@@ -1192,40 +1199,30 @@ def create_app():
     @app.post('/maintenance/reconcile_episodes')
     def reconcile_episodes():
         def worker(log_path: Path):
-            from database.models import get_database_manager
-            dbm = get_database_manager()
-            rows = dbm.execute_query(
-                """
-                SELECT id, title, episode_guid, status, transcript_path, published_date
-                FROM episodes
-                ORDER BY published_date DESC
-                """
-            )
+            # Get all episodes
+            all_episodes = episode_repo.get_recent_episodes(limit=1000)
+
             # Build set of episode IDs that appear in any digest
-            dig_rows = dbm.execute_query("SELECT episode_ids FROM digests WHERE episode_ids IS NOT NULL")
-            import json as _json
+            all_digests = digest_repo.get_recent_digests(days=90)
             in_digests = set()
-            for dr in dig_rows:
-                try:
-                    ids = _json.loads(dr['episode_ids']) if dr['episode_ids'] else []
-                    in_digests.update(ids)
-                except Exception:
-                    continue
+            for digest in all_digests:
+                if digest.episode_ids:
+                    in_digests.update(digest.episode_ids)
             root = PROJECT_ROOT / 'data' / 'transcripts'
             fixed = reset = ok = marked = 0
             with open(log_path, 'a', encoding='utf-8') as fh:
-                fh.write(f"Reconciling {len(rows)} episodes...\n")
-                for r in rows:
-                    eid = r['id']
-                    title = r['title']
-                    guid = r['episode_guid'] or ''
-                    status = r['status'] or ''
-                    tpath = r['transcript_path']
+                fh.write(f"Reconciling {len(all_episodes)} episodes...\n")
+                for ep in all_episodes:
+                    eid = ep.id
+                    title = ep.title
+                    guid = ep.episode_guid or ''
+                    status = ep.status or ''
+                    tpath = ep.transcript_path
                     fh.write(f"Episode {eid} [{status}]: {title[:60]}\n")
                     # If episode appears in any digest, ensure status is 'digested'
                     if eid in in_digests and status != 'digested':
                         try:
-                            dbm.execute_update("UPDATE episodes SET status='digested' WHERE id=?", (eid,))
+                            episode_repo.update_status_by_id(eid, 'digested')
                             status = 'digested'
                             marked += 1
                             fh.write("  status→digested (in digest table)\n")
@@ -1271,10 +1268,9 @@ def create_app():
                         continue
                     # No transcript: reset to pending for re-processing
                     try:
-                        dbm.execute_update(
-                            "UPDATE episodes SET status='pending', transcript_path=NULL, transcript_word_count=NULL, chunk_count=0 WHERE id=?",
-                            (eid,)
-                        )
+                        episode_repo.update_status_by_id(eid, 'pending')
+                        # Clear transcript-related fields
+                        episode_repo.update_transcript_path(eid, None)
                         reset += 1
                         fh.write("  RESET → pending (no transcript found)\n")
                     except Exception as ex:
@@ -1360,7 +1356,7 @@ def create_app():
                 # Create via repository
                 try:
                     feed_id = feed_repo.create(
-                        PodcastFeed(
+                        Feed(
                             feed_url=feed_url,
                             title=final_title,
                             description=None,
@@ -1532,7 +1528,7 @@ def create_app():
             feed_repo.update_last_checked(feed_id)
             try_title = getattr(parsed.feed, 'title', None) if hasattr(parsed, 'feed') else None
             if try_title and try_title.strip() and try_title.strip() != feed.title:
-                feed_repo.db.execute_update("UPDATE feeds SET title=? WHERE id=?", (try_title.strip(), feed_id))
+                feed_repo.update_title(feed_id, try_title.strip())
             flash('Feed OK', 'success')
         except Exception as e:
             flash(f'Check failed: {e}', 'error')
@@ -1602,8 +1598,28 @@ def create_app():
 
 if __name__ == '__main__':
     import argparse
+    import logging
+    import os
+
+    # Suppress Flask development server warnings and multiprocessing warnings
+    import warnings
+    warnings.filterwarnings('ignore', message='resource_tracker')
+    warnings.filterwarnings('ignore', message='This is a development server')
+
+    # Reduce Flask's logging verbosity
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
+    # Suppress multiprocessing warnings
+    os.environ['PYTHONWARNINGS'] = 'ignore::UserWarning'
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=5001)
     args = parser.parse_args()
+
+    print(f"🌐 Starting Podscrape2 Web UI on http://127.0.0.1:{args.port}")
+    print("📊 Database: Connected to Supabase PostgreSQL")
+    print("🔧 Environment: Development mode")
+    print("⏹️  Press Ctrl+C to stop\n")
+
     app = create_app()
     app.run(host='127.0.0.1', port=args.port, debug=True)

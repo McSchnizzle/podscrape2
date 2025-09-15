@@ -26,6 +26,14 @@ python -m pip install --upgrade pip >/dev/null 2>&1 || true
 echo "Installing requirements (including Flask)"
 python -m pip install -r requirements.txt >/dev/null
 
+# Basic tooling checks (non-fatal)
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "[WARN] ffmpeg not found. Audio chunking will fail. Install with: brew install ffmpeg"
+fi
+if ! command -v gh >/dev/null 2>&1; then
+  echo "[WARN] GitHub CLI (gh) not found. CLI-based publishing may be unavailable. Install with: brew install gh && gh auth login"
+fi
+
 export PYTHONPATH=src
 echo "Starting Web UI on http://127.0.0.1:${PORT}"
 python web_ui/app.py --port "${PORT}"

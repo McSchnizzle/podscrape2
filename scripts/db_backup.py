@@ -16,6 +16,8 @@ from src.config.env import require_database_url
 def main() -> None:
     load_dotenv()
     db_url = require_database_url()
+    # pg_dump expects a libpq-style URL without the SQLAlchemy driver suffix.
+    pg_url = db_url.replace("postgresql+psycopg://", "postgresql://")
 
     out_dir = Path("data") / "backups"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -27,7 +29,7 @@ def main() -> None:
         "--no-owner",
         "--no-privileges",
         "--format=plain",
-        db_url,
+        pg_url,
     ]
 
     print(f"Running pg_dump to {out_path}...")
@@ -38,4 +40,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

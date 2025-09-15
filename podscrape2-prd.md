@@ -1,22 +1,17 @@
-# RSS Podcast Transcript Digest System - Product Requirements Document
+# RSS Podcast Transcript Digest — Product Brief
 
-## Project Overview
+An automated daily digest system that ingests podcast episodes from RSS feeds, transcribes audio when available, scores content for topic relevancy, generates topic scripts, produces MP3s, and publishes a canonical RSS feed.
 
-An automated daily digest system that collects podcast episodes from RSS feeds, transcribes them using Nvidia Parakeet ASR, scores them for topic relevancy using GPT-5-mini, combines high-scoring content into topic-based scripts using GPT-5, converts scripts to audio using ElevenLabs TTS, and publishes them via RSS feed.
+Canonical RSS: https://podcast.paulrbrown.org/daily-digest.xml
 
-## Vision Statement
+## What It Does
+- Discover new episodes from configured RSS feeds
+- Download and chunk audio; transcribe (Parakeet MLX on Apple Silicon)
+- Score against topics; generate scripts from topic instructions
+- Produce MP3s with ElevenLabs; publish via GitHub Releases
+- Deploy canonical RSS to Vercel
 
-Create a fully automated daily podcast that intelligently curates and synthesizes content from podcast RSS feeds across multiple topics, delivering personalized AI-generated digest episodes via RSS feed with minimal manual intervention.
-
-## Core Objectives
-
-- **Automated Content Collection**: Collect podcast episodes from RSS feeds and transcribe using Nvidia Parakeet ASR with 10-minute audio chunking
-- **Intelligent Content Scoring**: Score each episode against multiple topics using GPT-5-mini with ≥0.65 relevancy threshold
-- **Topic-Based Script Generation**: Combine relevant transcripts into coherent scripts following topic-specific instructions using GPT-5
-- **High-Quality Audio Production**: Convert scripts to podcast-quality audio using ElevenLabs TTS with configurable voices
-- **Automated Publishing**: Publish to GitHub and serve via RSS at podcast.paulrbrown.org with proper retention management
-
-## Technical Architecture
+## Architecture (Concise)
 
 ### Database Design (SQLite)
 ```sql
@@ -31,22 +26,59 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
          mp3_summary, episode_ids (JSON), github_url, timestamps
 ```
 
-### File Structure
-```
-/podscrape2/
-├── transcripts/           # Podcast transcripts: {episode_guid}_{timestamp}.txt
-├── audio_cache/          # Downloaded podcast episodes: {episode_guid}.mp3
-├── audio_chunks/         # 10-minute audio chunks for processing
-├── completed-tts/        # MP3 files: {topic}_{YYYYMMDD}_{HHMMSS}.mp3
-├── scripts/              # Digest scripts: {topic}_{YYYYMMDD}.md
-├── logs/                 # Execution logs: digest_{YYYYMMDD}.log
-├── config/               # Configuration files
-├── database/             # SQLite database
-├── digest_instructions/  # Topic-specific generation instructions
-└── music_cache/         # Audio assets for future music bed integration
-```
+Key folders: data/ (db, transcripts, scripts, completed‑tts), public/ (daily-digest.xml)
 
-### Core Components
+## Web UI (Phases A–C)
+
+An optional local Web UI (Flask on 127.0.0.1:5001) provides configuration and operations while keeping the CLI pipelines unchanged when the UI is not running.
+
+### Capabilities
+- **Settings** (DB‑backed via `web_settings` + `WebConfigManager`):
+  - content_filtering.score_threshold
+  - content_filtering.max_episodes_per_digest
+  - audio_processing.chunk_duration_minutes
+  - audio_processing.transcribe_all_chunks / max_chunks_per_episode
+  - Settings are read by the pipeline (scorer, script generator, transcriber/audio)
+- **Feeds**:
+  - List feeds (feed_url, title, active, last_checked, consecutive_failures)
+  - Add feed (URL validation, duplicate guard, title autofill via FeedParser)
+  - Toggle active; soft delete
+  - “Check feed” verifies TLS and audio enclosure reachability (no pipeline run)
+  - Latest episode title + published date displayed per RSS feed
+- **Topics**:
+  - List/edit topics from `config/topics.json`
+  - Edit voice_id, instruction_file (upload/validate under `digest_instructions/`), description, active
+  - Persist via `ConfigManager.save_topics()`; ContentScorer uses `ConfigManager` with `WebConfigManager` override
+- **Dashboard**:
+  - Mirrors key settings from DB
+  - Last Run distillation (recent scored episodes with correct feed + qualifying topics; latest digests from DB including episode titles and MP3 durations)
+  - Transcribed but not yet digested (accurate feed names; one‑time repair of legacy mis‑associations using transcript headers)
+  - Retry failed episodes; Run Publishing / Run Full Pipeline controls
+  - Tail endpoint for latest log; we removed separate publishing log creation (noise)
+
+### Notable Choices
+- The UI does not trigger GPT/TTS except for manual “Run Full Pipeline”.
+- All settings live in SQLite (web_settings); `ConfigManager` reads `score_threshold` from WebConfig when present.
+- ContentScorer now loads topics and threshold via `ConfigManager` (with WebConfig override) to align with the Web UI.
+- Episodes used in digests are marked `digested` after daily digests complete to prevent reuse. A one‑time repair aligns legacy entries.
+
+### Operations
+- Start UI: `bash scripts/run_web_ui.sh` (PORT override supported)
+- UI tests: `cd ui-tests && npm install && npx playwright install && npx playwright test`
+
+### Acceptance
+- Dashboard reflects latest pipeline status (scored episodes, digests, RSS items, pending/failed episodes)
+- Feeds and Topics changes persist and affect the pipeline
+- “Check feed” surfaces networking/format issues that would block downloads
+
+## Status & Next
+
+Status: Core pipeline, publishing, and Web UI complete through Phase C.
+
+Next:
+- Phase D: Publishing UI (publish/unpublish, asset status), retention controls
+- Phase E: Orchestration (lookback logic, manual dates, weekly summaries, scheduling)
+- Phase F: Ops/docs (end‑to‑end tests, concise docs)
 
 1. **Feed Manager** (`feed_manager.py`)
    - Add/remove RSS podcast feeds

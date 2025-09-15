@@ -5,7 +5,7 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Thu, 11 Sep 2025 21:15:54 +0000</lastBuildDate>
+    <lastBuildDate>Sun, 14 Sep 2025 07:31:58 +0000</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <itunes:title>Daily AI &amp; Tech Digest</itunes:title>
     <itunes:description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</itunes:description>
@@ -20,6 +20,61 @@
       <itunes:email>brownpr0@gmail.com</itunes:email>
     </itunes:owner>
     <copyright>© 2025 Paul Brown</copyright>
+    <item>
+      <title>AI &amp; Tech Daily Digest — Sep 14, 2025: Slopocalypse, GEMA</title>
+      <description>Today: the rise of AI-produced podcasts, Google’s on-device GEMA embeddings, ChatGPT branching, Atlassian buys The Browser Company, and OpenAI’s jobs push—what leaders must act on now.</description>
+      <pubDate>Sun, 14 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-14-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-14/AI_and_Technology_20250914_073042.mp3" length="12763264" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily Digest — Sep 14, 2025: Slopocalypse, GEMA</itunes:title>
+      <itunes:description>Today: the rise of AI-produced podcasts, Google’s on-device GEMA embeddings, ChatGPT branching, Atlassian buys The Browser Company, and OpenAI’s jobs push—what leaders must act on now.</itunes:description>
+      <itunes:duration>15:58</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Digest: Survival, Solidarity &amp; Culture — Sep 14, 2025</title>
+      <description>Quick, practical insights on building durable social infrastructure: study, campus solidarity, youth pipelines, and culture-driven organizing to sustain movements under pressure.</description>
+      <pubDate>Sun, 14 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-14-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-14/Social_Movements_and_Community_Organizing_20250914_072918.mp3" length="16137031" type="audio/mpeg"/>
+      <itunes:title>Daily Digest: Survival, Solidarity &amp; Culture — Sep 14, 2025</itunes:title>
+      <itunes:description>Quick, practical insights on building durable social infrastructure: study, campus solidarity, youth pipelines, and culture-driven organizing to sustain movements under pressure.</itunes:description>
+      <itunes:duration>19:18</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements Digest — Sept 13, 2025</title>
+      <description>Quick take: neighborhood care as infrastructure, campus anti-repression tactics for Palestine, and why ‘Black capitalism’ alone can’t deliver economic sovereignty.</description>
+      <pubDate>Sat, 13 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-13-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-13/Social_Movements_and_Community_Organizing_20250913_075139.mp3" length="21600175" type="audio/mpeg"/>
+      <itunes:title>Social Movements Digest — Sept 13, 2025</itunes:title>
+      <itunes:description>Quick take: neighborhood care as infrastructure, campus anti-repression tactics for Palestine, and why ‘Black capitalism’ alone can’t deliver economic sovereignty.</itunes:description>
+      <itunes:duration>16:14</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily Digest — Sept 13, 2025</title>
+      <description>OpenAI–Microsoft recapitalization, Anthropic’s $13B raise, polyglot AI stacks, chips geopolitics, and iPhone 17 first looks—fast insights for leaders. (Sept 13, 2025)</description>
+      <pubDate>Sat, 13 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-13-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-13/AI_and_Technology_20250913_075057.mp3" length="17495398" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily Digest — Sept 13, 2025</itunes:title>
+      <itunes:description>OpenAI–Microsoft recapitalization, Anthropic’s $13B raise, polyglot AI stacks, chips geopolitics, and iPhone 17 first looks—fast insights for leaders. (Sept 13, 2025)</itunes:description>
+      <itunes:duration>21:46</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily Digest — Sept 12, 2025</title>
+      <description>Quick briefing: Apple’s Siri pivot, Anthropic’s $13B raise, OpenAI–Microsoft restructure, on-device embeddings, and enterprise AI tools reshaping workflows. Essential takeaways for leaders.</description>
+      <pubDate>Fri, 12 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-12-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-12/AI_and_Technology_20250912_210350.mp3" length="18802356" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily Digest — Sept 12, 2025</itunes:title>
+      <itunes:description>Quick briefing: Apple’s Siri pivot, Anthropic’s $13B raise, OpenAI–Microsoft restructure, on-device embeddings, and enterprise AI tools reshaping workflows. Essential takeaways for leaders.</itunes:description>
+      <itunes:duration>21:37</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
     <item>
       <title>AI &amp; Tech Digest — Sep 11, 2025: Production-Grade AI</title>
       <description>Today: AI moves from demos to production—MCP write-actions, YouTube dubbing, custom chips, Anthropic settlement, and agents reshaping work. Quick takeaways for builders and leaders.</description>

@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white shadow rounded p-4 space-y-6">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-medium">Feeds</h2>
+  </div>
+
+  <form method="post" class="border rounded p-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+    <input type="hidden" name="action" value="add">
+    <div>
+      <label class="block text-sm">Feed URL</label>
+      <input name="feed_url" placeholder="https://... or file:///" class="border rounded w-full p-2" required>
+    </div>
+    <div>
+      <label class="block text-sm">Title (optional)</label>
+      <input name="title" placeholder="Auto-filled if possible" class="border rounded w-full p-2">
+    </div>
+    <div>
+      <button class="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Add Feed</button>
+    </div>
+  </form>
+
+  <div class="overflow-x-auto space-y-6">
+    <div>
+      <h3 class="font-semibold mb-2">RSS Feeds</h3>
+      <table class="min-w-full border">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="text-left p-2 border">Title</th>
+            <th class="text-left p-2 border">URL</th>
+            <th class="text-left p-2 border">Latest Episode</th>
+            <th class="text-left p-2 border">Published</th>
+            <th class="text-left p-2 border">Active</th>
+            <th class="text-left p-2 border">Last Checked</th>
+            <th class="text-left p-2 border">Failures</th>
+            <th class="text-left p-2 border">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in rss_feeds %}
+          <tr class="border-t">
+            <td class="p-2 align-top">{{ f.title }}</td>
+            <td class="p-2 align-top text-sm text-blue-700 break-all">{{ f.feed_url }}</td>
+            <td class="p-2 align-top text-sm">{{ f.latest_episode_title or '-' }}</td>
+            <td class="p-2 align-top text-sm">{{ f.latest_episode_date or '-' }}</td>
+            <td class="p-2 align-top">{{ 'Yes' if f.active else 'No' }}</td>
+            <td class="p-2 align-top text-sm">{{ f.last_checked or '-' }}</td>
+            <td class="p-2 align-top">{{ f.consecutive_failures }}</td>
+          <td class="p-2 align-top">
+            <div class="flex flex-wrap gap-2">
+              <form method="post" action="/feeds/{{ f.id }}/toggle" class="inline">
+                <button class="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">{{ 'Deactivate' if f.active else 'Activate' }}</button>
+              </form>
+              <form method="post" action="/feeds/{{ f.id }}/check" class="inline">
+                <button class="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Check</button>
+              </form>
+              <form method="post" action="/feeds/{{ f.id }}/delete" class="inline" onsubmit="return confirm('Deactivate this feed?');">
+                <button class="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300" type="submit">Delete</button>
+              </form>
+            </div>
+          </td>
+          </tr>
+          {% else %}
+          <tr>
+          <td colspan="8" class="p-3 text-center text-gray-500">No RSS feeds</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 class="font-semibold mb-2">YouTube Feeds</h3>
+      <table class="min-w-full border">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="text-left p-2 border">Title</th>
+            <th class="text-left p-2 border">URL</th>
+            <th class="text-left p-2 border">Active</th>
+            <th class="text-left p-2 border">Last Checked</th>
+            <th class="text-left p-2 border">Failures</th>
+            <th class="text-left p-2 border">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in yt_feeds %}
+          <tr class="border-t">
+            <td class="p-2 align-top">{{ f.title }}</td>
+            <td class="p-2 align-top text-sm text-blue-700 break-all">{{ f.feed_url }}</td>
+            <td class="p-2 align-top">{{ 'Yes' if f.active else 'No' }}</td>
+            <td class="p-2 align-top text-sm">{{ f.last_checked or '-' }}</td>
+            <td class="p-2 align-top">{{ f.consecutive_failures }}</td>
+            <td class="p-2 align-top space-x-2">
+              <form method="post" action="/feeds/{{ f.id }}/toggle" class="inline">
+                <button class="px-2 py-1 rounded {{ 'bg-yellow-600 text-white' if f.active else 'bg-green-600 text-white' }}" type="submit">{{ 'Deactivate' if f.active else 'Activate' }}</button>
+              </form>
+              <form method="post" action="/feeds/{{ f.id }}/check" class="inline">
+                <button class="px-2 py-1 rounded bg-blue-600 text-white" type="submit">Check</button>
+              </form>
+              <form method="post" action="/feeds/{{ f.id }}/delete" class="inline" onsubmit="return confirm('Deactivate this feed?');">
+                <button class="px-2 py-1 rounded bg-gray-600 text-white" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="p-3 text-center text-gray-500">No YouTube feeds</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

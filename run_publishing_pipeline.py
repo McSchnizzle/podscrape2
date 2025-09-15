@@ -23,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 # Set up environment
 from dotenv import load_dotenv
 load_dotenv()
+from src.config.env import require_database_url
+require_database_url()  # Enforce Supabase Postgres configuration present
 
 from src.database.models import get_database_manager, get_digest_repo
 from src.publishing.github_publisher import create_github_publisher

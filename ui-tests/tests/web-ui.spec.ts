@@ -9,7 +9,7 @@ test.describe('Web UI settings flow', () => {
 
     // Go to settings
     await page.goto('/settings');
-    await expect(page.locator('text=Settings')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
     // Read current values
     const threshInput = page.locator('input[name="score_threshold"]');
@@ -20,6 +20,15 @@ test.describe('Web UI settings flow', () => {
     await threshInput.fill('0.70');
     await maxEpInput.fill('3');
     await chunkInput.fill('5');
+    // New fields: transcribe all + max chunks
+    const allChunksCheckbox = page.locator('input[name="transcribe_all_chunks"]');
+    const maxChunksInput = page.locator('input[name="max_chunks_per_episode"]');
+    // Ensure checkbox is toggled off to allow numeric to apply
+    const wasChecked = await allChunksCheckbox.isChecked();
+    if (wasChecked) {
+      await allChunksCheckbox.uncheck();
+    }
+    await maxChunksInput.fill('2');
 
     await Promise.all([
       page.waitForURL('**/settings'),
@@ -34,6 +43,9 @@ test.describe('Web UI settings flow', () => {
     await expect(page.locator('text=Score Threshold:').locator('xpath=..')).toContainText('0.7');
     await expect(page.locator('text=Max Episodes per Digest:').locator('xpath=..')).toContainText('3');
     await expect(page.locator('text=Chunk Duration (minutes):').locator('xpath=..')).toContainText('5');
+    // Reload settings page to confirm persistence of new fields
+    await page.goto('/settings');
+    await expect(allChunksCheckbox).not.toBeChecked();
+    await expect(maxChunksInput).toHaveValue('2');
   });
 });
-
