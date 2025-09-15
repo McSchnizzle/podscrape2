@@ -20,6 +20,9 @@ mutagen>=1.47.0                # Audio metadata
 # Database & Data
 # sqlite3 is part of the Python standard library; do not install via pip
 pandas>=2.0.0                  # Data manipulation (optional)
+SQLAlchemy>=2.0.0             # ORM for Postgres (Supabase)
+alembic>=1.12.0               # Migrations for SQLAlchemy
+psycopg[binary]>=3.1.0        # Postgres driver
 
 # Configuration & Validation
 pydantic>=2.0.0                # Data validation
@@ -33,6 +36,8 @@ feedgen>=0.9.0                 # RSS feed generation
 aiohttp>=3.8.0                 # Async HTTP client
 httpx>=0.24.0                  # Modern HTTP client
 Flask>=2.3.0                   # Web UI framework
+feedparser>=6.0.10             # RSS/Atom parsing for feed checks
+parakeet-mlx                   # Apple Silicon transcription (optional but installed)
 
 # Development & Testing
 pytest>=7.4.0                  # Testing framework
