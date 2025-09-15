@@ -29,7 +29,8 @@ sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
 from config.web_config import WebConfigManager, DEFAULTS
 from config.config_manager import ConfigManager
-from database.models import get_feed_repo, get_episode_repo, get_digest_repo, Feed
+from database.models import get_feed_repo, get_episode_repo, get_digest_repo, get_database_manager, Feed
+from sqlalchemy import text
 from web_ui.utils import is_valid_feed_url, save_instruction_upload, digest_instructions_dir
 
 try:
@@ -167,37 +168,110 @@ def create_app():
             'digests': [],   # list of {topic, word_count, episode_titles: [], mp3_duration: int}
             'errors': []
         }
-        # Build recent scored episodes from DB to ensure correct feed association
+        # Parse episodes actually processed in this log run
         try:
-            # Get recent scored episodes
-            scored_episodes = episode_repo.get_by_status('scored')[:10]
+            with open(log_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
             # Threshold from ConfigManager/Web UI
             try:
                 threshold = float(web_config.get_setting('content_filtering', 'score_threshold', 0.65))
             except Exception:
                 threshold = 0.65
 
-            # Build feed cache for episode display
-            feed_cache = {}
-            for ep in scored_episodes:
-                # Get feed title
-                if ep.feed_id not in feed_cache:
-                    feed = feed_repo.get_by_id(ep.feed_id)
-                    feed_cache[ep.feed_id] = feed.title if feed else 'Unknown Feed'
+            # Parse episode information from log
+            import re
 
-                f_title = feed_cache[ep.feed_id]
-                scores = ep.scores or {}
-                qualifying = [t for t, s in scores.items() if isinstance(s, (int, float)) and s >= threshold]
-                summary['episodes'].append({
-                    'title': ep.title,
-                    'feed': f_title,
-                    'scores': scores,
-                    'qualifying': qualifying,
-                })
+            # Find episode processing sections
+            episode_sections = re.findall(r'PROCESSING EPISODE \d+/\d+ — SCORING.*?(?=PROCESSING EPISODE|\Z)', content, re.DOTALL)
+
+            # Parse each episode
+            for section in episode_sections:
+                # Extract episode title and feed
+                title_match = re.search(r'Scoring: (.+)', section)
+                feed_match = re.search(r'Feed: (.+)', section)
+
+                if title_match:
+                    episode_title = title_match.group(1).strip()
+                    feed_title = feed_match.group(1).strip() if feed_match else 'Unknown Feed'
+
+                    # Parse topic scores
+                    scores = {}
+                    qualifying = []
+
+                    # Find the TOPIC SCORES section for this episode
+                    scores_section = re.search(r'📊 TOPIC SCORES:(.*?)📈 QUALIFICATION SUMMARY:', section, re.DOTALL)
+                    if scores_section:
+                        score_lines = scores_section.group(1).strip().split('\n')
+                        for line in score_lines:
+                            # Skip empty lines and log prefixes
+                            if not line.strip() or 'INFO -' not in line:
+                                continue
+
+                            # Extract the part after the log prefix
+                            # Lines look like: "2025-09-15 01:37:13,289 - __main__ - INFO -    ✅ QUALIFIES AI and Technology         0.95"
+                            log_content = line.split('INFO -', 1)[-1].strip()
+
+                            # Match lines like "✅ QUALIFIES AI and Technology         0.95"
+                            # or "Social Movements and Community Organizing 0.05"
+                            if '✅ QUALIFIES' in log_content:
+                                score_match = re.search(r'✅ QUALIFIES\s+(.+?)\s+([\d.]+)', log_content)
+                            else:
+                                score_match = re.search(r'^(.+?)\s+([\d.]+)$', log_content.strip())
+
+                            if score_match:
+                                topic = score_match.group(1).strip()
+                                score = float(score_match.group(2))
+                                scores[topic] = score
+                                if score >= threshold:
+                                    qualifying.append(topic)
+
+                    summary['episodes'].append({
+                        'title': episode_title,
+                        'feed': feed_title,
+                        'scores': scores,
+                        'qualifying': qualifying,
+                    })
+
         except Exception as e:
-            summary['errors'].append(f'Failed to load recent scored episodes: {e}')
+            summary['errors'].append(f'Failed to parse episodes from log: {e}')
 
-        # Digests created from DB (latest digest_date)
+        # Parse digest generation from log
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Find digest generation sections
+            digest_sections = re.findall(r'🎯 Generating digest: (.+)', content)
+
+            for topic in digest_sections:
+                topic = topic.strip()
+
+                # Look for the generation success line for this topic
+                pattern = rf'Generated script for {re.escape(topic)}: (\d+) words from (\d+) episodes'
+                match = re.search(pattern, content)
+
+                if match:
+                    word_count = int(match.group(1))
+                    episode_count = int(match.group(2))
+
+                    # Find episode titles that qualified for this topic from the parsed episodes
+                    episode_titles = []
+                    for ep in summary['episodes']:
+                        if topic in ep.get('qualifying', []):
+                            episode_titles.append(ep['title'])
+
+                    summary['digests'].append({
+                        'topic': topic,
+                        'word_count': word_count,
+                        'episode_count': episode_count,
+                        'episode_titles': episode_titles,
+                    })
+
+        except Exception as e:
+            summary['errors'].append(f'Failed to parse digests from log: {e}')
+
+        # Digests created from DB (latest digest_date) - fallback if no log parsing
         try:
             # Get latest digest date and digests for that date
             latest_date = digest_repo.get_latest_digest_date()
@@ -230,7 +304,7 @@ def create_app():
                         d['episode_titles'] = titles
                         summary['digests'].append(d)
                 else:
-                    # Enrich parsed digests
+                    # Enrich parsed digests with MP3 metadata only (avoid stale episode data)
                     for d in summary['digests']:
                         digest = digests_info.get(d['topic'])
                         if digest:
@@ -241,14 +315,8 @@ def create_app():
                             except Exception:
                                 d['mp3_hms'] = None
 
-                            # Get episode titles from episode IDs
-                            titles = []
-                            if digest.episode_ids:
-                                for ep_id in digest.episode_ids:
-                                    ep = episode_repo.get_by_id(ep_id)
-                                    if ep:
-                                        titles.append(ep.title)
-                            d['episode_titles'] = titles
+                            # Don't override episode titles from log - database may have stale data
+                            # The episode titles should come from the actual episodes processed in this run
         except Exception as e:
             summary['errors'].append(f'Failed to enrich digest info: {e}')
 
@@ -367,7 +435,7 @@ def create_app():
 
         # System health
         def get_system_health():
-            items = { 'tools': [], 'apis': [] }
+            items = { 'tools': [], 'apis': [], 'database': [] }
             # ffmpeg
             ff = shutil.which('ffmpeg')
             items['tools'].append({ 'name': 'ffmpeg', 'ok': bool(ff), 'detail': ff or 'not found in PATH' })
@@ -396,9 +464,64 @@ def create_app():
             # API keys/auth
             items['apis'].append({ 'name': 'OPENAI_API_KEY', 'ok': bool(os.getenv('OPENAI_API_KEY')), 'detail': 'present' if os.getenv('OPENAI_API_KEY') else 'missing' })
             items['apis'].append({ 'name': 'ELEVENLABS_API_KEY', 'ok': bool(os.getenv('ELEVENLABS_API_KEY')), 'detail': 'present' if os.getenv('ELEVENLABS_API_KEY') else 'missing' })
-            gh_token_ok = bool(os.getenv('GITHUB_TOKEN'))
-            items['apis'].append({ 'name': 'GitHub Auth', 'ok': gh_token_ok or gh_ok, 'detail': 'GITHUB_TOKEN present' if gh_token_ok else ('gh authenticated' if gh_ok else 'no token/gh auth') })
+            # Check GitHub token - verify it's a Classic PAT and test API access
+            gh_token = os.getenv('GITHUB_TOKEN')
+            gh_token_ok = False
+            gh_token_detail = 'missing'
+
+            if gh_token:
+                if gh_token.startswith('ghp_'):
+                    gh_token_detail = 'Classic PAT present'
+                    # Test API access
+                    try:
+                        import requests
+                        repo = os.getenv('GITHUB_REPOSITORY', 'McSchnizzle/podscrape2')
+                        headers = {
+                            'Authorization': f'token {gh_token}',
+                            'Accept': 'application/vnd.github+json'
+                        }
+                        r = requests.get(f'https://api.github.com/repos/{repo}', headers=headers, timeout=5)
+                        if r.status_code == 200:
+                            gh_token_ok = True
+                            gh_token_detail = 'Classic PAT - API verified ✓'
+                        else:
+                            gh_token_detail = f'Classic PAT - API error {r.status_code}'
+                    except Exception as e:
+                        gh_token_detail = f'Classic PAT - test failed: {str(e)[:30]}'
+                elif gh_token.startswith('github_pat_'):
+                    gh_token_detail = 'Fine-grained PAT (may lack permissions)'
+                else:
+                    gh_token_detail = 'Unknown token format'
+
+            items['apis'].append({
+                'name': 'GitHub Auth',
+                'ok': gh_token_ok or gh_ok,
+                'detail': gh_token_detail if gh_token else ('gh CLI authenticated' if gh_ok else 'no token/gh auth')
+            })
             items['apis'].append({ 'name': 'GITHUB_REPOSITORY', 'ok': bool(os.getenv('GITHUB_REPOSITORY')), 'detail': os.getenv('GITHUB_REPOSITORY') or 'missing' })
+
+            # Database connectivity check
+            try:
+                # Test database connection using existing repositories
+                test_repo = get_database_manager()
+                with test_repo.get_session() as session:
+                    # Simple query to test connection
+                    result = session.execute(text("SELECT 1")).scalar()
+                    if result == 1:
+                        # Get database URL info (without exposing credentials)
+                        db_url = os.getenv('DATABASE_URL', '')
+                        if 'supabase' in db_url:
+                            db_detail = 'Connected to Supabase PostgreSQL'
+                        elif 'postgresql' in db_url or 'postgres' in db_url:
+                            db_detail = 'Connected to PostgreSQL'
+                        else:
+                            db_detail = 'Connected to database'
+                        items['database'].append({ 'name': 'Supabase Connection', 'ok': True, 'detail': db_detail })
+                    else:
+                        items['database'].append({ 'name': 'Supabase Connection', 'ok': False, 'detail': 'Query test failed' })
+            except Exception as e:
+                items['database'].append({ 'name': 'Supabase Connection', 'ok': False, 'detail': f'Connection failed: {str(e)[:100]}' })
+
             return items
 
         health = get_system_health()
@@ -1078,7 +1201,7 @@ def create_app():
                     'title': ep.title,
                     'status': ep.status,
                     'scored_at': ep.scored_at,
-                    'published_date': ep.published_date,
+                    'published_date': ep.published_date.isoformat() if ep.published_date else '',
                     'scores': ep.scores or {}
                 }
                 ep_dict['included'] = incl_map.get(ep.id, [])

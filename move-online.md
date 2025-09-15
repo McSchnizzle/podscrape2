@@ -147,6 +147,7 @@ Acceptance criteria
 
 - [ENHANCED] **Web UI ready for deployment** - Local UI fully functional with Supabase integration:
   - ✅ Dashboard shows accurate "last run" episode counts via log file parsing (not stale database queries)
+  - ✅ **FIXED**: "Digests Created" section now correctly shows episodes from actual pipeline run, not stale database data
   - ✅ Real-time Supabase database connectivity health check in System Health section
   - ✅ All CRUD operations converted to SQLAlchemy repositories
   - ✅ RSS feed live and accessible at https://podcast.paulrbrown.org/daily-digest.xml
