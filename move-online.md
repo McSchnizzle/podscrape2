@@ -79,12 +79,13 @@ Acceptance criteria
 - [x] Complete remaining file migrations to SQLAlchemy:
   - **[COMPLETED]** `web_ui/app.py`: Convert ~30+ direct SQL calls to SQLAlchemy repositories
   - **[COMPLETED]** `run_publishing_pipeline.py`: Fixed db_manager attribute errors, updated to use digest repository pattern
+  - **[COMPLETED]** Dashboard enhancements: Fixed "last run" log parsing to show actual episodes processed (not all scored episodes), added Supabase connectivity health check
   - **[PENDING]** `rescore_episodes.py`: Update to use new repository pattern
   - **[PENDING]** `reset_latest_episode.py`: Update to use new repository pattern
   - **[PENDING]** Test files: Convert any remaining old database patterns
   - **[PENDING]** Utility scripts: Convert any remaining direct SQL calls
 
-**Current Status**: Core functionality working with Supabase. **All pipeline scripts fully operational** - `run_full_pipeline.py` and `run_publishing_pipeline.py` successfully tested end-to-end with PostgreSQL. Repository pattern implemented with comprehensive CRUD operations. **Publishing pipeline fixed** - resolved database connection issues, added missing repository methods (`update_digest`, `get_published_digests_without_rss`), corrected schema field references. RSS feed live at https://podcast.paulrbrown.org/daily-digest.xml
+**Current Status**: Core functionality working with Supabase. **All pipeline scripts fully operational** - `run_full_pipeline.py` and `run_publishing_pipeline.py` successfully tested end-to-end with PostgreSQL. Repository pattern implemented with comprehensive CRUD operations. **Publishing pipeline fixed** - resolved database connection issues, added missing repository methods (`update_digest`, `get_published_digests_without_rss`), corrected schema field references. **Dashboard improvements** - accurate last run episode tracking via log parsing, real-time Supabase health monitoring. RSS feed live at https://podcast.paulrbrown.org/daily-digest.xml
 
 Acceptance criteria
 - [x] Postgres schema created via Alembic; data migrated from a representative SQLite snapshot.
@@ -144,6 +145,11 @@ Acceptance criteria
 
 ## Phase 4 — Web UI Hosting + DNS
 
+- [ENHANCED] **Web UI ready for deployment** - Local UI fully functional with Supabase integration:
+  - ✅ Dashboard shows accurate "last run" episode counts via log file parsing (not stale database queries)
+  - ✅ Real-time Supabase database connectivity health check in System Health section
+  - ✅ All CRUD operations converted to SQLAlchemy repositories
+  - ✅ RSS feed live and accessible at https://podcast.paulrbrown.org/daily-digest.xml
 - [ ] Deploy the admin/status UI to Vercel:
   - Connect directly to Supabase for CRUD (Feeds, Topics, Episode status, Retention settings) via pooled connections.
   - Continue to use GitHub Workflow Dispatch for heavy actions (e.g., re-run pipeline) to keep serverless fast.
