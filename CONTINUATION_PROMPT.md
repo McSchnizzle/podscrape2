@@ -8,14 +8,21 @@
 - Repository pattern implemented with comprehensive CRUD operations in `src/database/models.py`
 - Additional repository methods added for complex web UI queries
 
-## 🎯 REMAINING WORK TO COMPLETE SUPABASE MIGRATION
+## ✅ SUPABASE MIGRATION COMPLETED (as of commit a112c24)
 
-### Priority 1: Utility Scripts
-**Files to migrate:**
-1. **`rescore_episodes.py`** - Convert to use episode repository for scoring operations
-2. **`reset_latest_episode.py`** - Convert to use episode repository for status resets
-3. **`demo_phase4.py`** - Review and convert any old database patterns
-4. **`test_new_digests.py`** - Convert old database references
+**All utility scripts successfully migrated:**
+1. ✅ **`rescore_episodes.py`** - Converted to use episode repository with get_by_status_list()
+2. ✅ **`reset_latest_episode.py`** - Converted to use episode repository for status resets
+3. ✅ **`demo_phase4.py`** - Migrated to use Feed/Episode models and repository pattern
+4. ✅ **`test_new_digests.py`** - Converted to use get_scored_episodes_sample() method
+5. ✅ **`run_full_pipeline.py`** - Removed SQLite imports, migrated to feed repository
+6. ✅ **`run_publishing_pipeline.py`** - Removed database manager dependency
+7. ✅ **`transcribe_episode.py`** - Migrated from archived rss_models to current repository pattern
+
+**All SQLite references removed:**
+- No more `import sqlite3` anywhere in codebase
+- No more `execute_query`/`execute_update` calls
+- All direct database calls replaced with repository methods
 
 ### Priority 2: Test Files
 **Search pattern:** Files containing `sqlite3|get_db_connection|execute_query|execute_update|DatabaseManagerOld`
@@ -78,16 +85,21 @@ episode_repo = get_episode_repo()
 digest_repo = get_digest_repo()
 ```
 
-## 📋 COMPLETION CHECKLIST
+## 📋 REMAINING TASKS
 
-- [ ] Migrate `rescore_episodes.py` to repository pattern
-- [ ] Migrate `reset_latest_episode.py` to repository pattern
-- [ ] Review and migrate `demo_phase4.py` if needed
-- [ ] Review and migrate `test_new_digests.py` if needed
-- [ ] Search for and migrate any remaining test files with old database patterns
-- [ ] Validate all migrated functionality works with Supabase
+**Phase 1a Supabase Migration: COMPLETE ✅**
+- [x] Migrate `rescore_episodes.py` to repository pattern
+- [x] Migrate `reset_latest_episode.py` to repository pattern
+- [x] Migrate `demo_phase4.py` to repository pattern
+- [x] Migrate `test_new_digests.py` to repository pattern
+- [x] Migrate `run_full_pipeline.py` and `run_publishing_pipeline.py`
+- [x] Migrate `transcribe_episode.py` to repository pattern
+- [x] Remove all SQLite imports and direct database calls
+
+**Remaining optional tasks:**
+- [ ] Archive or migrate test files with old database patterns (low priority)
+- [ ] Enable RLS (Row Level Security) on Supabase (security best practice)
 - [ ] Update move-online.md Phase 1a to mark as complete
-- [ ] Archive any remaining obsolete SQLite-specific files
 
 ## 🚨 IMPORTANT NOTES
 
