@@ -95,14 +95,11 @@ Acceptance criteria
 
 ## Phase 1 — Modularize Pipeline for Single‑Phase Runs
 
-- [PARTIAL] Introduce a simple pipeline CLI with subcommands (wrappers OK):
+- [x] Introduce a simple pipeline CLI with subcommands (wrappers OK):
   - **DONE**: `run_full_pipeline.py` has `--phase` flag for `discovery,audio,scoring,digest,tts`
-  - **TODO**: Add individual subcommands for each phase
   - **DONE**: Keep top‑level `run_full_pipeline.py` for convenience
-- [ ] Add flags: `--dry-run`, `--limit N`, `--from-step`, `--to-step`.
 - [x] Ensure idempotency: skip already‑processed items by checking DB/status.
 - [x] Standardize logging to `data/logs/pipeline_YYYYMMDD_HHMMSS.log`.
-- [ ] Add `pytest` integration tests for each phase using fixtures (no GPT/TTS calls).
 - [x] Make `run_publishing_pipeline.py` strictly publishing from existing MP3s.
 
 Acceptance criteria
@@ -125,6 +122,17 @@ Tasks
 
 Acceptance criteria
 - Public MP3 links via Releases work; daily DB backup artifacts exist for the last 7 days.
+
+
+## Phase 2.5 — CLI Enhancements (Deferred from Phase 1)
+
+- [ ] Add individual subcommands for each phase:
+  - `run_discovery.py`, `run_audio.py`, `run_scoring.py`, `run_digest.py`, `run_tts.py` as simple wrappers
+- [ ] Add flags: `--dry-run`, `--limit N`, `--from-step`, `--to-step`.
+- [ ] Add `pytest` integration tests for each phase using fixtures (no GPT/TTS calls).
+
+Acceptance criteria
+- Individual phase scripts available for convenience; dry-run mode prevents external API calls.
 
 
 ## Phase 3 — CI/CD
