@@ -360,13 +360,24 @@ def get_env_var(key: str, default: str = None, required: bool = True) -> str:
     
     return value
 
+def get_env_any(keys: List[str], default: Optional[str] = None, required: bool = True) -> str:
+    """Return the first non-empty value among keys; raise if required and none found."""
+    for k in keys:
+        v = os.getenv(k)
+        if v:
+            return v
+    if required:
+        raise ValueError(f"Required environment variable(s) missing: {keys}")
+    return default
+
 def load_api_keys() -> Dict[str, str]:
-    """Load API keys from environment variables"""
+    """Load API keys from environment variables with common fallbacks."""
+    github_token = get_env_any(['GITHUB_TOKEN', 'GH_TOKEN', 'GH_PAT_CLASSIC'])
     return {
         'openai_api_key': get_env_var('OPENAI_API_KEY'),
         'elevenlabs_api_key': get_env_var('ELEVENLABS_API_KEY'),
-        'github_token': get_env_var('GITHUB_TOKEN'),
-        'github_repository': get_env_var('GITHUB_REPOSITORY', 'McSchnizzle/podscrape2'),
+        'github_token': github_token,
+        'github_repository': get_env_var('GITHUB_REPOSITORY', 'McSchnizzle/podscrape2', required=False) or 'McSchnizzle/podscrape2',
     }
 
 def validate_environment() -> bool:
@@ -374,13 +385,16 @@ def validate_environment() -> bool:
     required_vars = [
         'OPENAI_API_KEY',
         'ELEVENLABS_API_KEY', 
-        'GITHUB_TOKEN'
     ]
+    # Accept any of these for GitHub auth
+    github_keys = ['GITHUB_TOKEN', 'GH_TOKEN', 'GH_PAT_CLASSIC']
     
     missing_vars = []
     for var in required_vars:
         if not os.getenv(var):
             missing_vars.append(var)
+    if not any(os.getenv(k) for k in github_keys):
+        missing_vars.append('GITHUB_TOKEN|GH_TOKEN|GH_PAT_CLASSIC')
     
     if missing_vars:
         logger.error(f"Missing required environment variables: {missing_vars}")
