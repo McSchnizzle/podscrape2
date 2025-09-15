@@ -12,9 +12,12 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import argparse
+from dataclasses import asdict, is_dataclass
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'src'))
 
 # Set up environment
 from dotenv import load_dotenv
@@ -24,6 +27,12 @@ require_database_url()
 
 from src.database.models import get_digest_repo
 from src.audio.complete_audio_processor import CompleteAudioProcessor
+
+def serialize_audio_metadata(obj):
+    """Convert dataclass objects to dictionaries for JSON serialization"""
+    if is_dataclass(obj):
+        return asdict(obj)
+    return obj
 
 class TTSRunner:
     """TTS audio generation phase"""
@@ -236,7 +245,7 @@ class TTSRunner:
                     'topic': digest.topic,
                     'success': True,
                     'skipped': False,
-                    'audio_metadata': audio_metadata
+                    'audio_metadata': serialize_audio_metadata(audio_metadata)
                 }
             else:
                 errors = result.get('errors', ['Unknown error'])
@@ -293,7 +302,6 @@ def main():
                     raise ValueError(f"Invalid digest ID: {args.input}")
         else:
             # Read from stdin
-            import sys
             digests_data = json.load(sys.stdin)
 
         result = runner.generate_audio(digests_data)

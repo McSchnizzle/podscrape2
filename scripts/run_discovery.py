@@ -56,10 +56,29 @@ class DiscoveryRunner:
         logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
 
         self.dry_run = dry_run
-        self.limit = limit
-        self.days_back = days_back
         self.episode_guid = episode_guid
         self.verbose = verbose
+
+        # Load web settings for defaults if not explicitly provided
+        try:
+            from src.config.web_config import WebConfigManager
+            web_config = WebConfigManager()
+
+            # Apply web settings if no explicit CLI values provided
+            if limit is None:
+                limit = int(web_config.get_setting('pipeline', 'max_episodes_per_run', 3))
+            if days_back == 7:  # Default value, check web config
+                days_back = int(web_config.get_setting('pipeline', 'days_back_default', 7))
+
+        except Exception as e:
+            self.logger.warning(f"Could not load web config, using defaults: {e}")
+            if limit is None:
+                limit = 3
+            if days_back is None:
+                days_back = 7
+
+        self.limit = limit
+        self.days_back = days_back
 
         # Initialize repositories
         self.episode_repo = get_episode_repo()
@@ -77,9 +96,25 @@ class DiscoveryRunner:
 
             feed_list = []
             for feed in feeds:
-                # Skip YouTube channels (unsupported)
-                if isinstance(feed.feed_url, str) and 'youtube.com/feeds/videos.xml' in feed.feed_url:
-                    continue
+                # Skip YouTube channels and other problematic feeds
+                if isinstance(feed.feed_url, str):
+                    if ('youtube.com' in feed.feed_url or
+                        'youtu.be' in feed.feed_url or
+                        feed.feed_url.startswith('https://www.youtube.com/@')):
+                        self.logger.info(f"SKIP: {feed.title} (YouTube feed not supported)")
+                        continue
+
+                    # Skip feeds with known issues
+                    problematic_patterns = [
+                        'shows.acast.com/the-hopeful-majority',    # SSL/404 errors
+                        'feeds.megaphone.fm/thegrayarea',          # 404 errors
+                        'psychedelic-wayfinder',                   # Malformed XML
+                        'rss.com/podcasts/psychedelic-wayfinder'   # Malformed XML
+                    ]
+
+                    if any(pattern in feed.feed_url for pattern in problematic_patterns):
+                        self.logger.info(f"SKIP: {feed.title} (feed has known issues)")
+                        continue
                 feed_list.append({
                     'id': feed.id,
                     'url': feed.feed_url,
@@ -279,7 +314,9 @@ def main():
             with open(args.output, 'w') as f:
                 json.dump(result, f, indent=2)
         else:
-            print(json.dumps(result, indent=2))
+            # Output JSON on single line for orchestrator compatibility
+            print(json.dumps(result))
+            sys.stdout.flush()  # Ensure JSON output is flushed
 
         # Exit code
         sys.exit(0 if result['success'] else 1)
@@ -296,7 +333,9 @@ def main():
             with open(args.output, 'w') as f:
                 json.dump(error_result, f, indent=2)
         else:
-            print(json.dumps(error_result, indent=2))
+            # Output JSON on single line for orchestrator compatibility
+            print(json.dumps(error_result))
+            sys.stdout.flush()  # Ensure JSON output is flushed
 
         sys.exit(1)
 
