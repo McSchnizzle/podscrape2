@@ -39,7 +39,8 @@ class FullPipelineRunner:
     """
     
     def __init__(self, log_file: str = None, phase_stop: str = None, dry_run: bool = False,
-                 limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False):
+                 limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False,
+                 from_step: str = None, to_step: str = None):
         # Set up comprehensive logging
         if log_file is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -130,8 +131,7 @@ class FullPipelineRunner:
         self.complete_audio_processor = CompleteAudioProcessor()
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
-        self.db_path = "data/database/digest.db"
-        
+
         # Initialize publishing components
         try:
             from src.publishing.rss_generator import PodcastMetadata
@@ -158,10 +158,10 @@ class FullPipelineRunner:
             self.logger.warning(f"Publishing components disabled: {e}")
             self.publishing_enabled = False
         
-        # Initialize Parakeet transcriber (after dependency verification)
-        if hasattr(self, 'has_parakeet_mlx') and self.has_parakeet_mlx:
-            from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
-            self.transcriber = create_parakeet_mlx_transcriber(chunk_duration_minutes=chunk_minutes)
+        # Initialize OpenAI Whisper transcriber (direct replacement for Parakeet MLX)
+        if hasattr(self, 'has_openai_whisper') and self.has_openai_whisper:
+            from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
+            self.transcriber = create_openai_whisper_transcriber(chunk_duration_minutes=chunk_minutes)
         else:
             self.transcriber = None
         
@@ -213,17 +213,18 @@ class FullPipelineRunner:
         
         self.logger.info("✓ OpenAI API key verified")
         
-        # Check Parakeet MLX availability
+        # Check OpenAI Whisper availability
         try:
-            import parakeet_mlx
-            from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
-            self.logger.info("✓ Parakeet MLX available for transcription")
-            self.has_parakeet_mlx = True
+            import whisper
+            import torch
+            from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
+            self.logger.info("✓ OpenAI Whisper available for transcription")
+            self.has_openai_whisper = True
         except ImportError as e:
-            self.logger.warning("✗ Parakeet MLX not available — proceeding without transcription")
+            self.logger.warning("✗ OpenAI Whisper not available — proceeding without transcription")
             self.logger.warning(f"Error: {e}")
-            self.logger.warning("Optional install: pip install parakeet-mlx")
-            self.has_parakeet_mlx = False
+            self.logger.warning("Install with: pip install openai-whisper")
+            self.has_openai_whisper = False
         
         # Check FFmpeg for audio processing
         try:
@@ -496,26 +497,20 @@ class FullPipelineRunner:
                 self.logger.warning("Transcriber not available; skipping transcription for this episode")
                 return db_episode
             
-            self.logger.info("Using Parakeet MLX (Apple Silicon optimized) for transcription")
-            
-            # Use Parakeet's episode transcription method
+            model_info = self.transcriber.get_model_info()
+            self.logger.info(f"Using OpenAI Whisper: {model_info.get('model', 'unknown')} model")
+
+            # Use OpenAI Whisper's episode transcription method
             try:
-                self.logger.info("Starting Parakeet transcription...")
-                
-                # Convert Path objects to strings for Parakeet API
+                self.logger.info(f"Starting transcription with OpenAI Whisper...")
+
+                # Convert Path objects to strings for Whisper API
                 chunk_paths_str = [str(path) for path in chunk_paths]
-                
-                # Create in-progress transcript file for monitoring
-                progress_dir = Path("data/transcripts")
-                progress_dir.mkdir(parents=True, exist_ok=True)
-                in_progress_file = progress_dir / f"{episode_guid[:6]}_in_progress.txt"
-                self.logger.info(f"Progress file: {in_progress_file}")
-                
-                # Call Parakeet transcriber (it will initialize model internally)
+
+                # Call OpenAI Whisper (it will initialize model internally)
                 transcription_result = self.transcriber.transcribe_episode(
-                    chunk_paths_str, 
-                    episode_guid,
-                    str(in_progress_file)
+                    chunk_paths_str,
+                    episode_guid
                 )
                 
                 # EpisodeTranscription object doesn't have success attribute - if we get here, it worked

@@ -724,6 +724,29 @@ class DigestRepository:
                 logger.error(f"Failed to clear GitHub URL for digest {digest_id}: {e}")
                 raise
 
+    def update_digest(self, digest_id: int, update_data: Dict[str, Any]):
+        """Update digest with provided data"""
+        with self.db.get_session() as session:
+            try:
+                digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
+                if digest_model:
+                    for key, value in update_data.items():
+                        if hasattr(digest_model, key):
+                            setattr(digest_model, key, value)
+                    session.commit()
+                else:
+                    logger.warning(f"Digest {digest_id} not found for update")
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to update digest {digest_id}: {e}")
+                raise
+
+    def get_published_digests_without_rss(self) -> List[Digest]:
+        """Get published digests that don't have RSS publication timestamp (not applicable in new schema)"""
+        # In the new schema, we don't track RSS publication separately
+        # Return empty list since we'll handle RSS generation differently
+        return []
+
     def _model_to_digest(self, model: DigestModel) -> Digest:
         """Convert SQLAlchemy model to dataclass"""
         return Digest(

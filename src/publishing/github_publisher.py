@@ -47,14 +47,14 @@ class GitHubPublisher:
     def __init__(self, github_token: str = None, repository: str = None):
         """
         Initialize GitHub publisher
-        
+
         Args:
             github_token: GitHub personal access token (if not provided, uses GITHUB_TOKEN env var)
             repository: Repository name in format "owner/repo" (if not provided, uses GITHUB_REPOSITORY env var)
         """
         self.github_token = github_token or os.getenv('GITHUB_TOKEN')
         self.repository = repository or os.getenv('GITHUB_REPOSITORY')
-        
+
         if not self.github_token:
             logger.warning("GITHUB_TOKEN not set; will attempt GH CLI fallback for publishing operations")
         # Detect gh CLI availability/auth
@@ -66,7 +66,6 @@ class GitHubPublisher:
                 # Ensure we don't let env tokens override local gh auth status
                 env_nt = os.environ.copy()
                 env_nt.pop('GITHUB_TOKEN', None)
-                env_nt.pop('GH_TOKEN', None)
                 auth = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True, timeout=10, env=env_nt)
                 self.gh_cli_ok = (auth.returncode == 0)
             if not self.gh_cli_ok:
@@ -79,7 +78,7 @@ class GitHubPublisher:
         
         self.api_base = "https://api.github.com"
         self.headers = {
-            'Authorization': f'Bearer {self.github_token}',
+            'Authorization': f'token {self.github_token}',
             'Accept': 'application/vnd.github+json',
             'User-Agent': 'RSS-Podcast-Digest-System/1.0',
             'X-GitHub-Api-Version': '2022-11-28'
@@ -194,13 +193,12 @@ class GitHubPublisher:
         except Exception as e:
             # Fallback to GH CLI create if REST fails and gh CLI is authenticated
             if not self.gh_cli_ok:
-                logger.error(f"Failed to create GitHub release: {e} (no GITHUB_TOKEN and GH CLI not authenticated)")
+                logger.error(f"Failed to create GitHub release: {e} (no GitHub token and GH CLI not authenticated)")
                 raise PodcastError(f"Failed to create GitHub release: {e}")
             try:
                 import subprocess
                 env_nt = os.environ.copy()
                 env_nt.pop('GITHUB_TOKEN', None)
-                env_nt.pop('GH_TOKEN', None)
                 cmd = [
                     'gh', 'release', 'create', tag_name,
                     *mp3_files,
@@ -240,7 +238,6 @@ class GitHubPublisher:
                 import subprocess, json as _json
                 env_nt = os.environ.copy()
                 env_nt.pop('GITHUB_TOKEN', None)
-                env_nt.pop('GH_TOKEN', None)
                 cmd = [
                     'gh', 'release', 'view', tag_name,
                     '--repo', self.repository,
@@ -294,7 +291,7 @@ class GitHubPublisher:
         # Upload the file
         upload_headers = self.headers.copy()
         upload_headers['Content-Type'] = 'application/octet-stream'
-        
+
         with open(file_path, 'rb') as f:
             params = {'name': file_path.name}
             upload_response = requests.post(

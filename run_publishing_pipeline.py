@@ -103,7 +103,6 @@ class PublishingPipelineRunner:
                 import subprocess
                 env_nt = os.environ.copy()
                 env_nt.pop('GITHUB_TOKEN', None)
-                env_nt.pop('GH_TOKEN', None)
                 r = subprocess.run(['gh','auth','status'], capture_output=True, text=True, timeout=10, env=env_nt)
                 if r.returncode != 0:
                     self.logger.warning("No GITHUB_TOKEN and GH CLI not authenticated — publishing may fail")
@@ -116,55 +115,52 @@ class PublishingPipelineRunner:
     def find_unpublished_digests(self, days_back: int = 30) -> List[Dict[str, Any]]:
         """Find digests that have MP3 files but haven't been published"""
         self.logger.info(f"Searching for unpublished digests from last {days_back} days...")
-        
-        # Get recent digests from database
-        with self.db_manager.get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT id, topic, digest_date, mp3_path, mp3_title, mp3_summary,
-                       mp3_duration_seconds, github_url, rss_published_at
-                FROM digests 
-                WHERE digest_date >= date('now', '-{} days')
-                AND mp3_path IS NOT NULL 
-                ORDER BY digest_date DESC
-            """.format(days_back))
-            
-            digests = []
-            for row in cursor.fetchall():
-                digest = {
-                    'id': row[0],
-                    'topic': row[1],
-                    'digest_date': row[2],
-                    'mp3_path': row[3],
-                    'mp3_title': row[4],
-                    'mp3_summary': row[5],
-                    'mp3_duration_seconds': row[6],
-                    'github_url': row[7],
-                    'rss_published_at': row[8]
-                }
-                
-                # Resolve MP3 path if only a filename or missing
-                from src.audio.audio_manager import AudioManager
-                resolved = AudioManager.resolve_existing_mp3_path(digest['mp3_path'])
-                if not resolved:
-                    self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
-                    continue
-                else:
-                    digest['mp3_path'] = str(resolved)
-                    # Persist normalized path for future runs
-                    try:
-                        with self.db_manager.get_connection() as conn:
-                            conn.execute("UPDATE digests SET mp3_path = ? WHERE id = ?", (digest['mp3_path'], digest['id']))
-                            conn.commit()
-                    except Exception:
-                        pass
-                
-                digests.append(digest)
-        
+
+        # Get recent digests from database using SQLAlchemy repository
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.now() - timedelta(days=days_back)
+
+        recent_digests = self.digest_repo.get_recent_digests(days=days_back)
+
+        digests = []
+        for digest_model in recent_digests:
+            # Only include digests that have MP3 files
+            if not digest_model.mp3_path:
+                continue
+
+            digest = {
+                'id': digest_model.id,
+                'topic': digest_model.topic,
+                'digest_date': digest_model.digest_date.isoformat(),
+                'mp3_path': digest_model.mp3_path,
+                'mp3_title': digest_model.mp3_title,
+                'mp3_summary': digest_model.mp3_summary,
+                'mp3_duration_seconds': digest_model.mp3_duration_seconds,
+                'github_url': digest_model.github_url,
+                'rss_published_at': None  # This field doesn't exist in the new schema
+            }
+
+            # Resolve MP3 path if only a filename or missing
+            from src.audio.audio_manager import AudioManager
+            resolved = AudioManager.resolve_existing_mp3_path(digest['mp3_path'])
+            if not resolved:
+                self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
+                continue
+            else:
+                digest['mp3_path'] = str(resolved)
+                # Persist normalized path for future runs
+                try:
+                    self.digest_repo.update_digest(digest_model.id, {'mp3_path': digest['mp3_path']})
+                except Exception:
+                    pass
+
+            digests.append(digest)
+
         self.logger.info(f"Found {len(digests)} digests with MP3 files:")
         for digest in digests:
             status = "PUBLISHED" if digest['github_url'] else "UNPUBLISHED"
             self.logger.info(f"  - {digest['digest_date']} | {digest['topic']} | {status}")
-        
+
         return digests
     
     def publish_digest(self, digest: Dict[str, Any]) -> bool:
@@ -198,13 +194,12 @@ class PublishingPipelineRunner:
                 except Exception:
                     pass
                 # Update database with GitHub URL
-                with self.db_manager.get_connection() as conn:
-                    conn.execute("""
-                        UPDATE digests 
-                        SET github_url = ?, github_release_id = ?, published_at = ?
-                        WHERE id = ?
-                    """, (release.html_url, str(release.id), datetime.now().isoformat(), digest['id']))
-                    conn.commit()
+                update_data = {
+                    'github_url': release.html_url,
+                    'github_release_id': str(release.id),
+                    'published_at': datetime.now()
+                }
+                self.digest_repo.update_digest(digest['id'], update_data)
                 
                 self.logger.info(f"  ✅ Published to GitHub: {release.html_url}")
                 digest['github_url'] = release.html_url  # Update for RSS generation
@@ -299,15 +294,7 @@ class PublishingPipelineRunner:
                 if self.vercel_deployer.validate_deployment():
                     self.logger.info("✅ Deployment validation passed")
                     
-                    # Update database with RSS publication timestamp
-                    with self.db_manager.get_connection() as conn:
-                        conn.execute("""
-                            UPDATE digests 
-                            SET rss_published_at = ?
-                            WHERE github_url IS NOT NULL 
-                            AND rss_published_at IS NULL
-                        """, (datetime.now().isoformat(),))
-                        conn.commit()
+                    # RSS publication tracking not needed in new schema - deployment success is sufficient
                     
                     return True
                 else:

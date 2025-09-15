@@ -166,6 +166,18 @@
             </li>
           {% endfor %}
         </ul>
+        {% if health.database %}
+        <div class="font-medium mt-3 mb-1">Database</div>
+        <ul class="space-y-1">
+          {% for db in health.database %}
+            <li>
+              <span class="inline-block w-2 h-2 rounded-full mr-2 {{ 'bg-green-500' if db.ok else 'bg-red-500' }}"></span>
+              <span class="font-mono">{{ db.name }}</span>
+              <span class="text-gray-600">— {{ db.detail }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -202,8 +214,16 @@
           <li>
             <span class="font-medium">{{ ep.title }}</span>
             {% if ep.feed %}<span class="text-gray-600">— {{ ep.feed }}</span>{% endif %}
+            {% if ep.scores %}
+              <div class="text-gray-600 text-xs mt-1">
+                Scores:
+                {% for topic, score in ep.scores.items() %}
+                  <span class="font-mono">{{ topic }}={{ "%.2f"|format(score) }}</span>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
             {% if ep.qualifying and ep.qualifying|length > 0 %}
-              <span class="ml-2 text-green-700">Qualifies: {{ ep.qualifying|join(', ') }}</span>
+              <span class="ml-2 text-green-700">✅ Qualifies: {{ ep.qualifying|join(', ') }}</span>
             {% endif %}
           </li>
         {% else %}

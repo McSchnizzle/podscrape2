@@ -12,8 +12,7 @@ from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
 
-from ..podcast.rss_models import PodcastEpisode as Episode, get_podcast_episode_repo
-from ..database.models import Digest, get_digest_repo
+from ..database.models import Episode, get_episode_repo, Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager
 
@@ -42,7 +41,7 @@ class ScriptGenerator:
     def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None):
         self.web_config = web_config
         self.config = config_manager or ConfigManager(web_config=web_config)
-        self.episode_repo = get_podcast_episode_repo()
+        self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         # Per-digest episode cap (from web config if available)

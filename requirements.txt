@@ -16,6 +16,7 @@ elevenlabs>=0.2.26             # TTS audio generation
 # Audio Processing
 pydub>=0.25.1                  # Audio manipulation
 mutagen>=1.47.0                # Audio metadata
+openai-whisper>=20231117       # Local OpenAI Whisper transcription (replaces Parakeet MLX)
 
 # Database & Data
 # sqlite3 is part of the Python standard library; do not install via pip

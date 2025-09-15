@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 RSS Podcast Transcription Script
-Downloads and transcribes podcast episodes using Parakeet ASR.
+Downloads and transcribes podcast episodes using OpenAI Whisper (local).
 
 Usage:
     python3 transcribe_episode.py --feed-url "https://feeds.simplecast.com/imTmqqal" --episode-limit 1
@@ -21,7 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from src.podcast.feed_parser import create_feed_parser
 from src.podcast.audio_processor import create_audio_processor
-from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
+from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
 from src.database.models import get_feed_repo, get_episode_repo, Feed, Episode
 from src.utils.logging_config import get_logger
 
@@ -39,16 +39,23 @@ class RSSTranscriptionPipeline:
         """Initialize pipeline components"""
         self.feed_repo = get_feed_repo()
         self.episode_repo = get_episode_repo()
-        
+
         # Initialize processors
         self.feed_parser = create_feed_parser()
         self.audio_processor = create_audio_processor()
-        self.transcriber = create_parakeet_mlx_transcriber()
-        
+        self.transcriber = create_openai_whisper_transcriber()
+
+        # Initialize web config for database settings
+        try:
+            from src.config.web_config import WebConfigManager
+            self.web_config = WebConfigManager()
+        except Exception:
+            self.web_config = None
+
         # Create directories
         self.transcript_dir = Path("data/transcripts")
         self.transcript_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info("RSS Transcription Pipeline initialized")
     
     def process_feed(self, feed_url: str, episode_limit: int = 1) -> list:
@@ -166,27 +173,49 @@ class RSSTranscriptionPipeline:
             logger.info("Chunking audio for transcription...")
             audio_chunks = self.audio_processor.chunk_audio(audio_path, episode.guid)
             logger.info(f"Created {len(audio_chunks)} audio chunks")
-            
-            # Create in-progress transcript file based on audio filename
+
+            # Apply database setting for max chunks per episode
+            max_chunks = 3  # Default value
+            if self.web_config:
+                try:
+                    max_chunks = self.web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3)
+                    logger.info(f"Using database setting: max_chunks_per_episode = {max_chunks}")
+                except Exception:
+                    pass
+
+            # Limit chunks based on database setting
+            if len(audio_chunks) > max_chunks:
+                audio_chunks = audio_chunks[:max_chunks]
+                logger.info(f"Limited to {max_chunks} chunks for transcription (database setting)")
+
+            # Create in-progress transcript file
             audio_filename = Path(audio_path).stem  # Get filename without extension
-            in_progress_path = f"{audio_filename}.txt"
-            
-            # Transcribe using Parakeet
-            logger.info("Starting Parakeet transcription...")
+            progress_filename = f"{audio_filename}-progress.txt"
+            progress_path = str(self.transcript_dir / progress_filename)
+            transcript_filename = f"{audio_filename}.txt"
+            final_transcript_path = str(self.transcript_dir / transcript_filename)
+
+            # Transcribe using OpenAI Whisper with in-progress file
+            logger.info("Starting OpenAI Whisper transcription...")
             self.episode_repo.update_status(episode.guid, 'transcribing')
+
+            transcription = self.transcriber.transcribe_episode(audio_chunks, episode.guid, progress_path)
+
+            # Rename progress file to final name
+            if Path(progress_path).exists():
+                Path(progress_path).rename(final_transcript_path)
+                logger.info(f"Renamed progress file to: {final_transcript_path}")
+            else:
+                # Fallback: write transcript to final location if progress file doesn't exist
+                with open(final_transcript_path, 'w', encoding='utf-8') as f:
+                    f.write(transcription.transcript_text)
+                logger.info(f"Wrote transcript to: {final_transcript_path}")
             
-            transcription = self.transcriber.transcribe_episode(audio_chunks, episode.guid, in_progress_path)
-            
-            # Move in-progress file to final location (in-progress file already has complete transcript)
-            final_transcript_path = str(self.transcript_dir / in_progress_path)
-            Path(in_progress_path).rename(final_transcript_path)
-            
-            # Update database with final transcript path
+            # Update database with final transcript path (remove chunk_count parameter)
             self.episode_repo.update_transcript(
                 episode.guid,
                 final_transcript_path,
-                transcription.word_count,
-                transcription.chunk_count
+                transcription.word_count
             )
             
             # Clean up audio chunks and original audio file (save disk space)
@@ -214,7 +243,7 @@ class RSSTranscriptionPipeline:
 
 def main():
     """Main CLI function"""
-    parser = argparse.ArgumentParser(description='Transcribe RSS podcast episodes using Parakeet ASR')
+    parser = argparse.ArgumentParser(description='Transcribe RSS podcast episodes using OpenAI Whisper (local)')
     parser.add_argument('--feed-url', required=True, help='RSS feed URL to process')
     parser.add_argument('--episode-limit', type=int, default=1, help='Number of episodes to process (default: 1)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')

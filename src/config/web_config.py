@@ -10,7 +10,7 @@ from sqlalchemy import text, Column, Integer, String, DateTime, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import insert
 
-from database.models import get_database_manager
+from src.database.models import get_database_manager
 
 Base = declarative_base()
 
