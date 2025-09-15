@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 # Set up environment
 from dotenv import load_dotenv
 load_dotenv()
+from src.config.env import require_database_url
+require_database_url()  # Enforce Supabase Postgres configuration present
 
 from src.podcast.feed_parser import FeedParser
 from src.scoring.content_scorer import ContentScorer
@@ -37,7 +39,8 @@ class FullPipelineRunner:
     Complete pipeline runner for processing one episode from RSS to digest
     """
     
-    def __init__(self, log_file: str = None, phase_stop: str = None):
+    def __init__(self, log_file: str = None, phase_stop: str = None, dry_run: bool = False,
+                 limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False):
         # Set up comprehensive logging
         if log_file is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -57,13 +60,38 @@ class FullPipelineRunner:
         )
         
         self.logger = logging.getLogger(__name__)
+
+        # Store configuration parameters
         self.log_file = log_file
         self.phase_stop = phase_stop  # Optional: stop after specific phase
-        
+        self.dry_run = dry_run
+        self.limit = limit
+        self.days_back = days_back
+        self.episode_guid = episode_guid
+        self.verbose = verbose
+
+        # Adjust logging level if verbose
+        if verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+            for handler in logging.getLogger().handlers:
+                handler.setLevel(logging.DEBUG)
+
         self.logger.info("="*100)
         self.logger.info("FULL RSS PODCAST PIPELINE - COMPLETE WORKFLOW")
         self.logger.info("="*100)
         self.logger.info(f"Logging to: {log_file}")
+
+        # Log configuration
+        if self.dry_run:
+            self.logger.info("🔍 DRY RUN MODE: No changes will be made")
+        if self.limit:
+            self.logger.info(f"📊 LIMIT: Processing max {self.limit} episodes")
+        if self.episode_guid:
+            self.logger.info(f"🎯 TARGET: Processing specific episode GUID: {self.episode_guid}")
+        else:
+            self.logger.info(f"📅 TIMEFRAME: Processing episodes from last {self.days_back} days")
+        if self.verbose:
+            self.logger.info("🔍 VERBOSE: Debug logging enabled")
         
         # Verify dependencies
         self._verify_dependencies()
@@ -219,11 +247,32 @@ class FullPipelineRunner:
         self.logger.info("✅ All dependencies verified")
     
     def discover_new_episodes(self):
-        """Find up to 3 recent unprocessed episodes from different RSS feeds (5 feeds available)"""
+        """Find unprocessed episodes based on CLI parameters"""
+
+        # Handle specific episode GUID
+        if self.episode_guid:
+            self.logger.info("\n" + "="*80)
+            self.logger.info(f"PHASE 1: PROCESSING SPECIFIC EPISODE: {self.episode_guid}")
+            self.logger.info("="*80)
+
+            episode = self.episode_repo.get_by_episode_guid(self.episode_guid)
+            if episode:
+                if self.dry_run:
+                    self.logger.info(f"🔍 DRY RUN: Would process episode: {episode.title}")
+                    return []
+                else:
+                    self.logger.info(f"✅ Found episode: {episode.title}")
+                    return [episode]
+            else:
+                self.logger.error(f"❌ Episode with GUID {self.episode_guid} not found")
+                return []
+
+        # Standard discovery with new filtering
+        max_episodes = self.limit or self.max_episodes_per_run
         self.logger.info("\n" + "="*80)
-        self.logger.info("PHASE 1: DISCOVER NEW EPISODES (max 3 from 5 feeds, 1 per feed)")
+        self.logger.info(f"PHASE 1: DISCOVER NEW EPISODES (max {max_episodes}, {self.days_back} days back)")
         self.logger.info("="*80)
-        
+
         discovered_episodes = []
         
         import requests
@@ -231,8 +280,8 @@ class FullPipelineRunner:
             'User-Agent': 'PodcastDigest/1.0 (+https://github.com/McSchnizzle/podscrape2)'
         }
         for feed_info in self.rss_feeds:
-            # Stop if we already have max episodes per run
-            if len(discovered_episodes) >= self.max_episodes_per_run:
+            # Stop if we already have max episodes per run/limit
+            if len(discovered_episodes) >= max_episodes:
                 break
                 
             feed_url = feed_info['url']
@@ -275,8 +324,8 @@ class FullPipelineRunner:
 
                 self.logger.info(f"  Found {len(feed.entries)} episodes in feed")
                 
-                # Check recent episodes for new ones (within last 14 days for testing)
-                cutoff_date = datetime.now() - timedelta(days=14)
+                # Check recent episodes for new ones (configurable days back)
+                cutoff_date = datetime.now() - timedelta(days=self.days_back)
                 
                 for i, entry in enumerate(feed.entries[:10]):
                     # Safely get episode GUID with fallback
@@ -293,9 +342,9 @@ class FullPipelineRunner:
                         # Fallback to current time if no date available
                         published_date = datetime.now()
                     
-                    # Skip episodes older than 14 days
+                    # Skip episodes older than configured days
                     if published_date < cutoff_date:
-                        self.logger.info(f"  [{i+1:2d}] SKIP: {title[:50]}... (older than 14 days: {published_date.strftime('%Y-%m-%d')})")
+                        self.logger.info(f"  [{i+1:2d}] SKIP: {title[:50]}... (older than {self.days_back} days: {published_date.strftime('%Y-%m-%d')})")
                         continue
                     
                     # Check if episode needs processing
@@ -345,13 +394,19 @@ class FullPipelineRunner:
                         'feed_id': feed_info.get('id')
                     }
                     
-                    self.logger.info(f"  [{i+1:2d}] ✅ NEW: {title}")
-                    self.logger.info(f"       Feed: {feed_name}")
-                    self.logger.info(f"       Published: {published_date.strftime('%Y-%m-%d %H:%M')}")
-                    self.logger.info(f"       Audio: {audio_url[:80]}...")
-                    # No explicit topic mapping; topics come from ConfigManager
-                    
-                    discovered_episodes.append(episode)
+                    if self.dry_run:
+                        self.logger.info(f"  [{i+1:2d}] 🔍 DRY RUN: Would process {title}")
+                        self.logger.info(f"       Feed: {feed_name}")
+                        self.logger.info(f"       Published: {published_date.strftime('%Y-%m-%d %H:%M')}")
+                        self.logger.info(f"       Audio: {audio_url[:80]}...")
+                    else:
+                        self.logger.info(f"  [{i+1:2d}] ✅ NEW: {title}")
+                        self.logger.info(f"       Feed: {feed_name}")
+                        self.logger.info(f"       Published: {published_date.strftime('%Y-%m-%d %H:%M')}")
+                        self.logger.info(f"       Audio: {audio_url[:80]}...")
+                        # No explicit topic mapping; topics come from ConfigManager
+
+                        discovered_episodes.append(episode)
                     break  # Only take one episode per feed
                 
             except Exception as e:
@@ -1289,9 +1344,25 @@ def main():
     parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline')
     parser.add_argument('--log', help='Log file path', default=None)
     parser.add_argument('--phase', help='Stop after phase', choices=['discovery','audio','scoring','digest','tts'], default=None)
+
+    # Enhanced Phase 1 CLI flags
+    parser.add_argument('--dry-run', action='store_true', help='Show what would be processed without making changes')
+    parser.add_argument('--limit', type=int, help='Limit number of episodes to process', default=None)
+    parser.add_argument('--days-back', type=int, help='Only process episodes from N days back', default=7)
+    parser.add_argument('--episode-guid', help='Process specific episode by GUID', default=None)
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
+
     args = parser.parse_args()
-    
-    runner = FullPipelineRunner(log_file=args.log, phase_stop=args.phase)
+
+    runner = FullPipelineRunner(
+        log_file=args.log,
+        phase_stop=args.phase,
+        dry_run=args.dry_run,
+        limit=args.limit,
+        days_back=args.days_back,
+        episode_guid=args.episode_guid,
+        verbose=args.verbose
+    )
     runner.run_pipeline()
 
 if __name__ == '__main__':

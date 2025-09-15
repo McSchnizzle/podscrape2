@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from typing import Optional
 
 from sqlalchemy import (
@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -35,8 +36,8 @@ class Feed(Base):
     last_episode_date = Column(DateTime(timezone=False))
     total_episodes_processed = Column(Integer, nullable=False, default=0)
     total_episodes_failed = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         Index("ix_feeds_active", "active"),
@@ -60,14 +61,14 @@ class Episode(Base):
     transcript_generated_at = Column(DateTime(timezone=False))
     transcript_word_count = Column(Integer)
     chunk_count = Column(Integer, nullable=False, default=0)
-    scores = Column(JSONB)  # { topic: float }
+    scores = Column(JSON)  # { topic: float } - database-agnostic JSON
     scored_at = Column(DateTime(timezone=False))
     status = Column(String(64), nullable=False, default="pending")
     failure_count = Column(Integer, nullable=False, default=0)
     failure_reason = Column(Text)
     last_failure_at = Column(DateTime(timezone=False))
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         Index("ix_episodes_status_published", "status", "published_date"),
@@ -87,12 +88,12 @@ class Digest(Base):
     mp3_duration_seconds = Column(Integer)
     mp3_title = Column(String(1024))
     mp3_summary = Column(Text)
-    episode_ids = Column(JSONB)  # [int]
+    episode_ids = Column(JSON)  # [int] - database-agnostic JSON
     episode_count = Column(Integer, nullable=False, default=0)
     average_score = Column(Integer)
     github_url = Column(String(4096))
     published_at = Column(DateTime(timezone=False))
-    generated_at = Column(DateTime(timezone=False), default=datetime.utcnow)
+    generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         UniqueConstraint("topic", "digest_date", name="uq_digests_topic_date"),

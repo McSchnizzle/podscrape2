@@ -1,0 +1,246 @@
+"""
+Pytest fixtures for database testing and integration tests.
+Provides isolated test environments with real database connections.
+"""
+
+import pytest
+import os
+import tempfile
+from datetime import datetime, date, timedelta
+from typing import Generator
+import logging
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
+
+# Configure test environment
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+
+from src.database.models import DatabaseManager, get_episode_repo, get_digest_repo, get_feed_repo
+from src.database.models import Episode, Feed, Digest
+from src.database.sqlalchemy_models import Base
+
+
+@pytest.fixture(scope="session")
+def test_database_engine():
+    """Create an in-memory SQLite database for testing"""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False  # Set to True for SQL debugging
+    )
+
+    # Create all tables
+    Base.metadata.create_all(engine)
+
+    return engine
+
+
+@pytest.fixture(scope="function")
+def test_db_session(test_database_engine) -> Generator[Session, None, None]:
+    """Create a fresh database session for each test"""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_database_engine)
+    session = SessionLocal()
+
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture(scope="function")
+def test_db_manager(test_database_engine):
+    """Create a DatabaseManager instance for testing"""
+    # Clear all tables before each test for isolation
+    Base.metadata.drop_all(test_database_engine)
+    Base.metadata.create_all(test_database_engine)
+
+    db_manager = DatabaseManager()
+    # Override the engine with our test engine
+    db_manager.engine = test_database_engine
+    db_manager.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_database_engine)
+    return db_manager
+
+
+@pytest.fixture(scope="function")
+def episode_repo(test_db_manager):
+    """Create an EpisodeRepository for testing"""
+    return get_episode_repo(test_db_manager)
+
+
+@pytest.fixture(scope="function")
+def feed_repo(test_db_manager):
+    """Create a FeedRepository for testing"""
+    return get_feed_repo(test_db_manager)
+
+
+@pytest.fixture(scope="function")
+def digest_repo(test_db_manager):
+    """Create a DigestRepository for testing"""
+    return get_digest_repo(test_db_manager)
+
+
+@pytest.fixture
+def sample_feed():
+    """Create a sample feed for testing"""
+    return Feed(
+        feed_url="https://example.com/feed.xml",
+        title="Test Podcast",
+        description="A test podcast for unit testing",
+        active=True,
+        consecutive_failures=0,
+        total_episodes_processed=0,
+        total_episodes_failed=0
+    )
+
+
+@pytest.fixture
+def sample_episode():
+    """Create a sample episode for testing"""
+    return Episode(
+        episode_guid="test-episode-123",
+        feed_id=1,
+        title="Test Episode",
+        published_date=datetime.now() - timedelta(days=1),
+        audio_url="https://example.com/audio.mp3",
+        duration_seconds=1800,
+        description="A test episode for unit testing",
+        status='pending'
+    )
+
+
+@pytest.fixture
+def sample_episode_with_scores(sample_episode):
+    """Create a sample episode with AI scores"""
+    sample_episode.scores = {
+        "AI and Technology": 0.85,
+        "Politics": 0.25,
+        "Climate": 0.60
+    }
+    sample_episode.scored_at = datetime.now()
+    sample_episode.status = 'scored'
+    return sample_episode
+
+
+@pytest.fixture
+def sample_digest():
+    """Create a sample digest for testing"""
+    return Digest(
+        topic="AI and Technology",
+        digest_date=date.today(),
+        episode_ids=[1, 2, 3],
+        episode_count=3,
+        average_score=0.75
+    )
+
+
+@pytest.fixture
+def populated_database(test_db_manager, feed_repo, episode_repo, digest_repo):
+    """Create a database populated with test data"""
+    # Create test feed
+    feed = Feed(
+        feed_url="https://test.example.com/feed.xml",
+        title="Test Podcast Feed",
+        description="Test feed for integration testing",
+        active=True
+    )
+    feed_id = feed_repo.create(feed)
+
+    # Create test episodes
+    episodes = []
+    for i in range(5):
+        episode = Episode(
+            episode_guid=f"test-episode-{i}",
+            feed_id=feed_id,
+            title=f"Test Episode {i+1}",
+            published_date=datetime.now() - timedelta(days=i),
+            audio_url=f"https://test.example.com/audio{i}.mp3",
+            duration_seconds=1800 + (i * 300),
+            description=f"Test episode {i+1} description",
+            status='pending' if i < 2 else 'scored',
+            scores={"AI and Technology": 0.8 - (i * 0.1)} if i >= 2 else None,
+            scored_at=datetime.now() if i >= 2 else None
+        )
+        episode_id = episode_repo.create(episode)
+        episode.id = episode_id
+        episodes.append(episode)
+
+    # Create test digest
+    digest = Digest(
+        topic="AI and Technology",
+        digest_date=date.today() - timedelta(days=1),
+        episode_ids=[episodes[2].id, episodes[3].id],
+        episode_count=2,
+        average_score=0.75,
+        script_path="/tmp/test_script.md",
+        script_word_count=500
+    )
+    digest_id = digest_repo.create(digest)
+    digest.id = digest_id
+
+    return {
+        'feed_id': feed_id,
+        'episodes': episodes,
+        'digest_id': digest_id
+    }
+
+
+@pytest.fixture
+def temp_directory():
+    """Create a temporary directory for test files"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield temp_dir
+
+
+@pytest.fixture
+def disable_logging():
+    """Disable logging during tests to reduce noise"""
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(logging.NOTSET)
+
+
+@pytest.fixture
+def mock_env_vars():
+    """Mock environment variables for testing"""
+    original_env = os.environ.copy()
+
+    # Set test environment variables
+    test_env = {
+        'OPENAI_API_KEY': 'test-openai-key',
+        'ELEVENLABS_API_KEY': 'test-elevenlabs-key',
+        'GITHUB_TOKEN': 'test-github-token',
+        'GITHUB_REPOSITORY': 'test/repo',
+        'DATABASE_URL': 'sqlite:///:memory:',
+        'ENV': 'test'
+    }
+
+    os.environ.update(test_env)
+
+    yield test_env
+
+    # Restore original environment
+    os.environ.clear()
+    os.environ.update(original_env)
+
+
+@pytest.fixture
+def real_database_test():
+    """
+    Fixture for tests that need the real Supabase database.
+    Use sparingly and only for integration tests.
+    """
+    # Temporarily override to use real database
+    original_url = os.environ.get('DATABASE_URL')
+    if not original_url:
+        pytest.skip("Real database tests require DATABASE_URL")
+
+    # Use the real database manager
+    db_manager = DatabaseManager()
+
+    yield db_manager
+
+    # Cleanup - this fixture should be used carefully
+    # to avoid affecting production data
