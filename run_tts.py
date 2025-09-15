@@ -25,6 +25,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize logging with phase identifier
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔧 PHASE SCRIPT: run_tts.py v1.0 - Independent execution")
+    logger.info("🎧 TTS Phase - Text-to-Speech Audio Generation")
+
     # Create runner with TTS phase stop
     runner = FullPipelineRunner(
         log_file=args.log,

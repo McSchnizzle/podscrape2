@@ -18,6 +18,7 @@ load_dotenv()
 
 from src.database.models import get_digest_repo
 from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, PodcastMetadata
+from src.utils.rss_timestamps import generate_unique_pubdate
 
 def create_local_episode(digest, mp3_path):
     """Create a PodcastEpisode from digest with local MP3 path"""
@@ -33,7 +34,7 @@ def create_local_episode(digest, mp3_path):
         title=digest.mp3_title or f"Daily Digest: {digest.topic}",
         description=digest.mp3_summary or f"AI-curated digest for {digest.topic}",
         audio_url=mp3_url,
-        pub_date=datetime.combine(digest.digest_date, datetime.min.time().replace(hour=12)),
+        pub_date=generate_unique_pubdate(digest.digest_date.strftime('%Y-%m-%d'), digest.topic),
         duration_seconds=digest.mp3_duration_seconds or 0,
         file_size=Path(mp3_path).stat().st_size if Path(mp3_path).exists() else 0,
         guid=f"digest-{date_str}-{digest.topic.lower().replace(' ', '-')}"

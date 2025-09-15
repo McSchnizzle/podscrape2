@@ -25,6 +25,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize logging with phase identifier
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔧 PHASE SCRIPT: run_audio.py v1.0 - Independent execution")
+    logger.info("🎧 Audio Processing Phase - Download and Transcription")
+
     # Create runner with audio phase stop
     runner = FullPipelineRunner(
         log_file=args.log,

@@ -25,6 +25,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize logging with phase identifier
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔧 PHASE SCRIPT: run_digest.py v1.0 - Independent execution")
+    logger.info("📝 Digest Generation Phase - Script Creation for Qualifying Topics")
+
     # Create runner with digest phase stop
     runner = FullPipelineRunner(
         log_file=args.log,

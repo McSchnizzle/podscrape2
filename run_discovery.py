@@ -25,6 +25,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize logging with phase identifier
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔧 PHASE SCRIPT: run_discovery.py v1.0 - Independent execution")
+    logger.info("📋 Discovery Phase - RSS Feed Discovery and Episode Identification")
+
     # Create runner with discovery phase stop
     runner = FullPipelineRunner(
         log_file=args.log,

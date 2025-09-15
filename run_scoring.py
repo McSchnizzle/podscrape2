@@ -25,6 +25,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize logging with phase identifier
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("🔧 PHASE SCRIPT: run_scoring.py v1.0 - Independent execution")
+    logger.info("🎯 Content Scoring Phase - AI-powered topic relevance scoring")
+
     # Create runner with scoring phase stop
     runner = FullPipelineRunner(
         log_file=args.log,
