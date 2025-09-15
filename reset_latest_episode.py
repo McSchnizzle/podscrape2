@@ -15,48 +15,37 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 from dotenv import load_dotenv
 load_dotenv()
 
-from src.database.models import get_episode_repo
-import sqlite3
+from database.models import get_episode_repo
 
 def reset_latest_episode():
     """Reset the most recent episode status to 'pending' for reprocessing"""
-    
-    db_path = "data/database/digest.db"
-    
+
     try:
-        # Get most recent episode
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Find most recent episode that was processed
-            cursor.execute("""
-                SELECT id, title, episode_guid, status, published_date 
-                FROM episodes 
-                WHERE status IN ('transcribed', 'scored')
-                ORDER BY published_date DESC 
-                LIMIT 1
-            """)
-            
-            episode = cursor.fetchone()
-            
-            if not episode:
-                print("No processed episodes found to reset")
-                return
-                
-            episode_id, title, guid, status, pub_date = episode
-            print(f"Found recent episode:")
-            print(f"  ID: {episode_id}")
-            print(f"  Title: {title[:60]}...")
-            print(f"  Status: {status}")
-            print(f"  Published: {pub_date}")
-            
-            # Reset status to pending
-            cursor.execute("UPDATE episodes SET status = 'pending' WHERE id = ?", (episode_id,))
-            conn.commit()
-            
-            print(f"\n✅ Reset episode {episode_id} status to 'pending'")
-            print("You can now run the pipeline to reprocess this episode with Turbo v2.5!")
-            
+        # Initialize episode repository
+        episode_repo = get_episode_repo()
+
+        # Get episodes that were processed (transcribed or scored)
+        processed_episodes = episode_repo.get_by_status_list(['transcribed', 'scored'])
+
+        if not processed_episodes:
+            print("No processed episodes found to reset")
+            return
+
+        # Sort by published date to get the most recent
+        recent_episode = max(processed_episodes, key=lambda ep: ep.published_date)
+
+        print(f"Found recent episode:")
+        print(f"  ID: {recent_episode.id}")
+        print(f"  Title: {recent_episode.title[:60]}...")
+        print(f"  Status: {recent_episode.status}")
+        print(f"  Published: {recent_episode.published_date}")
+
+        # Reset status to pending
+        episode_repo.update_status(recent_episode.episode_guid, 'pending')
+
+        print(f"\n✅ Reset episode {recent_episode.id} status to 'pending'")
+        print("You can now run the pipeline to reprocess this episode with Turbo v2.5!")
+
     except Exception as e:
         print(f"❌ Error: {e}")
 

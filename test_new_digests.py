@@ -12,7 +12,7 @@ from datetime import date
 # Add src to Python path  
 sys.path.append(str(Path(__file__).parent / 'src'))
 
-from database.models import get_database_manager, get_episode_repo, get_digest_repo
+from database.models import get_episode_repo, get_digest_repo
 from config.config_manager import ConfigManager
 
 # Set up logging
@@ -26,9 +26,8 @@ def test_new_digests():
     print("="*50)
     
     # Initialize components
-    db_manager = get_database_manager() 
-    episode_repo = get_episode_repo(db_manager)
-    digest_repo = get_digest_repo(db_manager)
+    episode_repo = get_episode_repo()
+    digest_repo = get_digest_repo()
     config_manager = ConfigManager()
     
     # Get current topics
@@ -50,20 +49,13 @@ def test_new_digests():
         if len(qualifying_episodes) > 0:
             print(f"    Scores: {[f'{ep.scores.get(topic_name, 0):.2f}' for ep in qualifying_episodes[:3]]}")
     
-    # Try direct database query to see actual scores
-    print(f"\n📊 Direct Database Query for New Topics:")
-    episodes_with_scores = db_manager.execute_query("""
-        SELECT title, scores 
-        FROM episodes 
-        WHERE status = 'scored' 
-        AND scores IS NOT NULL
-        LIMIT 5
-    """)
-    
-    import json
+    # Get sample scored episodes to see actual scores
+    print(f"\n📊 Sample Scored Episodes for New Topics:")
+    episodes_with_scores = episode_repo.get_scored_episodes_sample(limit=5)
+
     for episode in episodes_with_scores:
-        scores = json.loads(episode['scores']) if episode['scores'] else {}
-        print(f"  Episode: {episode['title'][:40]}...")
+        scores = episode.scores or {}
+        print(f"  Episode: {episode.title[:40]}...")
         for topic_name in [t['name'] for t in topics]:
             score = scores.get(topic_name, 0.0)
             qualifier = "✅" if score >= 0.65 else ""

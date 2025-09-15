@@ -316,6 +316,16 @@ class EpisodeRepository:
                 .all()
             return [self._model_to_episode(model) for model in episode_models]
 
+    def get_by_status_list(self, statuses: List[str]) -> List[Episode]:
+        """Get all episodes with any of the specified statuses"""
+        with self.db.get_session() as session:
+            episode_models = session.query(EpisodeModel)\
+                .filter(EpisodeModel.status.in_(statuses))\
+                .filter(EpisodeModel.transcript_path.isnot(None))\
+                .order_by(EpisodeModel.id)\
+                .all()
+            return [self._model_to_episode(model) for model in episode_models]
+
     def get_scored_episodes_for_topic(self, topic: str, min_score: float = 0.65,
                                     start_date: date = None, end_date: date = None) -> List[Episode]:
         """Get episodes scored above threshold for specific topic"""
@@ -359,6 +369,22 @@ class EpisodeRepository:
             except SQLAlchemyError as e:
                 session.rollback()
                 logger.error(f"Failed to update episode status {episode_guid}: {e}")
+                raise
+
+    def update_audio_download(self, episode_guid: str, audio_path: str):
+        """Update audio download information"""
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.episode_guid == episode_guid).first()
+                if episode_model:
+                    episode_model.audio_path = audio_path
+                    episode_model.audio_downloaded_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(UTC)
+                    session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to update audio download for episode {episode_guid}: {e}")
                 raise
 
     def update_transcript(self, episode_guid: str, transcript_path: str, word_count: int):
@@ -420,6 +446,16 @@ class EpisodeRepository:
         with self.db.get_session() as session:
             episode_models = session.query(EpisodeModel)\
                 .order_by(EpisodeModel.published_date.desc())\
+                .limit(limit)\
+                .all()
+            return [self._model_to_episode(model) for model in episode_models]
+
+    def get_scored_episodes_sample(self, limit: int = 5) -> List[Episode]:
+        """Get sample of scored episodes for testing/debugging"""
+        with self.db.get_session() as session:
+            episode_models = session.query(EpisodeModel)\
+                .filter(EpisodeModel.status == 'scored')\
+                .filter(EpisodeModel.scores.isnot(None))\
                 .limit(limit)\
                 .all()
             return [self._model_to_episode(model) for model in episode_models]

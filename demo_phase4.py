@@ -27,7 +27,7 @@ except ImportError as e:
     sys.exit(1)
 
 from utils.logging_config import setup_logging
-from database.models import get_database_manager, get_episode_repo
+from database.models import get_episode_repo, get_feed_repo, Episode, Feed
 from scoring.content_scorer import create_content_scorer
 
 def demo_rss_to_scoring_pipeline(feed_url: str = None, episode_limit: int = 1):
@@ -355,85 +355,62 @@ def demo_rss_to_scoring_pipeline(feed_url: str = None, episode_limit: int = 1):
         print("💽 STEP 4: Storing Episode in Database")
         print("-" * 40)
         
-        db_manager = get_database_manager()
-        episode_repo = get_episode_repo(db_manager)
-        
+        episode_repo = get_episode_repo()
+        feed_repo = get_feed_repo()
+
         # First, create a mock feed entry in database if it doesn't exist
         try:
-            # Insert a temporary feed for this demo (check if it exists first)
-            feed_query = "SELECT id FROM feeds WHERE feed_url = ?"
-            feed_rows = db_manager.execute_query(feed_query, (feed_url,))
-            
-            if feed_rows:
-                feed_id = feed_rows[0]['id']
+            # Check if feed exists
+            existing_feed = feed_repo.get_by_url(feed_url)
+
+            if existing_feed:
+                feed_id = existing_feed.id
                 print(f"📡 Using existing feed (ID: {feed_id})")
             else:
                 # Create new feed entry
-                feed_insert = """
-                INSERT INTO feeds (feed_url, title, description, active)
-                VALUES (?, ?, ?, 1)
-                """
-                feed_id = db_manager.get_last_insert_id(
-                    feed_insert,
-                    (feed_url, feed.feed.get('title', 'Demo Feed'), feed.feed.get('description', 'Demo Description')[:500])
+                feed_obj = Feed(
+                    feed_url=feed_url,
+                    title=feed.feed.get('title', 'Demo Feed'),
+                    description=feed.feed.get('description', 'Demo Description')[:500],
+                    active=True
                 )
+                feed_id = feed_repo.create(feed_obj)
                 print(f"📡 Created new feed entry (ID: {feed_id})")
-        
+
         except Exception as e:
             print(f"⚠️  Using mock feed ID due to error: {e}")
             feed_id = 1
         
-        # Create Episode object with real database integration
-        from database.models import Episode
-        
-        # Step 4a: Insert episode with 'downloading' status
-        episode_insert = """
-        INSERT INTO episodes (
-            episode_guid, feed_id, title, published_date, audio_url, 
-            duration_seconds, description, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'downloading')
-        """
-        
+        # Create Episode object and save to database
         try:
-            episode_db_id = db_manager.get_last_insert_id(
-                episode_insert,
-                (
-                    episode_guid,
-                    feed_id,
-                    target_episode.get('title', 'Unknown')[:500],
-                    episode_date.isoformat(),
-                    audio_url,
-                    duration_seconds,
-                    target_episode.get('description', '')[:1000]
-                )
+            # Step 4a: Create episode with 'downloading' status
+            episode_obj = Episode(
+                episode_guid=episode_guid,
+                feed_id=feed_id,
+                title=target_episode.get('title', 'Unknown')[:500],
+                published_date=episode_date,
+                audio_url=audio_url,
+                duration_seconds=duration_seconds,
+                description=target_episode.get('description', '')[:1000],
+                status='downloading'
             )
+
+            episode_db_id = episode_repo.create(episode_obj)
             print(f"📝 Episode inserted into database (ID: {episode_db_id})")
             print(f"   Status: downloading")
-            
+
             # Step 4b: Update with audio download info
-            audio_update = """
-            UPDATE episodes 
-            SET audio_path = ?, audio_downloaded_at = ?, status = 'chunking'
-            WHERE episode_guid = ?
-            """
-            db_manager.execute_update(audio_update, (str(audio_path), datetime.now().isoformat(), episode_guid))
+            episode_repo.update_audio_download(episode_guid, str(audio_path))
+            episode_repo.update_status(episode_guid, 'chunking')
             print(f"   Status updated: chunking")
-            
+
             # Step 4c: Update with transcription info
-            transcript_update = """
-            UPDATE episodes 
-            SET transcript_path = ?, transcript_generated_at = ?, 
-                transcript_word_count = ?, chunk_count = ?, status = 'transcribed'
-            WHERE episode_guid = ?
-            """
-            db_manager.execute_update(transcript_update, (
-                str(transcript_path), datetime.now().isoformat(), 
-                word_count, len(chunk_files), episode_guid
-            ))
+            episode_repo.update_transcript(episode_guid, str(transcript_path), word_count)
+            episode_repo.update_status(episode_guid, 'transcribed')
             print(f"   Status updated: transcribed")
             print(f"   Word count: {word_count}")
             print(f"   Chunk count: {len(chunk_files)}")
-            
+
         except Exception as e:
             print(f"❌ Database insert failed: {e}")
             return False

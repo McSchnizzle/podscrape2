@@ -21,8 +21,8 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from openai import OpenAI
-from ..config.config_manager import ConfigManager
-from ..config.web_config import WebConfigManager
+from config.config_manager import ConfigManager
+from config.web_config import WebConfigManager
 from dotenv import load_dotenv
 
 # Load environment variables

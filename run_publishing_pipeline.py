@@ -26,7 +26,7 @@ load_dotenv()
 from src.config.env import require_database_url
 require_database_url()  # Enforce Supabase Postgres configuration present
 
-from src.database.models import get_database_manager, get_digest_repo
+from src.database.models import get_digest_repo
 from src.publishing.github_publisher import create_github_publisher
 from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata, PodcastMetadata
 from src.publishing.retention_manager import create_retention_manager
@@ -63,8 +63,7 @@ class PublishingPipelineRunner:
         self._verify_environment()
         
         # Initialize components
-        self.db_manager = get_database_manager()
-        self.digest_repo = get_digest_repo(self.db_manager)
+        self.digest_repo = get_digest_repo()
         
         # Initialize publishing components
         if not dry_run:

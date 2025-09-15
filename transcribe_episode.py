@@ -22,8 +22,7 @@ sys.path.insert(0, str(project_root))
 from src.podcast.feed_parser import create_feed_parser
 from src.podcast.audio_processor import create_audio_processor
 from src.podcast.parakeet_mlx_transcriber import create_parakeet_mlx_transcriber
-from src.podcast.rss_models import get_feed_repo, get_podcast_episode_repo, PodcastFeed, PodcastEpisode
-from src.database.models import get_database_manager
+from src.database.models import get_feed_repo, get_episode_repo, Feed, Episode
 from src.utils.logging_config import get_logger
 
 # Set up logging
@@ -38,9 +37,8 @@ class RSSTranscriptionPipeline:
     
     def __init__(self):
         """Initialize pipeline components"""
-        self.db = get_database_manager()
-        self.feed_repo = get_feed_repo(self.db)
-        self.episode_repo = get_podcast_episode_repo(self.db)
+        self.feed_repo = get_feed_repo()
+        self.episode_repo = get_episode_repo()
         
         # Initialize processors
         self.feed_parser = create_feed_parser()
@@ -98,7 +96,7 @@ class RSSTranscriptionPipeline:
             logger.error(f"Failed to process feed {feed_url}: {e}")
             raise
     
-    def _get_or_create_feed(self, parsed_feed, feed_url: str) -> PodcastFeed:
+    def _get_or_create_feed(self, parsed_feed, feed_url: str) -> Feed:
         """Get existing feed or create new one"""
         # Check if feed exists
         existing_feed = self.feed_repo.get_by_url(feed_url)
@@ -107,10 +105,11 @@ class RSSTranscriptionPipeline:
             return existing_feed
         
         # Create new feed
-        new_feed = PodcastFeed(
+        new_feed = Feed(
             feed_url=feed_url,
             title=parsed_feed.title,
-            description=parsed_feed.description
+            description=parsed_feed.description,
+            active=True
         )
         feed_id = self.feed_repo.create(new_feed)
         new_feed.id = feed_id
@@ -123,7 +122,7 @@ class RSSTranscriptionPipeline:
         logger.info(f"Processing episode: '{episode.title}'")
         
         # Check if episode already exists
-        existing_episode = self.episode_repo.get_by_guid(episode.guid)
+        existing_episode = self.episode_repo.get_by_episode_guid(episode.guid)
         if existing_episode and existing_episode.status == 'transcribed':
             logger.info(f"Episode already transcribed: {episode.title}")
             return {
@@ -135,14 +134,15 @@ class RSSTranscriptionPipeline:
         
         try:
             # Create episode in database
-            db_episode = PodcastEpisode(
+            db_episode = Episode(
                 episode_guid=episode.guid,
                 feed_id=feed_id,
                 title=episode.title,
                 published_date=episode.published_date,
                 duration_seconds=episode.duration_seconds,
                 description=episode.description,
-                audio_url=episode.audio_url
+                audio_url=episode.audio_url,
+                status='pending'
             )
             
             if not existing_episode:
@@ -159,7 +159,7 @@ class RSSTranscriptionPipeline:
             )
             
             # Update episode with audio path
-            self.episode_repo.update_audio_path(episode.guid, audio_path)
+            self.episode_repo.update_audio_download(episode.guid, audio_path)
             logger.info(f"Audio downloaded: {audio_path}")
             
             # Chunk audio
@@ -208,7 +208,7 @@ class RSSTranscriptionPipeline:
             
         except Exception as e:
             # Mark episode as failed
-            self.episode_repo.mark_failure(episode.guid, str(e))
+            self.episode_repo.update_status(episode.guid, 'failed')
             raise
 
 
@@ -255,7 +255,6 @@ def main():
                 print(f"Processing time: {result['processing_time_seconds']:.1f}s")
                 print(f"Speed: {result['duration_seconds']/result['processing_time_seconds']:.1f}x realtime")
                 print(f"Transcript: {result['transcript_path']}")
-                print(f"JSON data: {result['json_path']}")
             elif result['status'] == 'already_transcribed':
                 print(f"Word count: {result['word_count']}")
                 print(f"Transcript: {result['transcript_path']}")

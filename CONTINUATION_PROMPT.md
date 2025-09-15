@@ -1,155 +1,109 @@
-# Continuation Prompt for Phase 1 Completion
-
-## Context
-You're continuing work on **Phase 1 of the move-online migration** for the podscrape2 RSS podcast digest system. This is a sophisticated Python application that processes RSS feeds → audio transcription → AI scoring → script generation → TTS → publishing.
+# Supabase Migration Continuation Prompt
 
 ## Current Status
-- **Branch**: `feature/move-online`
-- **Progress**: Phase 1 is 85% complete
-- **Critical Blocker**: Supabase database needs to be created
 
-## Architecture Overview
-- **Database**: SQLite → Supabase Postgres migration in progress
-- **Pipeline**: RSS feeds → Parakeet MLX transcription → GPT scoring → ElevenLabs TTS → GitHub Releases + Vercel RSS
-- **Tech Stack**: Python 3, SQLAlchemy, Alembic, Flask (web UI), PostgreSQL (Supabase)
+✅ **COMPLETED** (as of commit adaf932):
+- Main pipeline scripts (`run_full_pipeline.py`, `run_publishing_pipeline.py`) fully migrated to Supabase
+- Web UI (`web_ui/app.py`) fully migrated - all ~30+ direct SQL calls converted to SQLAlchemy repositories
+- Repository pattern implemented with comprehensive CRUD operations in `src/database/models.py`
+- Additional repository methods added for complex web UI queries
 
-## Immediate Priorities
+## 🎯 REMAINING WORK TO COMPLETE SUPABASE MIGRATION
 
-### 🚨 URGENT: Database Setup (CLI AUTHENTICATED!)
-**Status**: Supabase CLI is authenticated! Existing project found: `dylqxfgdozwjvbiklnfn`
+### Priority 1: Utility Scripts
+**Files to migrate:**
+1. **`rescore_episodes.py`** - Convert to use episode repository for scoring operations
+2. **`reset_latest_episode.py`** - Convert to use episode repository for status resets
+3. **`demo_phase4.py`** - Review and convert any old database patterns
+4. **`test_new_digests.py`** - Convert old database references
 
-**IMMEDIATE ACTION** (should take <10 minutes):
-1. **Link to existing project**: `supabase link --project-ref dylqxfgdozwjvbiklnfn --password "3Z@hoz8Njo14w5llsW"`
-2. **Apply schema**: Copy SQL from `supabase_setup_instructions.md` and run:
-   ```bash
-   supabase db reset --debug
-   # OR apply the SQL manually:
-   # supabase db push
+### Priority 2: Test Files
+**Search pattern:** Files containing `sqlite3|get_db_connection|execute_query|execute_update|DatabaseManagerOld`
+
+Use these commands to find remaining files:
+```bash
+grep -r "execute_query\|execute_update\|get_db_connection\|sqlite3" --include="*.py" . --exclude-dir=archive
+grep -r "from.*models.*import.*get_database_manager" --include="*.py" . --exclude-dir=archive
+```
+
+### Priority 3: Validation
+- Run all migrated scripts to ensure they work with Supabase
+- Test Web UI functionality end-to-end
+- Run any existing test suites
+
+## 🔧 MIGRATION APPROACH
+
+### For Utility Scripts:
+1. **Import pattern**: Replace old imports with:
+   ```python
+   from database.models import get_feed_repo, get_episode_repo, get_digest_repo
    ```
-3. **Verify connection**: `python3 scripts/doctor.py` (should show ✅ DATABASE_URL connectivity)
-4. **Run migration**: `alembic upgrade head`
 
-### Key Files to Review
-- `supabase_setup_instructions.md` - Complete SQL schema ready to deploy
-- `PHASE1_PROGRESS.md` - Detailed progress report
-- `move-online.md` - Updated with current progress checkmarks
-- `scripts/doctor.py` - Environment validation (20/23 checks passing)
+2. **Repository usage**: Replace direct SQL with repository methods:
+   ```python
+   # OLD
+   dbm = get_database_manager()
+   rows = dbm.execute_query("SELECT * FROM episodes WHERE status = ?", (status,))
 
-## Remaining Phase 1 Tasks
+   # NEW
+   episode_repo = get_episode_repo()
+   episodes = episode_repo.get_by_status(status)
+   ```
 
-### High Priority (2-4 hours total)
-1. **Database Connection** (30 min after Supabase setup)
-   - Verify: `python3 scripts/doctor.py` shows "✅ DATABASE_URL connectivity"
-   - Run migration: `alembic upgrade head`
-   - Test data migration: `PYTHONPATH=src python3 scripts/migrate_sqlite_to_pg.py`
+3. **Available repository methods** (see `src/database/models.py`):
+   - **EpisodeRepository**: `get_by_status()`, `update_status()`, `update_scores()`, `get_by_id()`, etc.
+   - **FeedRepository**: `get_by_url()`, `get_all()`, `create()`, etc.
+   - **DigestRepository**: `get_by_date()`, `get_recent_digests()`, `create()`, etc.
 
-2. **Refactor Database Models** (2-3 hours)
-   - **File**: `src/database/models.py`
-   - **Goal**: Replace SQLite-specific code with SQLAlchemy sessions
-   - **Key Changes**:
-     - Replace `json_extract()` with `.scores->>topic`
-     - Replace `date('now', '-7 days')` with `now() - interval '7 days'`
-     - Use SQLAlchemy sessions instead of raw SQL
-     - Keep SQLite fallback for offline dev
+### For Test Files:
+1. Update database setup to use Supabase test database or fixtures
+2. Replace old database patterns with repository calls
+3. Ensure test isolation (tests should not interfere with production data)
 
-3. **Enhanced Pipeline CLI** (1-2 hours)
-   - **File**: `run_full_pipeline.py`
-   - **Add Flags**: `--dry-run`, `--limit N`, `--from-step`, `--to-step`
-   - **Create Subcommands**: Individual commands for each phase
+## 🗄️ DATABASE CONTEXT
 
-### Medium Priority
-4. **Integration Tests** (2-3 hours)
-   - Create pytest fixtures for pipeline phases
-   - Mock external APIs (OpenAI, ElevenLabs)
-   - Test idempotency and phase isolation
+**Current setup:**
+- **Database**: Supabase PostgreSQL via `DATABASE_URL` environment variable
+- **Models**: SQLAlchemy models in `src/database/sqlalchemy_models.py`
+- **Repositories**: Repository pattern in `src/database/models.py`
+- **Schema**: Alembic migrations in `supabase/migrations/`
 
-## Development Environment
+**Repository Factory Functions:**
+```python
+from database.models import get_database_manager, get_feed_repo, get_episode_repo, get_digest_repo
 
-### Quick Setup
-```bash
-# Activate environment
-source .venv/bin/activate  # if using venv
-
-# Install dependencies
-python3 -m pip install -r requirements.txt
-
-# Run environment check
-python3 scripts/doctor.py
-
-# Start development
-bash scripts/bootstrap_local.sh
+# Use these instead of direct database calls
+feed_repo = get_feed_repo()
+episode_repo = get_episode_repo()
+digest_repo = get_digest_repo()
 ```
 
-### Key Commands
-```bash
-# Environment validation
-python3 scripts/doctor.py
+## 📋 COMPLETION CHECKLIST
 
-# Pipeline testing (after DB setup)
-python3 run_full_pipeline.py --phase discovery
+- [ ] Migrate `rescore_episodes.py` to repository pattern
+- [ ] Migrate `reset_latest_episode.py` to repository pattern
+- [ ] Review and migrate `demo_phase4.py` if needed
+- [ ] Review and migrate `test_new_digests.py` if needed
+- [ ] Search for and migrate any remaining test files with old database patterns
+- [ ] Validate all migrated functionality works with Supabase
+- [ ] Update move-online.md Phase 1a to mark as complete
+- [ ] Archive any remaining obsolete SQLite-specific files
 
-# Database migration
-alembic upgrade head
+## 🚨 IMPORTANT NOTES
 
-# Development server
-bash scripts/run_web_ui.sh
-```
+- **NO SQLite fallback needed** - full migration to Supabase/PostgreSQL
+- **Repository methods handle all database operations** - no raw SQL needed for basic operations
+- **Existing functionality must be preserved** - test thoroughly after migration
+- **Archive obsolete files** - move them to `archive/` directory instead of deleting
 
-## Technical Context
+## 💡 NEXT STEPS AFTER MIGRATION
 
-### Database Models (Already Created)
-- **Location**: `src/database/sqlalchemy_models.py`
-- **Tables**: `feeds`, `episodes`, `digests`
-- **Features**: JSONB fields, proper indexes, Postgres-optimized
+Once migration is complete, the next phases in move-online.md are:
+- Phase 1: Modularize Pipeline for Single-Phase Runs
+- Phase 2: Storage and Artifact Strategy
+- Phase 3: CI/CD setup
+- Phase 4: Web UI Hosting + DNS
 
-### Migration System (Ready)
-- **Alembic Config**: `alembic.ini` configured for environment-based DATABASE_URL
-- **Initial Migration**: `alembic/versions/1ad9f7f93530_initial_schema_creation.py`
-- **Data Migration**: `scripts/migrate_sqlite_to_pg.py`
+---
 
-### Environment Management
-- **Config**: `src/config/env.py` handles Supabase URL resolution
-- **Validation**: `scripts/doctor.py` comprehensive environment check
-- **Setup**: `scripts/bootstrap_local.sh` development environment
-
-## Quality Standards
-- **Testing**: Use real RSS feeds, no mocks (see CLAUDE.md)
-- **Python**: Always use `python3` command (macOS compatibility)
-- **Error Handling**: Graceful degradation, comprehensive logging
-- **Documentation**: Update progress in move-online.md
-
-## Success Criteria for Phase 1 Completion
-1. ✅ Database connectivity working (`scripts/doctor.py` passes all checks)
-2. ✅ SQLAlchemy models integrated with existing pipeline
-3. ✅ Enhanced CLI flags implemented and tested
-4. ✅ Integration tests created and passing
-5. ✅ All move-online.md Phase 1 tasks marked complete
-
-## Files to Focus On
-- `src/database/models.py` - Database abstraction layer (needs SQLAlchemy refactor)
-- `run_full_pipeline.py` - Main pipeline (needs additional CLI flags)
-- `scripts/doctor.py` - Environment validation (working, needs DB connection)
-- `move-online.md` - Progress tracking (keep updated)
-
-## ⚡ Supabase CLI Ready!
-**EXCELLENT NEWS**: Supabase CLI is authenticated and project exists!
-
-**Quick Database Setup** (run these commands):
-```bash
-# 1. Link to the existing project
-supabase link --project-ref dylqxfgdozwjvbiklnfn --password "3Z@hoz8Njo14w5llsW"
-
-# 2. Check if schema needs to be applied
-supabase db diff
-
-# 3. Apply our schema (copy SQL from supabase_setup_instructions.md)
-# Either reset the DB or apply SQL manually
-
-# 4. Verify everything works
-python3 scripts/doctor.py
-alembic upgrade head
-```
-
-**Key Discovery**: The existing project `dylqxfgdozwjvbiklnfn` matches our .env configuration perfectly. The database just needs the schema applied.
-
-Start by checking the database connectivity status and then proceed with the remaining implementation tasks!
+**Ready to continue the Supabase migration! Start with `rescore_episodes.py` and work through the remaining utility scripts.**

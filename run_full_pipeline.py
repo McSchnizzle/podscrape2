@@ -24,7 +24,7 @@ require_database_url()  # Enforce Supabase Postgres configuration present
 from src.podcast.feed_parser import FeedParser
 from src.scoring.content_scorer import ContentScorer
 from src.generation.script_generator import ScriptGenerator
-from src.database.models import get_episode_repo, get_digest_repo, Episode
+from src.database.models import get_episode_repo, get_digest_repo, get_feed_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.audio.complete_audio_processor import CompleteAudioProcessor
 from src.publishing.github_publisher import create_github_publisher
@@ -32,7 +32,6 @@ from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, c
 from src.publishing.retention_manager import create_retention_manager
 from src.publishing.vercel_deployer import create_vercel_deployer
 import feedparser
-import sqlite3
 
 class FullPipelineRunner:
     """
@@ -173,31 +172,23 @@ class FullPipelineRunner:
         
     def _load_feeds_from_database(self):
         """Load active RSS feeds from database"""
-        db_path = self.db_path
         try:
-            with sqlite3.connect(db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, feed_url, title 
-                    FROM feeds 
-                    WHERE active = 1 
-                    ORDER BY title
-                """)
-                feeds = cursor.fetchall()
-                
-                # Convert to expected format
-                feed_list = []
-                for fid, url, title in feeds:
-                    # Skip YouTube channels for now (unsupported)
-                    if isinstance(url, str) and 'youtube.com/feeds/videos.xml' in url:
-                        continue
-                    feed_list.append({
-                        'id': fid,
-                        'url': url,
-                        'name': title
-                    })
-                
-                return feed_list
+            feed_repo = get_feed_repo()
+            feeds = feed_repo.get_active_feeds()
+
+            # Convert to expected format
+            feed_list = []
+            for feed in feeds:
+                # Skip YouTube channels for now (unsupported)
+                if isinstance(feed.feed_url, str) and 'youtube.com/feeds/videos.xml' in feed.feed_url:
+                    continue
+                feed_list.append({
+                    'id': feed.id,
+                    'url': feed.feed_url,
+                    'name': feed.title
+                })
+
+            return feed_list
                 
         except Exception as e:
             self.logger.error(f"Failed to load feeds from database: {e}")
@@ -291,9 +282,8 @@ class FullPipelineRunner:
             # Mark feed as checked regardless of outcome
             try:
                 if 'id' in feed_info and feed_info['id'] is not None:
-                    with sqlite3.connect(self.db_path) as conn:
-                        conn.execute("UPDATE feeds SET last_checked = ? WHERE id = ?", (datetime.now().isoformat(), int(feed_info['id'])))
-                        conn.commit()
+                    feed_repo = get_feed_repo()
+                    feed_repo.update_last_checked(int(feed_info['id']), datetime.now())
             except Exception:
                 pass
             

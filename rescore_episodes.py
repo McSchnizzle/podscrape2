@@ -13,7 +13,7 @@ from datetime import datetime
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent / 'src'))
 
-from database.models import get_database_manager, EpisodeRepository
+from database.models import get_episode_repo
 from scoring.content_scorer import ContentScorer
 from config.config_manager import ConfigManager
 
@@ -30,39 +30,32 @@ logger = logging.getLogger(__name__)
 
 def rescore_all_episodes():
     """Re-score all transcribed episodes with new topic structure"""
-    
+
     # Initialize components
-    db_manager = get_database_manager()
-    episode_repo = EpisodeRepository(db_manager)
-    
+    episode_repo = get_episode_repo()
+
     # Initialize content scorer with new configuration
     config_manager = ConfigManager()
     content_scorer = ContentScorer(config_path="config/topics.json")
-    
+
     logger.info("Starting episode re-scoring with new topic structure")
     logger.info(f"Active topics: {[t['name'] for t in config_manager.get_topics()]}")
-    
+
     # Get all episodes that have been transcribed
-    episodes_to_rescore = db_manager.execute_query('''
-        SELECT id, episode_guid, title, transcript_path, status
-        FROM episodes 
-        WHERE status IN ('transcribed', 'scored', 'digested') 
-        AND transcript_path IS NOT NULL
-        ORDER BY id
-    ''')
+    episodes_to_rescore = episode_repo.get_by_status_list(['transcribed', 'scored', 'digested'])
     
     logger.info(f"Found {len(episodes_to_rescore)} episodes to re-score")
     
     successful_rescores = 0
     failed_rescores = 0
-    
-    for episode_row in episodes_to_rescore:
-        episode_id = episode_row['id']
-        episode_guid = episode_row['episode_guid']
-        title = episode_row['title']
-        transcript_path = episode_row['transcript_path']
-        current_status = episode_row['status']
-        
+
+    for episode in episodes_to_rescore:
+        episode_id = episode.id
+        episode_guid = episode.episode_guid
+        title = episode.title
+        transcript_path = episode.transcript_path
+        current_status = episode.status
+
         logger.info(f"\\nRe-scoring episode {episode_id}: {title[:50]}...")
         
         try:
