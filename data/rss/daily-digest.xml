@@ -5,7 +5,7 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Mon, 15 Sep 2025 07:04:06 +0000</lastBuildDate>
+    <lastBuildDate>Tue, 16 Sep 2025 16:34:09 +0000</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <itunes:title>Daily AI &amp; Tech Digest</itunes:title>
     <itunes:description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</itunes:description>
@@ -21,25 +21,157 @@
     </itunes:owner>
     <copyright>© 2025 Paul Brown</copyright>
     <item>
-      <title>AI &amp; Tech Daily — Sep 15, 2025: AirPods Translate, Apple Health, Technofeudalism</title>
-      <description>Quick digest: Apple’s fall updates prioritize health and live translation; AI tools cut dev time for watch apps; technofeudalism and Yudkowsky renew debates on power and AI risk.</description>
-      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
-      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_054106.mp3" length="15177814" type="audio/mpeg"/>
-      <itunes:title>AI &amp; Tech Daily — Sep 15, 2025: AirPods Translate, Apple Health, Technofeudalism</itunes:title>
-      <itunes:description>Quick digest: Apple’s fall updates prioritize health and live translation; AI tools cut dev time for watch apps; technofeudalism and Yudkowsky renew debates on power and AI risk.</itunes:description>
-      <itunes:duration>19:22</itunes:duration>
+      <title>AI &amp; iPhone Shift: Air, Orange Pro, and Yudkowsky — Sep 16, 2025</title>
+      <description>Quick briefing: Apple’s thin-new iPhone Air, orange Pro buzz, AirPods live translation, Watch health alerts—and Eliezer Yudkowsky’s AI doom debate. What it means for products, developers, and policy.</description>
+      <pubDate>Tue, 16 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250916_232923.mp3" length="13294908" type="audio/mpeg"/>
+      <itunes:title>AI &amp; iPhone Shift: Air, Orange Pro, and Yudkowsky — Sep 16, 2025</itunes:title>
+      <itunes:description>Quick briefing: Apple’s thin-new iPhone Air, orange Pro buzz, AirPods live translation, Watch health alerts—and Eliezer Yudkowsky’s AI doom debate. What it means for products, developers, and policy.</itunes:description>
+      <itunes:duration>16:48</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
-      <title>Daily Digest — Social Movements: Sovereignty &amp; Safety (2025-09-15)</title>
-      <description>Three episodes unpack imperialism, political-violence risks, and technofeudalism—plus four concrete sparks for local organizing: reclaiming sovereignty, safety infrastructure, platform power, and immigrant justice.</description>
+      <title>AI &amp; Tech Daily — iPhone Air, Orange Pro &amp; AirPods AI (Sep 16, 2025)</title>
+      <description>Quick digest: iPhone 17’s incremental updates vs. thin iPhone Air standout, orange Pro buzz, AirPods Pro live translation, and Apple Watch health tradeoffs. Design, AI, and market takeaways for leaders.</description>
+      <pubDate>Tue, 16 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250916_224649.mp3" length="9649886" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily — iPhone Air, Orange Pro &amp; AirPods AI (Sep 16, 2025)</itunes:title>
+      <itunes:description>Quick digest: iPhone 17’s incremental updates vs. thin iPhone Air standout, orange Pro buzz, AirPods Pro live translation, and Apple Watch health tradeoffs. Design, AI, and market takeaways for leaders.</itunes:description>
+      <itunes:duration>11:58</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_104304.mp3" length="11906448" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>11:21</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily — Sept 15, 2025: iPhone Air, Live Translation</title>
+      <description>Apple’s ultra-thin iPhone Air, orange iPhone 17 Pro, AirPods live translation, and Watch health alerts — plus AI safety and market shifts. Quick analysis for product and AI pros.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_130756.mp3" length="10870745" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily — Sept 15, 2025: iPhone Air, Live Translation</itunes:title>
+      <itunes:description>Apple’s ultra-thin iPhone Air, orange iPhone 17 Pro, AirPods live translation, and Watch health alerts — plus AI safety and market shifts. Quick analysis for product and AI pros.</itunes:description>
+      <itunes:duration>13:38</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_054106.mp3" length="15177814" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>14:28</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_013846.mp3" length="9122004" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>08:41</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_033246.mp3" length="11511894" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>10:58</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_032522.mp3" length="9149589" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>08:43</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_020106.mp3" length="11355160" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>10:49</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 15, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/AI_and_Technology_20250915_130756.mp3" length="10870745" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>10:22</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 15, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/Social_Movements_and_Community_Organizing_20250915_130915.mp3" length="17134281" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>16:20</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Digest — Social Movements (Sept 15, 2025)</title>
+      <description>Quick, practical insights from two episodes: sovereignty as an organizing frame, scaling from the edges, ethics in action, and readiness. Four concrete sparks and weekly steps to organize locally.</description>
+      <pubDate>Mon, 15 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/Social_Movements_and_Community_Organizing_20250915_130915.mp3" length="17134281" type="audio/mpeg"/>
+      <itunes:title>Daily Digest — Social Movements (Sept 15, 2025)</itunes:title>
+      <itunes:description>Quick, practical insights from two episodes: sovereignty as an organizing frame, scaling from the edges, ethics in action, and readiness. Four concrete sparks and weekly steps to organize locally.</itunes:description>
+      <itunes:duration>20:31</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 15, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
       <pubDate>Mon, 15 Sep 2025 14:00:00 +0000</pubDate>
       <guid isPermaLink="false">digest-2025-09-15-social-movements-and-community-organizing</guid>
       <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/Social_Movements_and_Community_Organizing_20250915_053912.mp3" length="23208064" type="audio/mpeg"/>
-      <itunes:title>Daily Digest — Social Movements: Sovereignty &amp; Safety (2025-09-15)</itunes:title>
-      <itunes:description>Three episodes unpack imperialism, political-violence risks, and technofeudalism—plus four concrete sparks for local organizing: reclaiming sovereignty, safety infrastructure, platform power, and immigrant justice.</itunes:description>
-      <itunes:duration>28:15</itunes:duration>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>22:07</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 15, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Mon, 15 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-15-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-15/Social_Movements_and_Community_Organizing_20250915_033431.mp3" length="18233932" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 15, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>17:23</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
@@ -51,6 +183,28 @@
       <itunes:title>AI &amp; Tech Daily Digest — Sep 14, 2025: Slopocalypse, GEMA</itunes:title>
       <itunes:description>Today: the rise of AI-produced podcasts, Google’s on-device GEMA embeddings, ChatGPT branching, Atlassian buys The Browser Company, and OpenAI’s jobs push—what leaders must act on now.</itunes:description>
       <itunes:duration>15:58</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 14, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Sun, 14 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-14-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-14/AI_and_Technology_20250914_073042.mp3" length="12763264" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 14, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>12:10</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 14, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Sun, 14 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-14-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-14/Social_Movements_and_Community_Organizing_20250914_072918.mp3" length="16137031" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 14, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>15:23</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
@@ -76,6 +230,17 @@
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
+      <title>AI and Technology Daily Digest - September 13, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Sat, 13 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-13-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-13/AI_and_Technology_20250913_075057.mp3" length="17495398" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 13, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>16:41</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
       <title>Social Movements Digest — Sept 13, 2025</title>
       <description>Quick take: neighborhood care as infrastructure, campus anti-repression tactics for Palestine, and why ‘Black capitalism’ alone can’t deliver economic sovereignty.</description>
       <pubDate>Sat, 13 Sep 2025 14:00:00 +0000</pubDate>
@@ -84,6 +249,303 @@
       <itunes:title>Social Movements Digest — Sept 13, 2025</itunes:title>
       <itunes:description>Quick take: neighborhood care as infrastructure, campus anti-repression tactics for Palestine, and why ‘Black capitalism’ alone can’t deliver economic sovereignty.</itunes:description>
       <itunes:duration>16:14</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 13, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Sat, 13 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-13-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-13/Social_Movements_and_Community_Organizing_20250913_075139.mp3" length="21600175" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 13, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>20:35</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily Digest — Sept 12, 2025</title>
+      <description>Quick briefing: Apple’s Siri pivot, Anthropic’s $13B raise, OpenAI–Microsoft restructure, on-device embeddings, and enterprise AI tools reshaping workflows. Essential takeaways for leaders.</description>
+      <pubDate>Fri, 12 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-12-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-12/AI_and_Technology_20250912_210350.mp3" length="18802356" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily Digest — Sept 12, 2025</itunes:title>
+      <itunes:description>Quick briefing: Apple’s Siri pivot, Anthropic’s $13B raise, OpenAI–Microsoft restructure, on-device embeddings, and enterprise AI tools reshaping workflows. Essential takeaways for leaders.</itunes:description>
+      <itunes:duration>21:37</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 12, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Fri, 12 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-12-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-12/AI_and_Technology_20250912_051327.mp3" length="19716433" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 12, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>18:48</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 12, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Fri, 12 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-12-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-12/AI_and_Technology_20250912_210350.mp3" length="18802356" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 12, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>17:55</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Digest — Sep 11, 2025: Production-Grade AI</title>
+      <description>Today: AI moves from demos to production—MCP write-actions, YouTube dubbing, custom chips, Anthropic settlement, and agents reshaping work. Quick takeaways for builders and leaders.</description>
+      <pubDate>Thu, 11 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/AI_and_Technology_20250911_195433.mp3" length="17624129" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Digest — Sep 11, 2025: Production-Grade AI</itunes:title>
+      <itunes:description>Today: AI moves from demos to production—MCP write-actions, YouTube dubbing, custom chips, Anthropic settlement, and agents reshaping work. Quick takeaways for builders and leaders.</itunes:description>
+      <itunes:duration>21:14</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 11, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Thu, 11 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/AI_and_Technology_20250911_195433.mp3" length="17624129" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 11, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>16:48</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 11, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Thu, 11 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/Social_Movements_and_Community_Organizing_20250911_195342.mp3" length="27894222" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 11, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>26:36</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Digest — Community Defense &amp; Assemblies (Sep 11, 2025)</title>
+      <description>Quick briefing: how neighborhood assemblies, immigrant defense, and anti-displacement tactics are building local power against authoritarian encroachments. Practical steps for organizers and civic leaders.</description>
+      <pubDate>Thu, 11 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-11-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-11/Social_Movements_and_Community_Organizing_20250911_195342.mp3" length="27894222" type="audio/mpeg"/>
+      <itunes:title>Daily Digest — Community Defense &amp; Assemblies (Sep 11, 2025)</itunes:title>
+      <itunes:description>Quick briefing: how neighborhood assemblies, immigrant defense, and anti-displacement tactics are building local power against authoritarian encroachments. Practical steps for organizers and civic leaders.</itunes:description>
+      <itunes:duration>20:34</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 10, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/AI_and_Technology_20250910_081411.mp3" length="15229223" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>14:31</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily Digest — Sep 10, 2025</title>
+      <description>Today: AI-written code tops 50% in some teams, Microsoft’s $17.4B Nebius compute bet, Databricks’ AI revenue surge, Google Gemini momentum, and an OpenAI-backed feature film experiment.</description>
+      <pubDate>Wed, 10 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/AI_and_Technology_20250910_083245.mp3" length="15229223" type="audio/mpeg"/>
+      <itunes:title>AI &amp; Tech Daily Digest — Sep 10, 2025</itunes:title>
+      <itunes:description>Today: AI-written code tops 50% in some teams, Microsoft’s $17.4B Nebius compute bet, Databricks’ AI revenue surge, Google Gemini momentum, and an OpenAI-backed feature film experiment.</itunes:description>
+      <itunes:duration>18:58</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 10, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/AI_and_Technology_20250910_083245.mp3" length="15229223" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>14:31</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 10, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/AI_and_Technology_20250910_073624.mp3" length="13025325" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>12:25</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 10, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/Social_Movements_and_Community_Organizing_20250910_081445.mp3" length="26299708" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>25:04</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 10, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/Social_Movements_and_Community_Organizing_20250910_080251.mp3" length="20819009" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>19:51</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 10, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Wed, 10 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/Social_Movements_and_Community_Organizing_20250910_073657.mp3" length="29611617" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 10, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>28:14</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Digest — Social Movements (Sep 10, 2025)</title>
+      <description>Five rapid briefings on assemblies, immigration defense, anti-displacement, abolitionist safety, and debtor power—practical tactics and action steps for organizers and civic leaders.</description>
+      <pubDate>Wed, 10 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-10-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-10/Social_Movements_and_Community_Organizing_20250910_081445.mp3" length="26299708" type="audio/mpeg"/>
+      <itunes:title>Daily Digest — Social Movements (Sep 10, 2025)</itunes:title>
+      <itunes:description>Five rapid briefings on assemblies, immigration defense, anti-displacement, abolitionist safety, and debtor power—practical tactics and action steps for organizers and civic leaders.</itunes:description>
+      <itunes:duration>20:34</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI and Technology Daily Digest - September 09, 2025</title>
+      <description>Daily digest for AI and Technology from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/AI_and_Technology_20250909_213521.mp3" length="11704991" type="audio/mpeg"/>
+      <itunes:title>AI and Technology Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for AI and Technology from podcast episodes.</itunes:description>
+      <itunes:duration>11:09</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</title>
+      <description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</description>
+      <pubDate>Tue, 09 Sep 2025 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-ai-and-technology</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/AI_and_Technology_20250909_213521.mp3" length="11704991" type="audio/mpeg"/>
+      <itunes:title>AI Daily — Devin: Infinite Junior Engineers (Sep 09, 2025)</itunes:title>
+      <itunes:description>Cognition’s Devin acts as async “junior engineers” that run parallel PRs, shifting teams from IDE to ticket-driven workflows. Learn practical guardrails, MCP integration, and hiring impacts.</itunes:description>
+      <itunes:duration>14:24</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Community Organizing Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Community Organizing from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Community_Organizing_20250909_202243.mp3" length="33016730" type="audio/mpeg"/>
+      <itunes:title>Community Organizing Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>31:29</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Community Organizing Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Community Organizing from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Community_Organizing_20250909_190338.mp3" length="5527973" type="audio/mpeg"/>
+      <itunes:title>Community Organizing Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>05:16</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Community Organizing Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Community Organizing from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Community_Organizing_20250909_205142.mp3" length="34129756" type="audio/mpeg"/>
+      <itunes:title>Community Organizing Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>32:32</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Daily Organizing Digest — Sep 09, 2025</title>
+      <description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</description>
+      <pubDate>Tue, 09 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Social_Movements_and_Community_Organizing_20250909_213546.mp3" length="33028851" type="audio/mpeg"/>
+      <itunes:title>Daily Organizing Digest — Sep 09, 2025</itunes:title>
+      <itunes:description>Quick, actionable roundup: assemblies, sanctuary defense, anti-displacement tactics, and cultural shifts to build neighborhood power against rising authoritarianism. One action to take today.</itunes:description>
+      <itunes:duration>20:35</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Social Movements and Community Organizing Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Social Movements and Community Organizing from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-social-movements-and-community-organizing</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Social_Movements_and_Community_Organizing_20250909_213546.mp3" length="33028851" type="audio/mpeg"/>
+      <itunes:title>Social Movements and Community Organizing Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Social Movements and Community Organizing from podcast episodes.</itunes:description>
+      <itunes:duration>31:29</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Societal Culture Change Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Societal Culture Change from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-societal-culture-change</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Societal_Culture_Change_20250909_202341.mp3" length="15032365" type="audio/mpeg"/>
+      <itunes:title>Societal Culture Change Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Societal Culture Change from podcast episodes.</itunes:description>
+      <itunes:duration>14:20</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Societal Culture Change Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Societal Culture Change from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-societal-culture-change</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Societal_Culture_Change_20250909_195719.mp3" length="5687215" type="audio/mpeg"/>
+      <itunes:title>Societal Culture Change Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Societal Culture Change from podcast episodes.</itunes:description>
+      <itunes:duration>05:25</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Societal Culture Change Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Societal Culture Change from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-societal-culture-change</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Societal_Culture_Change_20250909_190453.mp3" length="5637478" type="audio/mpeg"/>
+      <itunes:title>Societal Culture Change Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Societal Culture Change from podcast episodes.</itunes:description>
+      <itunes:duration>05:22</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>Societal Culture Change Daily Digest - September 09, 2025</title>
+      <description>Daily digest for Societal Culture Change from podcast episodes.</description>
+      <pubDate>Tue, 09 Sep 2025 12:00:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-09-societal-culture-change</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-09/Societal_Culture_Change_20250909_205107.mp3" length="15085027" type="audio/mpeg"/>
+      <itunes:title>Societal Culture Change Daily Digest - September 09, 2025</itunes:title>
+      <itunes:description>Daily digest for Societal Culture Change from podcast episodes.</itunes:description>
+      <itunes:duration>14:23</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
   </channel>

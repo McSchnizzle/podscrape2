@@ -1,12 +1,16 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/` — application code (database, podcast pipeline, publishing, config, utils).
-- `web_ui/` — optional Flask Web UI (port 5001) with templates.
-- `ui-tests/` — Playwright UI tests and config.
-- `data/` — database (`data/database/digest.db`), RSS, audio artifacts.
-- `scripts/` — helper scripts (e.g., `scripts/run_web_ui.sh`).
-- Top-level runners: `run_full_pipeline.py`, `run_publishing_pipeline.py`, `generate_local_rss.py`.
+- `src/` — application code (database, podcast pipeline, publishing, config, utils)
+- `scripts/` — production phase scripts (`run_discovery.py`, `run_audio.py`, etc.) and utilities
+- `web_ui/` — optional Flask Web UI (port 5001) with templates
+- `ui-tests/` — Playwright UI tests and config
+- `data/` — logs, audio artifacts, legacy SQLite database
+- **Top-level runners**:
+  - `run_full_pipeline_orchestrator.py` (production orchestrator)
+  - `run_full_pipeline.py` (legacy single-phase)
+  - `run_publishing_pipeline.py` (publishing only)
+  - Individual phase scripts in `scripts/` directory
 
 ## Build, Test, and Development Commands
 - Create venv and install deps:
@@ -18,9 +22,18 @@
   ```bash
   timeout 12m python3 run_publishing_pipeline.py -v
   ```
-- Run full pipeline:
+- Run full pipeline (production orchestrator):
   ```bash
-  timeout 12m python3 run_full_pipeline.py --log pipeline_run_$(date +%Y%m%d_%H%M%S).log
+  timeout 15m python3 run_full_pipeline_orchestrator.py
+  ```
+- Run individual phases:
+  ```bash
+  python3 scripts/run_discovery.py --verbose
+  python3 scripts/run_audio.py --limit 3
+  python3 scripts/run_scoring.py
+  python3 scripts/run_digest.py
+  python3 scripts/run_tts.py
+  python3 scripts/run_publishing.py
   ```
 - Start Web UI (optional):
   ```bash
@@ -55,6 +68,7 @@
 - PRs: clear description, rationale, logs/screenshots for UI/ops, and validation steps (commands + expected output).
 
 ## Security & Configuration Tips
-- Env vars: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GITHUB_TOKEN` (or `gh auth status`), `GITHUB_REPOSITORY`.
-- Canonical RSS: `public/daily-digest.xml` (deployed on Vercel); legacy `/daily-digest2.xml` redirects.
-- DB init usually not required; run `python src/database/init_db.py` only for fresh/reset.
+- **Environment Variables**: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `DATABASE_URL` (PostgreSQL/Supabase)
+- **Canonical RSS**: `public/daily-digest.xml` (deployed on Vercel)
+- **Database**: PostgreSQL via Supabase (production), SQLite (legacy). Use `python3 -m alembic upgrade head` for PostgreSQL migrations
+- **Transcription**: Local OpenAI Whisper (no API costs) with `WHISPER_MODEL` environment variable

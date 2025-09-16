@@ -17,16 +17,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import argparse
 
-# Add src to path
+# Bootstrap phase initialization
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
-
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
-require_database_url()  # Enforce Supabase Postgres configuration present
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 from src.database.models import get_digest_repo
 from src.publishing.github_publisher import create_github_publisher
@@ -35,31 +31,24 @@ from src.publishing.retention_manager import create_retention_manager
 from src.publishing.vercel_deployer import create_vercel_deployer
 from src.utils.rss_timestamps import generate_unique_pubdate
 
+# Import centralized logging
+try:
+    from src.utils.logging_config import setup_phase_logging
+except ImportError:
+    from utils.logging_config import setup_phase_logging
+
 class PublishingPipelineRunner:
     """
     Complete publishing pipeline integration
     """
     
-    def __init__(self, log_file: str = None, dry_run: bool = False):
-        # Set up logging: console only unless a log_file is provided
-        handlers = [logging.StreamHandler(sys.stdout)]
-        if log_file:
-            handlers.insert(0, logging.FileHandler(log_file))
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=handlers
-        )
-        
-        self.logger = logging.getLogger(__name__)
-        self.log_file = log_file
+    def __init__(self, log_file: str = None, dry_run: bool = False, verbose: bool = False):
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("publishing", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
+
+        self.log_file = log_file or str(self.pipeline_logger.get_log_file())
         self.dry_run = dry_run
-        
-        self.logger.info("="*100)
-        self.logger.info("🔧 PHASE SCRIPT: scripts/run_publishing.py v1.0 - Independent execution")
-        self.logger.info("📡 Publishing Phase - GitHub Releases, RSS Generation, and Vercel Deployment")
-        self.logger.info("RSS PODCAST PUBLISHING PIPELINE - COMPLETE WORKFLOW")
-        self.logger.info("="*100)
         if log_file:
             self.logger.info(f"Logging to: {log_file}")
         self.logger.info(f"Dry run mode: {'ON' if dry_run else 'OFF'}")
@@ -315,6 +304,9 @@ class PublishingPipelineRunner:
     
     def run_complete_pipeline(self, days_back: int = 30) -> bool:
         """Run the complete publishing pipeline"""
+
+        self.pipeline_logger.log_phase_start("Publishing Pipeline Phase")
+
         try:
             self.logger.info("🚀 Starting complete publishing pipeline...")
             start_time = datetime.now()
@@ -346,8 +338,8 @@ class PublishingPipelineRunner:
                 self.logger.error("Failed to deploy to Vercel")
                 return False
             
-            # 5. Cleanup old files (optional)
-            if not self.dry_run:
+            # 5. Cleanup old files (optional) - only when not running under orchestrator
+            if not self.dry_run and not os.getenv('ORCHESTRATED_EXECUTION'):
                 try:
                     self.retention_manager.cleanup_all()
                     self.logger.info("✅ Cleanup completed")
@@ -355,10 +347,11 @@ class PublishingPipelineRunner:
                     self.logger.warning(f"⚠️  Cleanup failed: {e}")
             
             duration = (datetime.now() - start_time).total_seconds()
-            self.logger.info("="*100)
-            self.logger.info(f"🎉 Publishing pipeline completed successfully in {duration:.1f}s")
+
+            # Log completion
+            self.pipeline_logger.log_phase_complete(f"Publishing completed successfully in {duration:.1f}s")
+
             self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
-            self.logger.info("="*100)
             
             return True
             

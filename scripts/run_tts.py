@@ -9,39 +9,57 @@ import os
 import sys
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 import argparse
 from dataclasses import asdict, is_dataclass
 
-# Add src to path
+# Bootstrap phase initialization
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
-
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
-require_database_url()
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 from src.database.models import get_digest_repo
 from src.audio.complete_audio_processor import CompleteAudioProcessor
 
-def serialize_audio_metadata(obj):
-    """Convert dataclass objects to dictionaries for JSON serialization"""
-    if is_dataclass(obj):
-        return asdict(obj)
-    return obj
+# Import centralized logging
+try:
+    from src.utils.logging_config import setup_phase_logging
+except ImportError:
+    from utils.logging_config import setup_phase_logging
+
+def serialize_for_json(obj):
+    """
+    Recursively convert objects to JSON-serializable format.
+    Handles dataclasses and datetime objects properly.
+    """
+    if obj is None:
+        return None
+    elif is_dataclass(obj):
+        # Convert dataclass to dict and recursively process fields
+        return serialize_for_json(asdict(obj))
+    elif isinstance(obj, (datetime, date)):
+        # Convert datetime/date to ISO string
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        # Recursively process dictionary values
+        return {key: serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        # Recursively process list/tuple items
+        return [serialize_for_json(item) for item in obj]
+    else:
+        # Return primitive types as-is
+        return obj
 
 class TTSRunner:
     """TTS audio generation phase"""
 
     def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        level = logging.DEBUG if verbose else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("tts", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
 
         self.dry_run = dry_run
         self.limit = limit
@@ -69,6 +87,8 @@ class TTSRunner:
 
     def generate_audio(self, digests_data):
         """Generate TTS audio from digest phase or direct digest data"""
+
+        self.pipeline_logger.log_phase_start("TTS Audio Generation Phase")
 
         if isinstance(digests_data, str):
             # Load from JSON file
@@ -202,6 +222,12 @@ class TTSRunner:
                 file_name = Path(file_path).name if file_path != 'Unknown' else 'Unknown'
                 self.logger.info(f"      • {result['topic']}: {file_name}")
 
+        # Log completion
+        self.pipeline_logger.log_phase_complete(
+            f"Generated {len(successful)} audio files" +
+            (f" ({len(skipped)} skipped, {len(failed)} failed)" if (skipped or failed) else "")
+        )
+
         return {
             'success': len(failed) == 0,
             'audio_generated': len(successful),
@@ -245,7 +271,7 @@ class TTSRunner:
                     'topic': digest.topic,
                     'success': True,
                     'skipped': False,
-                    'audio_metadata': serialize_audio_metadata(audio_metadata)
+                    'audio_metadata': serialize_for_json(audio_metadata)
                 }
             else:
                 errors = result.get('errors', ['Unknown error'])
@@ -306,12 +332,15 @@ def main():
 
         result = runner.generate_audio(digests_data)
 
+        # Serialize result for JSON output (handles datetime and dataclass objects)
+        json_safe_result = serialize_for_json(result)
+
         # Output JSON
         if args.output:
             with open(args.output, 'w') as f:
-                json.dump(result, f, indent=2)
+                json.dump(json_safe_result, f, indent=2)
         else:
-            print(json.dumps(result))
+            print(json.dumps(json_safe_result))
             sys.stdout.flush()
 
         # Exit code

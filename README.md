@@ -1,28 +1,33 @@
-# RSS Podcast Digest System (with Web UI)
+# RSS Podcast Digest System
 
-Generate daily, topic‑based podcast digests from RSS feeds. The system discovers new episodes, transcribes when available, scores content against topics, generates scripts, produces MP3s, and publishes a canonical RSS feed. Includes an optional local Web UI for configuration and operations.
+Production-ready automated system that generates daily, topic-based podcast digests from RSS feeds. Features a comprehensive orchestrator, PostgreSQL database, OpenAI Whisper transcription, and optional Web UI for management.
+
+**Live RSS Feed**: https://podcast.paulrbrown.org/daily-digest.xml
 
 ## 🎯 Overview
 
-This system automatically:
-- Collects transcripts from specified YouTube creators
-- Scores content against multiple topics using GPT-5-mini  
-- Generates topic-based scripts using GPT-5
-- Converts scripts to audio using ElevenLabs TTS
-- Publishes via RSS feed at podcast.paulrbrown.org
+This production system automatically:
+- Discovers new episodes from RSS podcast feeds
+- Downloads and transcribes audio using local OpenAI Whisper
+- Scores content against multiple topics using GPT-5-mini
+- Generates topic-based digest scripts using GPT-5
+- Converts scripts to MP3 audio using ElevenLabs TTS
+- Publishes via GitHub Releases and RSS feed at podcast.paulrbrown.org
 
 ## 🏗️ Architecture
 
 ```
-RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription → AI Scoring → Script Generation → TTS → RSS Feed
+RSS Feeds → Episode Discovery → Audio Download/Chunking → OpenAI Whisper Transcription → AI Scoring → Script Generation → TTS → GitHub/RSS Publishing
 ```
 
 ### Core Components
-- SQLite DB: feeds, episodes, digests
-- Scoring/Generation: GPT‑based scoring and topic scripts
-- Audio/TTS: ElevenLabs with per‑topic voice config
-- Publishing: GitHub Releases (assets), Vercel (canonical RSS)
-- Web UI (optional): Flask app on 127.0.0.1:5001 for settings, feeds/topics, and dashboard
+- **Database**: PostgreSQL (Supabase) with SQLAlchemy models and automatic connection pooling
+- **Orchestrator**: Production-ready pipeline with comprehensive logging and error handling
+- **Transcription**: Local OpenAI Whisper (cross-platform, no API costs)
+- **AI Processing**: GPT-5-mini scoring and GPT-5 script generation
+- **Audio/TTS**: ElevenLabs with per-topic voice configuration
+- **Publishing**: GitHub Releases (MP3 assets) + Vercel (RSS feed)
+- **Web UI**: Optional Flask app on 127.0.0.1:5001 for management and monitoring
 
 ## 📁 Project Structure
 
@@ -38,8 +43,15 @@ podscrape2/
 │   └── publishing/        # GitHub and RSS publishing
 ├── web_ui/                # Optional Flask Web UI (port 5001)
 ├── ui-tests/              # Playwright end-to-end tests for the Web UI
+├── scripts/                # Production phase scripts
+│   ├── run_discovery.py   # RSS feed discovery
+│   ├── run_audio.py       # Download + transcribe
+│   ├── run_scoring.py     # AI content scoring
+│   ├── run_digest.py      # Script generation
+│   ├── run_tts.py         # Audio generation
+│   └── run_publishing.py  # GitHub + RSS + Vercel
 ├── data/
-│   ├── database/          # SQLite database files
+│   ├── database/          # Legacy SQLite files
 │   ├── transcripts/       # Raw transcript files
 │   ├── scripts/           # Generated digest scripts
 │   ├── completed-tts/     # Generated MP3 files
@@ -54,15 +66,19 @@ podscrape2/
 │   ├── podscrape2-prd.md # Product Requirements Document
 │   └── completed-phases1-7.md  # Completed work log (Phases 1–7)
 │   └── tasklist2.md      # Remaining work (Web UI + Automation)
-└── run_full_pipeline.py / run_publishing_pipeline.py  # Pipeline runners
+├── run_full_pipeline_orchestrator.py  # Production orchestrator
+├── run_full_pipeline.py               # Legacy single-phase runner
+└── run_publishing_pipeline.py         # Publishing-only pipeline
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.9+
-- YouTube channels to monitor
+- RSS podcast feeds to monitor
 - API keys: OpenAI, ElevenLabs, GitHub
+- PostgreSQL database (Supabase recommended)
+- ffmpeg for audio processing
 
 ### Installation
 
@@ -83,19 +99,32 @@ podscrape2/
    # Edit .env with your API keys
    ```
 
-4. **Initialize Database**
+4. **Setup Database**
    ```bash
-   python src/database/init_db.py
+   # For PostgreSQL (production)
+   python3 -m alembic upgrade head
+
+   # For SQLite (legacy/local testing)
+   python3 src/database/init_db.py
    ```
 
-5. **Add YouTube Channels**
+5. **Add RSS Feeds**
    ```bash
-   python src/channels/manage.py add "https://youtube.com/@channelname"
+   # Via Web UI (recommended)
+   bash scripts/run_web_ui.sh
+   # Navigate to Feeds section
+
+   # Or via database directly
+   # Add feeds to PostgreSQL feeds table
    ```
 
-6. **Run Manual Test**
+6. **Run Test Pipeline**
    ```bash
-   python daily_digest.py --manual --date 2025-09-09
+   # Production orchestrator (recommended)
+   python3 run_full_pipeline_orchestrator.py --phase discovery
+
+   # Full production run
+   timeout 15m python3 run_full_pipeline_orchestrator.py
    ```
 
 ### Configuration
@@ -106,21 +135,25 @@ OPENAI_API_KEY=your-openai-api-key-here          # GPT-5 models
 ELEVENLABS_API_KEY=your-elevenlabs-key-here      # TTS generation
 GITHUB_TOKEN=your-github-token-here              # Repository access
 GITHUB_REPOSITORY=your-username/your-repo-name
+DATABASE_URL=postgresql://user:pass@host:5432/db # PostgreSQL (Supabase)
+WHISPER_MODEL=base                               # OpenAI Whisper model size
 ```
 
-#### Channel Management
+#### Feed Management
 ```bash
-# Add channel
-python src/channels/manage.py add "Channel Name or URL"
+# Start Web UI for feed management (recommended)
+bash scripts/run_web_ui.sh
 
-# List channels  
-python src/channels/manage.py list
+# Or check feeds programmatically
+python3 scripts/run_discovery.py --dry-run --verbose
 
-# Remove channel
-python src/channels/manage.py remove "Channel Name"
-
-# Channel health check
-python src/channels/manage.py health
+# Individual phase execution
+python3 scripts/run_discovery.py   # Discover new episodes
+python3 scripts/run_audio.py       # Download and transcribe
+python3 scripts/run_scoring.py     # Score content
+python3 scripts/run_digest.py      # Generate scripts
+python3 scripts/run_tts.py         # Create audio
+python3 scripts/run_publishing.py  # Publish to GitHub/RSS
 ```
 
 #### Topic Configuration (config/topics.json)
@@ -148,19 +181,23 @@ python src/channels/manage.py health
 ### Automated Execution
 ```bash
 # Add to crontab for daily 6 AM execution
-0 6 * * * cd /path/to/podscrape2 && python daily_digest.py
+0 6 * * * cd /path/to/podscrape2 && timeout 15m python3 run_full_pipeline_orchestrator.py
 ```
 
 ### Manual Execution
 ```bash
-# Process today's content
-python daily_digest.py --manual
+# Full production pipeline
+python3 run_full_pipeline_orchestrator.py
 
-# Process specific date
-python daily_digest.py --manual --date 2025-09-09
+# Stop after specific phase
+python3 run_full_pipeline_orchestrator.py --phase audio
 
-# Debug mode with verbose logging
-python daily_digest.py --manual --date 2025-09-09 --debug
+# Publishing only (uses existing MP3s)
+python3 run_publishing_pipeline.py
+
+# Individual phase with options
+python3 scripts/run_audio.py --limit 3 --verbose
+python3 scripts/run_scoring.py --dry-run
 ```
 
 ### Monitoring
@@ -229,14 +266,14 @@ python tests/test_performance.py
 ## 📊 Content Flow
 
 ### Daily Pipeline
-1. **Discovery**: Find new videos from monitored channels
-2. **Filtering**: Exclude videos <3 minutes (shorts)
-3. **Transcription**: Extract transcripts using youtube-transcript-api
+1. **Discovery**: Find new episodes from RSS podcast feeds
+2. **Filtering**: Exclude episodes <3 minutes, download audio
+3. **Transcription**: Process audio chunks with local OpenAI Whisper
 4. **Scoring**: Score each episode against all topics (GPT-5-mini)
 5. **Selection**: Include episodes scoring ≥0.65 for each topic
-6. **Generation**: Create topic-based scripts (GPT-5)
-7. **Audio**: Convert scripts to MP3 (ElevenLabs)
-8. **Publishing**: Upload to GitHub and update RSS feed
+6. **Generation**: Create topic-based digest scripts (GPT-5)
+7. **Audio**: Convert scripts to MP3 (ElevenLabs TTS)
+8. **Publishing**: Upload to GitHub Releases and update RSS feed
 
 ### Content Scoring
 - Each episode scored against all topics (0.0-1.0 scale)
@@ -270,11 +307,12 @@ Note: As of Sep 2025, the project standardized on `daily-digest.xml` (retiring `
 
 ## 🔧 Maintenance
 
-### File Retention
-- **Local MP3s**: 7 days automatic cleanup
-- **GitHub Assets**: 14 days automatic cleanup
-- **Database**: Configurable retention (default: 14 days)
-- **Logs**: 30 days automatic cleanup
+### File Retention (WebConfig Driven)
+- **Local MP3s**: 7 days automatic cleanup via orchestrator
+- **GitHub Releases**: 14 days automatic cleanup
+- **Database**: PostgreSQL with Supabase professional backups
+- **Logs**: 3 days automatic cleanup with WebConfig override
+- **Scripts/Transcripts**: 14 days automatic cleanup
 
 ### Health Monitoring
 - Channel failure tracking
@@ -312,10 +350,11 @@ See `completed-phases1-7.md` for completed phases and `tasklist2.md` for remaini
 4. Maintain comprehensive test coverage
 
 ### Code Style
-- Black formatting
-- Type hints required
-- Comprehensive error handling
-- Detailed logging for debugging
+- Black formatting with Flake8 linting
+- Type hints required for all functions
+- Comprehensive error handling with retry logic
+- Standardized logging via PipelineLogger
+- SQLAlchemy models with Alembic migrations
 
 ## 📚 Documentation
 

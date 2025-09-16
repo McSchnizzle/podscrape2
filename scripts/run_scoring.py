@@ -13,28 +13,29 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 
-# Add src to path
+# Bootstrap phase initialization
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
-
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
-require_database_url()
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 from src.database.models import get_episode_repo
 from src.scoring.content_scorer import ContentScorer
+
+# Import centralized logging
+try:
+    from src.utils.logging_config import setup_phase_logging
+except ImportError:
+    from utils.logging_config import setup_phase_logging
 
 class ScoringRunner:
     """Content scoring phase"""
 
     def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        level = logging.DEBUG if verbose else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("scoring", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
 
         self.dry_run = dry_run
         self.limit = limit
@@ -62,6 +63,8 @@ class ScoringRunner:
 
     def score_episodes(self, episodes_data):
         """Score episodes from audio phase or direct input"""
+
+        self.pipeline_logger.log_phase_start("Content Scoring Phase")
 
         if isinstance(episodes_data, str):
             # Load from JSON file
@@ -166,6 +169,12 @@ class ScoringRunner:
                     'guid': episode_data.get('guid', 'unknown'),
                     'error': str(e)
                 })
+
+        # Log completion
+        self.pipeline_logger.log_phase_complete(
+            f"Scored {len(scored_episodes)} episodes" +
+            (f" ({len(failed_episodes)} failed)" if failed_episodes else "")
+        )
 
         return {
             'success': len(failed_episodes) == 0,

@@ -1,19 +1,22 @@
 # RSS Podcast Transcript Digest — Product Brief
 
-An automated daily digest system that ingests podcast episodes from RSS feeds, transcribes audio when available, scores content for topic relevancy, generates topic scripts, produces MP3s, and publishes a canonical RSS feed.
+**Production Status**: Fully operational automated daily digest system with PostgreSQL database, OpenAI Whisper transcription, and comprehensive orchestrator.
+
+An automated daily digest system that ingests podcast episodes from RSS feeds, transcribes audio using local OpenAI Whisper, scores content for topic relevancy, generates topic scripts, produces MP3s, and publishes a canonical RSS feed.
 
 Canonical RSS: https://podcast.paulrbrown.org/daily-digest.xml
 
 ## What It Does
-- Discover new episodes from configured RSS feeds
-- Download and chunk audio; transcribe (Parakeet MLX on Apple Silicon)
-- Score against topics; generate scripts from topic instructions
-- Produce MP3s with ElevenLabs; publish via GitHub Releases
-- Deploy canonical RSS to Vercel
+- **Discovery**: Find new episodes from configured RSS feeds with health monitoring
+- **Processing**: Download and chunk audio; transcribe with local OpenAI Whisper (cross-platform)
+- **Intelligence**: Score against topics using GPT-5-mini; generate digest scripts with GPT-5
+- **Production**: Create MP3s with ElevenLabs TTS using topic-specific voices
+- **Publishing**: Deploy via GitHub Releases (MP3s) and Vercel (RSS feed)
+- **Management**: Optional Web UI for configuration and monitoring
 
 ## Architecture (Concise)
 
-### Database Design (SQLite)
+### Database Design (PostgreSQL via Supabase)
 ```sql
 -- Core Tables
 episodes: id, episode_guid, feed_id, title, published_date, duration_seconds, 
@@ -26,7 +29,9 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
          mp3_summary, episode_ids (JSON), github_url, timestamps
 ```
 
-Key folders: data/ (db, transcripts, scripts, completed‑tts), public/ (daily-digest.xml)
+**Production Architecture**: PostgreSQL (Supabase) with professional backups, local OpenAI Whisper transcription, comprehensive orchestrator with standardized logging and retention management.
+
+Key folders: data/ (logs, transcripts, scripts, completed-tts), scripts/ (phase scripts), public/ (daily-digest.xml)
 
 ## Web UI (Phases A–C)
 
@@ -249,6 +254,6 @@ See `completed-phases1-7.md` for completed phases and `tasklist2.md` for the rem
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: September 9, 2025  
-**Status**: Implementation Ready
+**Document Version**: 2.0
+**Last Updated**: September 16, 2025
+**Status**: Production Operational

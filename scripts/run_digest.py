@@ -13,28 +13,29 @@ from datetime import datetime, date
 from pathlib import Path
 import argparse
 
-# Add src to path
+# Bootstrap phase initialization
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
-
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
-require_database_url()
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 from src.database.models import get_episode_repo, get_digest_repo
 from src.generation.script_generator import ScriptGenerator
+
+# Import centralized logging
+try:
+    from src.utils.logging_config import setup_phase_logging
+except ImportError:
+    from utils.logging_config import setup_phase_logging
 
 class DigestRunner:
     """Digest script generation phase"""
 
     def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        level = logging.DEBUG if verbose else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("digest", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
 
         self.dry_run = dry_run
         self.limit = limit
@@ -78,6 +79,8 @@ class DigestRunner:
 
     def generate_digests(self, episodes_data=None, target_date=None):
         """Generate digests from scoring phase or all qualifying episodes"""
+
+        self.pipeline_logger.log_phase_start("Digest Script Generation Phase")
 
         if target_date is None:
             target_date = date.today()
@@ -193,6 +196,12 @@ class DigestRunner:
                     'topic': topic,
                     'error': str(e)
                 })
+
+        # Log completion
+        self.pipeline_logger.log_phase_complete(
+            f"Generated {len(generated_digests)} digests" +
+            (f" ({len(failed_digests)} failed)" if failed_digests else "")
+        )
 
         return {
             'success': len(failed_digests) == 0,

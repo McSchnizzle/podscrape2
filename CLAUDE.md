@@ -12,19 +12,19 @@ AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Ve
 
 ### Core Data Flow
 - **RSS Feeds**: Monitored for new episodes via `src/podcast/feed_parser.py`
-- **Audio Processing**: Downloads, chunks (3-min), transcribes with Parakeet MLX on Apple Silicon
+- **Audio Processing**: Downloads, chunks (3-min), transcribes with OpenAI Whisper (cross-platform)
 - **Content Scoring**: Uses GPT-5-mini to score transcripts against configured topics (threshold: 0.65)
 - **Script Generation**: Creates topic-based digest scripts using GPT-5 and topic instruction files
 - **Audio Generation**: Converts scripts to MP3 using ElevenLabs TTS with topic-specific voices
 - **Publishing**: Uploads to GitHub Releases, generates RSS feed, deploys to Vercel
 
-### Database Architecture (SQLite → Postgres Migration Ready)
+### Database Architecture (PostgreSQL via Supabase)
 - **episodes**: Core episode data, transcripts, AI scores, processing status
 - **feeds**: RSS feed URLs, titles, health status, last checked timestamps
 - **digests**: Generated scripts, MP3 metadata, publishing status
 - **web_settings**: UI configuration (score thresholds, audio processing settings)
 
-The system supports both SQLite (current) and Postgres via SQLAlchemy models in `src/database/sqlalchemy_models.py`.
+The system uses PostgreSQL (Supabase) with SQLAlchemy models in `src/database/sqlalchemy_models.py`. Legacy SQLite support available in `src/database/models.py`.
 
 ## Development Commands
 
@@ -42,17 +42,25 @@ brew install gh && gh auth login  # GitHub publishing
 
 ### Core Pipeline Commands
 ```bash
-# Full pipeline: RSS → Audio → Transcript → Score → Script → MP3 → Publish
+# Full pipeline orchestrator: RSS → Audio → Transcript → Score → Script → MP3 → Publish
+python3 run_full_pipeline_orchestrator.py
+
+# Legacy single-phase: RSS → Audio → Transcript → Score → Script → MP3 → Publish
 python3 run_full_pipeline.py
 
 # Publishing only: MP3s → GitHub → RSS → Vercel
 python3 run_publishing_pipeline.py
 
-# With custom logging
-python3 run_full_pipeline.py --log pipeline_$(date +%Y%m%d_%H%M%S).log
-
 # Stop after specific phase for debugging
-python3 run_full_pipeline.py --phase audio  # discovery, audio, scoring, digest, tts
+python3 run_full_pipeline_orchestrator.py --phase audio  # discovery, audio, scoring, digest, tts, publishing
+
+# Individual phase scripts (production-ready)
+python3 scripts/run_discovery.py    # RSS feed discovery
+python3 scripts/run_audio.py        # Download + transcribe
+python3 scripts/run_scoring.py      # AI content scoring
+python3 scripts/run_digest.py       # Script generation
+python3 scripts/run_tts.py          # Audio generation
+python3 scripts/run_publishing.py   # GitHub + RSS + Vercel
 ```
 
 ### Web UI (Optional)
@@ -85,8 +93,9 @@ python3 test_metadata_generation.py
 
 ### Database Commands
 ```bash
-# Initialize database
+# Initialize database (SQLite legacy) or run Alembic migrations (PostgreSQL)
 python3 src/database/init_db.py
+python3 -m alembic upgrade head  # For PostgreSQL/Supabase
 
 # Manual episode scoring
 python3 rescore_episodes.py
@@ -124,7 +133,7 @@ Real data reveals actual RSS behavior, network issues, and audio CDN problems th
 
 ### Audio Processing Architecture
 - **Chunking**: Audio split into 3-minute chunks for optimal ASR performance
-- **Transcription**: Parakeet MLX (Apple Silicon optimized) or fallback CPU processing
+- **Transcription**: OpenAI Whisper (local, cross-platform) with configurable model size
 - **TTS**: ElevenLabs with topic-specific voice IDs and settings
 - **Cleanup**: Automatic cleanup of intermediate audio files after processing
 
@@ -166,11 +175,12 @@ Flask application providing local configuration interface:
 
 ## Integration Points
 
-### Database Migration Strategy
-The system is architected for migration from SQLite to Postgres (Supabase):
-- Current: SQLite with custom models in `src/database/models.py`
-- Future: SQLAlchemy models in `src/database/sqlalchemy_models.py`
-- Migration script: `src/database/migrate_phase7.py`
+### Database Architecture
+The system uses PostgreSQL (Supabase) for production:
+- **Production**: PostgreSQL with SQLAlchemy models in `src/database/sqlalchemy_models.py`
+- **Legacy**: SQLite support maintained in `src/database/models.py`
+- **Migration**: Completed migration to Supabase with automatic connection pooling
+- **Backup**: Professional daily backups with 7+ day retention via Supabase
 
 ### API Dependencies
 - **OpenAI**: GPT-5-mini for scoring, GPT-5 for script generation
@@ -181,17 +191,18 @@ The system is architected for migration from SQLite to Postgres (Supabase):
 ### External Tool Dependencies
 - **ffmpeg**: Required for audio chunking and format conversion
 - **gh CLI**: GitHub authentication and operations
-- **parakeet-mlx**: Apple Silicon optimized transcription (optional but recommended)
+- **OpenAI Whisper**: Cross-platform local transcription (no API costs)
 
 ## Development Workflow
 
 When implementing features:
-1. **Follow the phase structure**: The system was built in phases 1-7, each with specific test files
-2. **Test with real data**: Use the established RSS feeds, not mock data
-3. **Respect the data flow**: RSS → Audio → Transcript → Score → Script → TTS → Publish
-4. **Database-first**: Update models and migrations before changing logic
-5. **Error handling**: The system handles network failures, API limits, and partial processing gracefully
-6. **Logging**: Comprehensive logging is critical - logs go to `data/logs/` and console
+1. **Use the orchestrator**: Primary pipeline is `run_full_pipeline_orchestrator.py` with comprehensive logging and error handling
+2. **Phase-based development**: Independent phase scripts in `scripts/` directory for modular execution
+3. **Test with real data**: Use the established RSS feeds, not mock data
+4. **Respect the data flow**: RSS → Audio → Transcript → Score → Script → TTS → Publish
+5. **Database-first**: SQLAlchemy models with migrations for PostgreSQL (Supabase)
+6. **Error handling**: The system handles network failures, API limits, and partial processing gracefully
+7. **Logging**: Standardized logging via `PipelineLogger` with automatic cleanup and retention management
 
 ## Common Maintenance Tasks
 

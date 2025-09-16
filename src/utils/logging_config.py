@@ -290,7 +290,7 @@ def cleanup_old_logs(log_dir: str = None, days_to_keep: int = 3):
 class PipelineLogger:
     """Phase-specific logging for pipeline operations"""
 
-    def __init__(self, phase_name: str, verbose: bool = False, console_output: bool = True):
+    def __init__(self, phase_name: str, verbose: bool = False, console_output: bool = True, run_cleanup: bool = True):
         """
         Initialize logging for a specific pipeline phase.
 
@@ -298,6 +298,7 @@ class PipelineLogger:
             phase_name: Name of the phase (e.g., 'orchestrator', 'discovery', 'audio', etc.)
             verbose: Enable debug logging
             console_output: Enable console output in addition to file logging
+            run_cleanup: Whether to run log cleanup (default True, set False for sub-phases)
         """
         self.phase_name = phase_name
         self.verbose = verbose
@@ -308,8 +309,9 @@ class PipelineLogger:
         self.logs_dir = project_root / "logs"
         self.logs_dir.mkdir(exist_ok=True)
 
-        # Clean up old logs (older than 3 days) at start
-        cleanup_old_logs(str(self.logs_dir), days_to_keep=3)
+        # Clean up old logs (older than 3 days) at start - only if requested and not running under orchestrator
+        if run_cleanup and not os.getenv('ORCHESTRATED_EXECUTION'):
+            cleanup_old_logs(str(self.logs_dir), days_to_keep=3)
 
         # Create phase-specific log file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -391,7 +393,7 @@ class PipelineLogger:
         self.logger.info("=" * 80)
 
 
-def setup_phase_logging(phase_name: str, verbose: bool = False, console_output: bool = True) -> PipelineLogger:
+def setup_phase_logging(phase_name: str, verbose: bool = False, console_output: bool = True, run_cleanup: bool = True) -> PipelineLogger:
     """
     Convenience function to set up logging for a phase.
 
@@ -399,11 +401,12 @@ def setup_phase_logging(phase_name: str, verbose: bool = False, console_output: 
         phase_name: Name of the phase
         verbose: Enable debug logging
         console_output: Enable console output
+        run_cleanup: Whether to run log cleanup (default True, set False for sub-phases)
 
     Returns:
         PipelineLogger instance
     """
-    return PipelineLogger(phase_name, verbose, console_output)
+    return PipelineLogger(phase_name, verbose, console_output, run_cleanup)
 
 
 def move_legacy_logs_to_logs_dir():

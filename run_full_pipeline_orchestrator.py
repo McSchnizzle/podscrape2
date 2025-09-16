@@ -26,6 +26,7 @@ require_database_url()
 
 # Import centralized logging
 from utils.logging_config import setup_phase_logging, move_legacy_logs_to_logs_dir
+from src.publishing.retention_manager import create_retention_manager
 
 class PipelineOrchestrator:
     """
@@ -69,6 +70,14 @@ class PipelineOrchestrator:
         if self.verbose:
             self.logger.info("🔍 VERBOSE: Debug logging enabled")
 
+        # Initialize retention manager with WebConfig settings
+        try:
+            self.retention_manager = create_retention_manager()
+            self.logger.info("📦 Retention manager initialized with WebConfig settings")
+        except Exception as e:
+            self.logger.warning(f"⚠️  Could not initialize retention manager: {e}")
+            self.retention_manager = None
+
     def run_phase_script(self, script_name: str, input_data=None, **kwargs):
         """Run a phase script and return the result"""
 
@@ -78,6 +87,10 @@ class PipelineOrchestrator:
 
         # Build command
         cmd = ['python3', str(script_path)]
+
+        # Set environment variable to indicate orchestrated execution (to skip log cleanup)
+        env = os.environ.copy()
+        env['ORCHESTRATED_EXECUTION'] = '1'
 
         # Add output flag for orchestrator compatibility - use stdout
         # (no need to specify --output since default is stdout)
@@ -120,7 +133,8 @@ class PipelineOrchestrator:
                 stderr=subprocess.STDOUT,  # Combine stderr with stdout
                 text=True,
                 bufsize=1,  # Line buffered
-                universal_newlines=True
+                universal_newlines=True,
+                env=env  # Pass environment with orchestration flag
             )
 
             # Send input if provided
@@ -337,6 +351,19 @@ class PipelineOrchestrator:
         self.logger.info(f"📊 Episodes Scored: {len(scored_episodes)}")
         self.logger.info(f"📝 Digests Generated: {len(digests)}")
         self.logger.info(f"🎵 Audio Files Generated: {len([r for r in audio_results if r.get('success')])}")
+
+        # Run retention cleanup using WebConfig settings
+        if self.retention_manager:
+            try:
+                self.logger.info("🧹 Running retention cleanup...")
+                cleanup_stats = self.retention_manager.cleanup_all(dry_run=self.dry_run)
+                if cleanup_stats.files_deleted > 0 or cleanup_stats.github_releases_deleted > 0:
+                    self.logger.info(f"   Cleaned up {cleanup_stats.files_deleted} files, {cleanup_stats.github_releases_deleted} GitHub releases")
+                    self.logger.info(f"   Freed {cleanup_stats.bytes_freed / (1024*1024):.1f} MB")
+                else:
+                    self.logger.info("   No files needed cleanup")
+            except Exception as e:
+                self.logger.warning(f"⚠️  Retention cleanup failed: {e}")
 
         self.logger.info(f"\n📋 Log File: {self.log_file}")
         self.logger.info("🚀 Pipeline orchestration completed successfully!")
