@@ -24,7 +24,12 @@
   <!-- Live Status (SSE + Phase Indicator) -->
   <div class="mt-4 border rounded p-3" x-data="phaseRunner({{ 'true' if autostream else 'false' }}, '{{ stream_file or '' }}')">
     <div class="flex items-center justify-between">
-      <h3 class="font-semibold">Live Status</h3>
+      <div>
+        <h3 class="font-semibold">Live Status</h3>
+        <div class="text-sm text-gray-600 mt-1" x-show="currentLogFile">
+          <span class="font-mono" x-text="currentLogFile"></span>
+        </div>
+      </div>
       <div class="space-x-2">
         <button class="bg-gray-700 text-white px-3 py-1 rounded" x-show="!running" @click="start()">Start</button>
         <button class="bg-gray-400 text-white px-3 py-1 rounded" x-show="running" @click="stop()">Stop</button>
@@ -52,6 +57,7 @@
         es: null,
         running: false,
         lines: '',
+        currentLogFile: fileName || null,
         phases: [
           { key: 'discovery', label: 'Discovery', state: 'pending' },
           { key: 'audio', label: 'Audio', state: 'pending' },
@@ -118,6 +124,15 @@
         start() {
           this.reset();
           const url = fileName ? `/logs/stream?file=${encodeURIComponent(fileName)}` : '/logs/stream';
+
+          // Update current log file display
+          if (fileName) {
+            // Show just the filename, not the full path
+            this.currentLogFile = fileName.includes('/') ? fileName.split('/').pop() : fileName;
+          } else {
+            this.currentLogFile = 'Latest log file';
+          }
+
           this.es = new EventSource(url);
           this.running = true;
           this.es.onmessage = (e) => { this.lines += e.data + '\n'; this.parse(e.data); this.$nextTick(() => { if (this.$refs.log) this.$refs.log.scrollTop = this.$refs.log.scrollHeight; }); };

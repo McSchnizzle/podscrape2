@@ -14,7 +14,9 @@ from pathlib import Path
 import argparse
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'src'))
 
 # Set up environment
 from dotenv import load_dotenv
@@ -24,40 +26,45 @@ require_database_url()
 
 from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
+from src.utils.logging_config import setup_phase_logging
 
 class AudioProcessor_Runner:
     """Audio download and transcription phase"""
 
     def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        level = logging.DEBUG if verbose else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("audio", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
 
         self.dry_run = dry_run
         self.limit = limit
         self.verbose = verbose
 
-        # Initialize repositories and components
+        # Initialize repositories and components - with explicit cleanup tracking
         self.episode_repo = get_episode_repo()
+        self._db_connections = [self.episode_repo]  # Track for cleanup
 
         # Verify dependencies
         self._verify_dependencies()
 
-        # Initialize Web UI config for audio settings
+        # Initialize Web UI config for audio settings - minimize database usage
+        chunk_minutes = 3
         try:
             from src.config.web_config import WebConfigManager
-            self.web_config = WebConfigManager()
-        except Exception:
-            self.web_config = None
-
-        # Resolve audio processing settings
-        chunk_minutes = 3
-        if self.web_config:
+            # Use a single config lookup and close immediately
+            web_config = WebConfigManager()
             try:
-                chunk_minutes = int(self.web_config.get_setting('audio_processing', 'chunk_duration_minutes', 3))
+                chunk_minutes = int(web_config.get_setting('audio_processing', 'chunk_duration_minutes', 3))
             except Exception:
                 pass
+            # Explicitly cleanup web config connection
+            try:
+                web_config.close()
+            except (AttributeError, Exception):
+                pass
+            del web_config  # Explicit cleanup
+        except Exception:
+            pass
 
         self.audio_processor = AudioProcessor(chunk_duration_minutes=chunk_minutes)
 
@@ -67,7 +74,7 @@ class AudioProcessor_Runner:
             from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
             self.transcriber = create_openai_whisper_transcriber(chunk_duration_minutes=chunk_minutes)
 
-        self.logger.info("Audio processing initialized")
+        self.pipeline_logger.log_phase_start("Audio download and transcription processing")
 
     def _verify_dependencies(self):
         """Verify required dependencies"""
@@ -95,6 +102,25 @@ class AudioProcessor_Runner:
             raise Exception("FFmpeg not available")
 
         self.logger.info("✅ Dependencies verified")
+
+    def cleanup(self):
+        """Cleanup database connections and resources"""
+        try:
+            for connection in getattr(self, '_db_connections', []):
+                try:
+                    if hasattr(connection, 'close'):
+                        connection.close()
+                except Exception:
+                    pass
+            self._db_connections = []
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
 
     def process_episodes(self, episodes_data):
         """Process audio for episodes from discovery phase or direct input"""
@@ -172,6 +198,13 @@ class AudioProcessor_Runner:
                         'error': result['error']
                     })
 
+                # Force cleanup after each episode to prevent resource accumulation
+                try:
+                    import gc
+                    gc.collect()  # Force garbage collection
+                except Exception:
+                    pass
+
             except Exception as e:
                 self.logger.error(f"Failed to process episode {episode_data['title']}: {e}")
                 failed_episodes.append({
@@ -237,12 +270,23 @@ class AudioProcessor_Runner:
             # Apply transcription limits
             transcribe_all = True
             max_chunks = None
-            if self.web_config:
+            try:
+                from src.config.web_config import WebConfigManager
+                # Use a single config lookup and close immediately
+                web_config = WebConfigManager()
                 try:
-                    transcribe_all = bool(self.web_config.get_setting('audio_processing', 'transcribe_all_chunks', True))
-                    max_chunks = int(self.web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3))
+                    transcribe_all = bool(web_config.get_setting('audio_processing', 'transcribe_all_chunks', True))
+                    max_chunks = int(web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3))
                 except Exception:
                     pass
+                # Explicitly cleanup web config connection
+                try:
+                    web_config.close()
+                except (AttributeError, Exception):
+                    pass
+                del web_config  # Explicit cleanup
+            except Exception:
+                pass
 
             if not transcribe_all and isinstance(max_chunks, int) and max_chunks > 0:
                 if len(chunk_paths) > max_chunks:
@@ -372,33 +416,33 @@ def main():
     args = parser.parse_args()
 
     try:
-        runner = AudioProcessor_Runner(
+        with AudioProcessor_Runner(
             dry_run=args.dry_run,
             limit=args.limit,
             verbose=args.verbose
-        )
+        ) as runner:
 
-        # Handle input
-        if args.input:
-            if args.input.endswith('.json') or '/' in args.input:
-                # JSON file input
-                episodes_data = args.input
+            # Handle input
+            if args.input:
+                if args.input.endswith('.json') or '/' in args.input:
+                    # JSON file input
+                    episodes_data = args.input
+                else:
+                    # Single episode GUID
+                    episodes_data = {
+                        'success': True,
+                        'episodes': [{
+                            'guid': args.input,
+                            'title': 'Manual Episode',
+                            'mode': 'resume'
+                        }]
+                    }
             else:
-                # Single episode GUID
-                episodes_data = {
-                    'success': True,
-                    'episodes': [{
-                        'guid': args.input,
-                        'title': 'Manual Episode',
-                        'mode': 'resume'
-                    }]
-                }
-        else:
-            # Read from stdin
-            import sys
-            episodes_data = json.load(sys.stdin)
+                # Read from stdin
+                import sys
+                episodes_data = json.load(sys.stdin)
 
-        result = runner.process_episodes(episodes_data)
+            result = runner.process_episodes(episodes_data)
 
         # Output JSON
         if args.output:

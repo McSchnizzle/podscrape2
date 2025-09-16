@@ -58,7 +58,9 @@ def create_app():
     # Utility: start a background maintenance task that writes to a dedicated log
     def _start_maintenance_task(name: str, worker_func):
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_path = PROJECT_ROOT / f'maintenance_{name}_{ts}.log'
+        logs_dir = PROJECT_ROOT / 'data' / 'logs'
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f'maintenance_{name}_{ts}.log'
         try:
             with open(log_path, 'a', encoding='utf-8') as fh:
                 fh.write(f"[web-ui] Starting maintenance: {name} at {datetime.now().isoformat()}\n")
@@ -70,15 +72,38 @@ def create_app():
         return log_path
 
     def _find_latest_log():
-        # Search only for full pipeline logs in project root
-        logs = sorted(PROJECT_ROOT.glob('pipeline_run_*.log'), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Search for pipeline logs in data/logs directory and project root
+        logs_dir = PROJECT_ROOT / 'data' / 'logs'
+        patterns = ['pipeline_run_*.log']
+        logs = []
+
+        # Search in data/logs directory
+        if logs_dir.exists():
+            for pattern in patterns:
+                logs.extend(logs_dir.glob(pattern))
+
+        # Also search in project root for backwards compatibility
+        for pattern in patterns:
+            logs.extend(PROJECT_ROOT.glob(pattern))
+
+        # Sort by modification time, most recent first
+        logs = sorted(logs, key=lambda p: p.stat().st_mtime, reverse=True)
         return logs[0] if logs else None
 
     def _list_recent_logs(limit=10):
         pats = ['pipeline_run_*.log', 'publishing_pipeline_*.log']
+        logs_dir = PROJECT_ROOT / 'data' / 'logs'
         logs = []
+
+        # Search in data/logs directory
+        if logs_dir.exists():
+            for pat in pats:
+                logs.extend(logs_dir.glob(pat))
+
+        # Also search in project root for backwards compatibility
         for pat in pats:
             logs.extend(PROJECT_ROOT.glob(pat))
+
         logs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return logs[:limit]
 
@@ -332,9 +357,11 @@ def create_app():
         # Last run info (from latest log)
         latest_log = _find_latest_log()
         last_run = None
+        latest_log_name = None
         if latest_log:
             # Build best-effort metadata; don't block summary if stat fails
             last_run = {'name': latest_log.name, 'path': str(latest_log)}
+            latest_log_name = latest_log.name
             try:
                 last_run.update({
                     'modified': datetime.fromtimestamp(latest_log.stat().st_mtime).isoformat(timespec='seconds'),
@@ -528,7 +555,7 @@ def create_app():
         # Auto-start stream if requested
         from flask import request as _req
         autostream = bool(_req.args.get('autostream'))
-        stream_file = _req.args.get('stream_file')
+        stream_file = _req.args.get('stream_file') or latest_log_name
 
         return render_template('dashboard.html', settings=settings, last_run=last_run,
                                rss_items=rss_items, undigested=undigested, failed_eps=failed_eps,
@@ -977,14 +1004,17 @@ def create_app():
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         # Build command safely without relying on shell tools like `timeout`
         if kind == 'full':
-            log_path = PROJECT_ROOT / f'pipeline_run_{ts}.log'
+            # Create log file in data/logs directory
+            logs_dir = PROJECT_ROOT / 'data' / 'logs'
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            log_path = logs_dir / f'pipeline_run_{ts}.log'
             # Pre-create the log file to ensure SSE can attach immediately
             try:
                 log_path.touch(exist_ok=True)
             except Exception:
                 pass
             # Use orchestrator for phase-by-phase execution (needed for CI/CD)
-            cmd_args = [sys.executable, 'run_full_pipeline_orchestrator.py', '--log', log_path.name]
+            cmd_args = [sys.executable, 'run_full_pipeline_orchestrator.py', '--log', str(log_path)]
             if phase:
                 cmd_args.extend(['--phase', phase])
         else:
@@ -1261,7 +1291,52 @@ def create_app():
         except Exception as e:
             flash(f'Failed to undigest episode: {e}', 'error')
         return redirect(url_for('episodes_admin'))
-    
+
+    @app.post('/episodes/<int:episode_id>/reset_to_pending')
+    def episode_reset_to_pending(episode_id: int):
+        try:
+            ep = episode_repo.get_by_id(episode_id)
+            if not ep:
+                flash('Episode not found', 'error')
+                return redirect(url_for('episodes_admin'))
+
+            # Delete transcript files if they exist
+            deleted_files = []
+            tpath = getattr(ep, 'transcript_path', None)
+            if tpath and os.path.exists(tpath):
+                try:
+                    Path(tpath).unlink()
+                    deleted_files.append(str(tpath))
+                except Exception as e:
+                    flash(f'Warning: Failed to delete transcript file {tpath}: {e}', 'warning')
+
+            # Also delete progress files
+            transcript_dir = Path("data/transcripts")
+            episode_guid = ep.episode_guid
+            progress_file = transcript_dir / f"{episode_guid}-progress.txt"
+            if progress_file.exists():
+                try:
+                    progress_file.unlink()
+                    deleted_files.append(str(progress_file))
+                except Exception as e:
+                    flash(f'Warning: Failed to delete progress file: {e}', 'warning')
+
+            # Clear transcript path from database
+            if tpath:
+                episode_repo.update_transcript_path(ep.id, None)
+
+            # Reset status to pending
+            episode_repo.update_status_by_id(ep.id, 'pending')
+
+            if deleted_files:
+                flash(f'Episode reset to pending. Deleted {len(deleted_files)} transcript file(s).', 'success')
+            else:
+                flash('Episode reset to pending.', 'success')
+
+        except Exception as e:
+            flash(f'Failed to reset episode to pending: {e}', 'error')
+        return redirect(url_for('episodes_admin'))
+
 
     # --------------
     # Logs
@@ -1287,9 +1362,16 @@ def create_app():
             from pathlib import Path as _P
             base = _P(file_arg).name
             if base.startswith(('pipeline_run_', 'publishing_pipeline_', 'maintenance_')) and base.endswith('.log'):
-                candidate = PROJECT_ROOT / base
+                # First try data/logs directory
+                logs_dir = PROJECT_ROOT / 'data' / 'logs'
+                candidate = logs_dir / base
                 if candidate.exists():
                     latest = candidate
+                else:
+                    # Fallback to project root for backwards compatibility
+                    candidate = PROJECT_ROOT / base
+                    if candidate.exists():
+                        latest = candidate
         if latest is None:
             latest = _find_latest_log()
             if not latest or not latest.exists():
@@ -1323,7 +1405,9 @@ def create_app():
     @app.post('/maintenance/repair_publishing')
     def repair_publishing():
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_path = PROJECT_ROOT / f'maintenance_repair_publishing_{ts}.log'
+        logs_dir = PROJECT_ROOT / 'data' / 'logs'
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f'maintenance_repair_publishing_{ts}.log'
         try:
             with open(log_path, 'a', encoding='utf-8') as fh:
                 fh.write(f"[web-ui] Launching: python3 scripts/run_publishing.py -v\n")
