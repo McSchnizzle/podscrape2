@@ -71,6 +71,10 @@
             <form method="post" action="/episodes/{{ ep.id }}/undigest" class="inline">
               <button class="text-blue-700 text-xs" type="submit" title="Reset to scored and restore transcript if archived">Reset to Scored</button>
             </form>
+            <span class="text-gray-400 text-xs mx-1">|</span>
+            <form method="post" action="/episodes/{{ ep.id }}/reset_to_pending" class="inline">
+              <button class="text-orange-700 text-xs" type="submit" title="Reset to pending and delete transcript files" onclick="return confirm('This will delete transcript files. Are you sure?')">Reset to Pending</button>
+            </form>
           </td>
         </tr>
         {% else %}

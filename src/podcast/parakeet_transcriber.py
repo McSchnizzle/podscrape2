@@ -153,13 +153,13 @@ class ParakeetTranscriber:
             for i, chunk_path in enumerate(audio_chunks):
                 chunk_start_time = i * self.chunk_duration_seconds
                 chunk_result = self._transcribe_chunk(
-                    chunk_path, 
-                    chunk_number=i+1, 
+                    chunk_path,
+                    chunk_number=i+1,
                     start_time=chunk_start_time
                 )
                 transcription_chunks.append(chunk_result)
                 total_processing_time += chunk_result.processing_time_seconds
-                
+
                 logger.debug(f"Transcribed chunk {i+1}/{len(audio_chunks)}: {len(chunk_result.text)} chars")
             
             # Combine all chunks into full transcript

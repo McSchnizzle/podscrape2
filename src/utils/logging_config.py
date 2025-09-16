@@ -259,31 +259,185 @@ def enable_debug_logging():
     debug_logger = logging.getLogger('debug')
     debug_logger.info("Debug logging enabled")
 
-def cleanup_old_logs(log_dir: str = None, days_to_keep: int = 30):
-    """Clean up log files older than specified days"""
+def cleanup_old_logs(log_dir: str = None, days_to_keep: int = 3):
+    """Clean up log files older than specified days (default: 3 days)"""
     if log_dir is None:
         project_root = Path(__file__).parent.parent.parent
-        log_dir = project_root / 'data' / 'logs'
-    
+        log_dir = project_root / 'logs'  # Changed to top-level logs directory
+
     log_dir = Path(log_dir)
     if not log_dir.exists():
         return
-    
+
     logger = get_logger(__name__)
     current_time = time.time()
     cutoff_time = current_time - (days_to_keep * 24 * 60 * 60)
-    
+
     cleaned_count = 0
     for log_file in log_dir.glob('*.log*'):
         if log_file.stat().st_mtime < cutoff_time:
             try:
                 log_file.unlink()
                 cleaned_count += 1
+                print(f"🗑️  Cleaned up old log: {log_file.name}")
             except Exception as e:
                 logger.warning(f"Failed to delete old log file {log_file}: {e}")
-    
+
     if cleaned_count > 0:
         logger.info(f"Cleaned up {cleaned_count} old log files")
+
+
+class PipelineLogger:
+    """Phase-specific logging for pipeline operations"""
+
+    def __init__(self, phase_name: str, verbose: bool = False, console_output: bool = True):
+        """
+        Initialize logging for a specific pipeline phase.
+
+        Args:
+            phase_name: Name of the phase (e.g., 'orchestrator', 'discovery', 'audio', etc.)
+            verbose: Enable debug logging
+            console_output: Enable console output in addition to file logging
+        """
+        self.phase_name = phase_name
+        self.verbose = verbose
+        self.console_output = console_output
+
+        # Create logs directory at project root level
+        project_root = Path(__file__).parent.parent.parent
+        self.logs_dir = project_root / "logs"
+        self.logs_dir.mkdir(exist_ok=True)
+
+        # Clean up old logs (older than 3 days) at start
+        cleanup_old_logs(str(self.logs_dir), days_to_keep=3)
+
+        # Create phase-specific log file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = self.logs_dir / f"{phase_name}_{timestamp}.log"
+
+        # Configure logging
+        self._setup_logging()
+
+        # Create logger instance
+        self.logger = logging.getLogger(f"pipeline.{phase_name}")
+
+    def _setup_logging(self):
+        """Setup logging configuration for this phase"""
+        # Clear any existing handlers to avoid conflicts
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+
+        # Configure logging level
+        level = logging.DEBUG if self.verbose else logging.INFO
+
+        # Create formatters
+        detailed_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+
+        simple_formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+
+        # Create file handler for this phase
+        file_handler = logging.FileHandler(self.log_file, mode='w')
+        file_handler.setLevel(level)
+        file_handler.setFormatter(detailed_formatter)
+
+        # Create handlers list
+        handlers = [file_handler]
+
+        # Add console handler if requested
+        if self.console_output:
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(level)
+            console_handler.setFormatter(simple_formatter)
+            handlers.append(console_handler)
+
+        # Configure root logger
+        logging.basicConfig(
+            level=level,
+            handlers=handlers,
+            force=True
+        )
+
+    def get_logger(self) -> logging.Logger:
+        """Get the configured logger instance"""
+        return self.logger
+
+    def get_log_file(self) -> Path:
+        """Get the log file path"""
+        return self.log_file
+
+    def log_phase_start(self, description: str = ""):
+        """Log the start of a phase with formatting"""
+        self.logger.info("=" * 80)
+        self.logger.info(f"📋 PHASE: {self.phase_name.upper()}")
+        if description:
+            self.logger.info(f"📝 {description}")
+        self.logger.info("=" * 80)
+        self.logger.info(f"📁 Log file: {self.log_file}")
+
+    def log_phase_complete(self, success: bool = True, summary: str = ""):
+        """Log the completion of a phase"""
+        status = "✅ COMPLETED" if success else "❌ FAILED"
+        self.logger.info("=" * 80)
+        self.logger.info(f"🏁 {self.phase_name.upper()} {status}")
+        if summary:
+            self.logger.info(f"📊 {summary}")
+        self.logger.info("=" * 80)
+
+
+def setup_phase_logging(phase_name: str, verbose: bool = False, console_output: bool = True) -> PipelineLogger:
+    """
+    Convenience function to set up logging for a phase.
+
+    Args:
+        phase_name: Name of the phase
+        verbose: Enable debug logging
+        console_output: Enable console output
+
+    Returns:
+        PipelineLogger instance
+    """
+    return PipelineLogger(phase_name, verbose, console_output)
+
+
+def move_legacy_logs_to_logs_dir():
+    """Move existing log files to the logs directory"""
+    project_root = Path(__file__).parent.parent.parent
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(exist_ok=True)
+
+    # Find all .log files in the current directory
+    current_dir = project_root
+    moved_count = 0
+
+    for log_file in current_dir.glob("*.log"):
+        try:
+            target_path = logs_dir / log_file.name
+
+            # Avoid overwriting existing files
+            if target_path.exists():
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                stem = target_path.stem
+                suffix = target_path.suffix
+                target_path = logs_dir / f"{stem}_moved_{timestamp}{suffix}"
+
+            log_file.rename(target_path)
+            moved_count += 1
+            print(f"📁 Moved log: {log_file.name} → logs/{target_path.name}")
+
+        except Exception as e:
+            print(f"⚠️  Failed to move {log_file}: {e}")
+
+    if moved_count > 0:
+        print(f"✅ Moved {moved_count} log files to logs/ directory")
+    else:
+        print("ℹ️  No legacy log files found to move")
 
 # Application-specific loggers
 def get_database_logger() -> logging.Logger:

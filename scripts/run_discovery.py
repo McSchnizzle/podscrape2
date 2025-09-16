@@ -45,15 +45,20 @@ except ImportError:
 import feedparser
 import requests
 
+# Import centralized logging
+try:
+    from src.utils.logging_config import setup_phase_logging
+except ImportError:
+    from utils.logging_config import setup_phase_logging
+
 class DiscoveryRunner:
     """RSS feed discovery phase"""
 
     def __init__(self, dry_run: bool = False, limit: int = None, days_back: int = 7,
                  episode_guid: str = None, verbose: bool = False):
-        # Configure logging
-        self.logger = logging.getLogger(__name__)
-        level = logging.DEBUG if verbose else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up phase-specific logging
+        self.pipeline_logger = setup_phase_logging("discovery", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
 
         self.dry_run = dry_run
         self.episode_guid = episode_guid

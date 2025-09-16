@@ -24,6 +24,9 @@ load_dotenv()
 from src.config.env import require_database_url
 require_database_url()
 
+# Import centralized logging
+from utils.logging_config import setup_phase_logging, move_legacy_logs_to_logs_dir
+
 class PipelineOrchestrator:
     """
     Orchestrates the complete pipeline by calling individual phase scripts
@@ -32,29 +35,15 @@ class PipelineOrchestrator:
     def __init__(self, log_file: str = None, phase_stop: str = None, dry_run: bool = False,
                  limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False):
 
-        # Set up logging
-        if log_file is None:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_file = f"pipeline_orchestrator_{timestamp}.log"
+        # Move legacy logs on first run
+        move_legacy_logs_to_logs_dir()
 
-        # Configure logging to both console and file
-        handlers = [logging.FileHandler(log_file)]
-        try:
-            if sys.stdout.isatty():
-                handlers.append(logging.StreamHandler(sys.stdout))
-        except Exception:
-            pass
-
-        logging.basicConfig(
-            level=logging.DEBUG if verbose else logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=handlers
-        )
-
-        self.logger = logging.getLogger(__name__)
+        # Set up centralized logging
+        self.pipeline_logger = setup_phase_logging("orchestrator", verbose=verbose, console_output=True)
+        self.logger = self.pipeline_logger.get_logger()
+        self.log_file = str(self.pipeline_logger.get_log_file())
 
         # Store configuration
-        self.log_file = log_file
         self.phase_stop = phase_stop
         self.dry_run = dry_run
         self.limit = limit
@@ -62,13 +51,11 @@ class PipelineOrchestrator:
         self.episode_guid = episode_guid
         self.verbose = verbose
 
-        # Script paths - phase scripts are in the root directory
+        # Script paths - phase scripts are in the scripts directory
         self.scripts_dir = Path(__file__).parent
 
-        self.logger.info("="*100)
-        self.logger.info("FULL RSS PODCAST PIPELINE ORCHESTRATOR")
-        self.logger.info("="*100)
-        self.logger.info(f"Logging to: {log_file}")
+        # Log orchestrator start
+        self.pipeline_logger.log_phase_start("Full RSS Podcast Pipeline Orchestrator")
 
         # Log configuration
         if self.dry_run:
@@ -92,19 +79,19 @@ class PipelineOrchestrator:
         # Build command
         cmd = ['python3', str(script_path)]
 
-        # Add JSON output flag for orchestrator compatibility
-        cmd.append('--json-output')
+        # Add output flag for orchestrator compatibility - use stdout
+        # (no need to specify --output since default is stdout)
 
         # Add common flags
         if self.dry_run:
             cmd.append('--dry-run')
-        if self.limit and script_name != 'run_discovery.py':  # Discovery has its own limit handling
+        if self.limit and script_name != 'scripts/run_discovery.py':  # Discovery has its own limit handling
             cmd.extend(['--limit', str(self.limit)])
         if self.verbose:
             cmd.append('--verbose')
 
         # Add script-specific flags
-        if script_name == 'run_discovery.py':
+        if script_name == 'scripts/run_discovery.py':
             if self.days_back:
                 cmd.extend(['--days-back', str(self.days_back)])
             if self.episode_guid:
@@ -224,7 +211,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 1: EPISODE DISCOVERY")
             self.logger.info("="*80)
 
-            discovery_result = self.run_phase_script('run_discovery.py')
+            discovery_result = self.run_phase_script('scripts/run_discovery.py')
 
             if not discovery_result.get('success'):
                 self.logger.error(f"Discovery phase failed: {discovery_result.get('error')}")
@@ -245,7 +232,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 2: AUDIO PROCESSING")
             self.logger.info("="*80)
 
-            audio_result = self.run_phase_script('run_audio.py', discovery_result)
+            audio_result = self.run_phase_script('scripts/run_audio.py', discovery_result)
 
             if not audio_result.get('success'):
                 self.logger.error(f"Audio phase failed: {audio_result.get('error')}")
@@ -263,7 +250,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 3: CONTENT SCORING")
             self.logger.info("="*80)
 
-            scoring_result = self.run_phase_script('run_scoring.py', audio_result)
+            scoring_result = self.run_phase_script('scripts/run_scoring.py', audio_result)
 
             if not scoring_result.get('success'):
                 self.logger.error(f"Scoring phase failed: {scoring_result.get('error')}")
@@ -281,7 +268,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 4: DIGEST GENERATION")
             self.logger.info("="*80)
 
-            digest_result = self.run_phase_script('run_digest.py', scoring_result)
+            digest_result = self.run_phase_script('scripts/run_digest.py', scoring_result)
 
             if not digest_result.get('success'):
                 self.logger.error(f"Digest phase failed: {digest_result.get('error')}")
@@ -299,7 +286,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 5: TTS AUDIO GENERATION")
             self.logger.info("="*80)
 
-            tts_result = self.run_phase_script('run_tts.py', digest_result)
+            tts_result = self.run_phase_script('scripts/run_tts.py', digest_result)
 
             if not tts_result.get('success'):
                 self.logger.error(f"TTS phase failed: {tts_result.get('error')}")

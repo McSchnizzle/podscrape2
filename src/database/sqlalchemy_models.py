@@ -82,6 +82,7 @@ class Digest(Base):
     id = Column(Integer, primary_key=True)
     topic = Column(String(256), nullable=False)
     digest_date = Column(Date, nullable=False)
+    digest_timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(UTC))
     script_path = Column(String(4096))
     script_word_count = Column(Integer)
     mp3_path = Column(String(4096))
@@ -96,7 +97,8 @@ class Digest(Base):
     generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
-        UniqueConstraint("topic", "digest_date", name="uq_digests_topic_date"),
+        UniqueConstraint("topic", "digest_date", "digest_timestamp", name="uq_digests_topic_date_timestamp"),
         Index("ix_digests_date", "digest_date"),
+        Index("ix_digests_timestamp", "digest_timestamp"),
     )
 

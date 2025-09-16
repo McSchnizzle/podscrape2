@@ -47,8 +47,11 @@ def report_phase_result(
             result.update(metadata)
 
         # Output JSON to stdout (orchestrator reads this)
-        print(json.dumps(result))
-        sys.stdout.flush()
+        try:
+            print(json.dumps(result), flush=True)
+            sys.stdout.flush()
+        except Exception as e:
+            logger.warning(f"Failed to output JSON result: {e}")
 
         logger.debug(f"JSON output generated for {phase_name} phase: success={success}")
 

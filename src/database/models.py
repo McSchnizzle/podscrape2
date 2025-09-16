@@ -66,6 +66,7 @@ class Digest:
     """Topic-based digest model - dataclass for API compatibility"""
     topic: str
     digest_date: date
+    digest_timestamp: Optional[datetime] = None
     script_path: Optional[str] = None
     script_word_count: Optional[int] = None
     mp3_path: Optional[str] = None
@@ -590,9 +591,13 @@ class DigestRepository:
         """Create new digest and return ID"""
         with self.db.get_session() as session:
             try:
+                # Use provided timestamp or generate new one
+                digest_timestamp = digest.digest_timestamp or datetime.now(UTC)
+
                 digest_model = DigestModel(
                     topic=digest.topic,
                     digest_date=digest.digest_date,
+                    digest_timestamp=digest_timestamp,
                     episode_ids=digest.episode_ids,
                     episode_count=digest.episode_count,
                     script_path=digest.script_path,
@@ -753,6 +758,7 @@ class DigestRepository:
             id=model.id,
             topic=model.topic,
             digest_date=model.digest_date,
+            digest_timestamp=model.digest_timestamp,
             script_path=model.script_path,
             script_word_count=model.script_word_count,
             mp3_path=model.mp3_path,

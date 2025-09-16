@@ -6,7 +6,7 @@ Generates topic-based digest scripts from scored episodes using GPT-5.
 import os
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, UTC
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 from openai import OpenAI
@@ -249,20 +249,22 @@ Thank you for your understanding, and we'll see you tomorrow!
         logger.info(f"Generated no-content script for {topic}: {word_count} words")
         return script, word_count
     
-    def save_script(self, topic: str, digest_date: date, content: str, word_count: int) -> str:
+    def save_script(self, topic: str, digest_date: date, content: str, word_count: int, digest_timestamp: datetime = None) -> str:
         """Save script to file and return file path"""
-        from datetime import datetime as _dt
-        timestamp = _dt.now().strftime('%Y%m%d_%H%M%S')
+        if digest_timestamp is None:
+            digest_timestamp = datetime.now(UTC)
+
+        timestamp = digest_timestamp.strftime('%Y%m%d_%H%M%S')
         filename = f"{topic.replace(' ', '_')}_{digest_date.strftime('%Y%m%d')}_{timestamp}.md"
         script_path = self.scripts_dir / filename
-        
+
         try:
             with open(script_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            
+
             logger.info(f"Saved script to: {script_path}")
             return str(script_path)
-            
+
         except Exception as e:
             logger.error(f"Failed to save script to {script_path}: {e}")
             raise ScriptGenerationError(f"Failed to save script: {e}")
@@ -274,49 +276,40 @@ Thank you for your understanding, and we'll see you tomorrow!
         Returns created Digest object.
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
-        
-        # Check if digest already exists (we will update it rather than returning early)
-        existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
-        
+
         # Find qualifying episodes
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)
         logger.info(f"Found {len(episodes)} qualifying episodes for {topic}")
-        
+
         # Generate script
         script_content, word_count = self.generate_script(topic, episodes, digest_date)
-        
-        # Save script to file
-        script_path = self.save_script(topic, digest_date, script_content, word_count)
-        
-        # Create or update digest in database
-        if existing_digest:
-            # Update existing
-            self.digest_repo.update_script(existing_digest.id, script_path, word_count)
-            existing_digest.script_path = script_path
-            existing_digest.script_word_count = word_count
-            return existing_digest
-        else:
-            # Create new digest
-            digest = Digest(
-                topic=topic,
-                digest_date=digest_date,
-                episode_ids=[ep.id for ep in episodes],
-                episode_count=len(episodes),
-                script_path=script_path,
-                script_word_count=word_count,
-                average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
-            )
-            
-            digest_id = self.digest_repo.create(digest)
-            digest.id = digest_id
-            
-            logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
-            
-            # TODO: Mark episodes as digested AFTER all daily digests are complete
-            # This allows episodes to appear in multiple topic digests
-            # self.mark_digest_episodes_as_digested(digest)
-            
-            return digest
+
+        # Save script to file with timestamp for uniqueness
+        digest_timestamp = datetime.now(UTC)
+        script_path = self.save_script(topic, digest_date, script_content, word_count, digest_timestamp)
+
+        # Create new digest (each run creates a unique digest with timestamp)
+        digest = Digest(
+            topic=topic,
+            digest_date=digest_date,
+            digest_timestamp=digest_timestamp,
+            episode_ids=[ep.id for ep in episodes],
+            episode_count=len(episodes),
+            script_path=script_path,
+            script_word_count=word_count,
+            average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
+        )
+
+        digest_id = self.digest_repo.create(digest)
+        digest.id = digest_id
+
+        logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
+
+        # TODO: Mark episodes as digested AFTER all daily digests are complete
+        # This allows episodes to appear in multiple topic digests
+        # self.mark_digest_episodes_as_digested(digest)
+
+        return digest
     
     def create_daily_digests(self, digest_date: date, 
                             start_date: date = None, end_date: date = None) -> List[Digest]:
