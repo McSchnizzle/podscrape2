@@ -855,7 +855,7 @@ def create_app():
                     'mp3_duration_seconds': digest.mp3_duration_seconds,
                     'github_url': digest.github_url
                 }
-                from run_publishing_pipeline import PublishingPipelineRunner
+                from scripts.run_publishing import PublishingPipelineRunner
                 runner = PublishingPipelineRunner()
                 with open(log_path, 'a', encoding='utf-8') as fh:
                     fh.write(f"Ensuring asset for digest {digest_id}: {d.get('topic')} {d.get('digest_date')}\n")
@@ -936,11 +936,12 @@ def create_app():
                     repo = os.getenv('GITHUB_REPOSITORY')
                     asset_url = f"https://github.com/{repo}/releases/download/daily-{digest.digest_date}/{Path(digest.mp3_path).name}"
                     from src.publishing.rss_generator import PodcastEpisode
+                    from src.utils.rss_timestamps import generate_unique_pubdate
                     ep = PodcastEpisode(
                         title=digest.mp3_title or f"{digest.topic} - {digest.digest_date}",
                         description=digest.mp3_summary or '',
                         audio_url=asset_url,
-                        pub_date=_dt.fromisoformat(str(digest.digest_date) + 'T12:00:00'),
+                        pub_date=generate_unique_pubdate(str(digest.digest_date), digest.topic),
                         duration_seconds=digest.mp3_duration_seconds or 0,
                         file_size=size,
                         guid=f"digest-{digest.digest_date}-{digest.topic.lower().replace(' ', '-')}"
@@ -982,24 +983,44 @@ def create_app():
                 log_path.touch(exist_ok=True)
             except Exception:
                 pass
-            cmd_args = [sys.executable, 'run_full_pipeline.py', '--log', log_path.name]
+            # Use orchestrator for phase-by-phase execution (needed for CI/CD)
+            cmd_args = [sys.executable, 'run_full_pipeline_orchestrator.py', '--log', log_path.name]
             if phase:
                 cmd_args.extend(['--phase', phase])
         else:
             # Publishing: do not create a separate log file; stream main console output only
             log_path = None
-            cmd_args = [sys.executable, 'run_publishing_pipeline.py', '-v']
+            cmd_args = [sys.executable, 'scripts/run_publishing.py', '-v']
         try:
             extra_env = os.environ.copy()
             extra_env.setdefault('PYTHONUNBUFFERED', '1')
+            # Ensure PYTHONPATH includes src directory for consistency
+            src_path = str(PROJECT_ROOT / 'src')
+            current_pythonpath = extra_env.get('PYTHONPATH', '')
+            if current_pythonpath:
+                extra_env['PYTHONPATH'] = f"{src_path}:{current_pythonpath}"
+            else:
+                extra_env['PYTHONPATH'] = src_path
             if log_path is not None:
                 # Capture stdout/stderr into the log file so early import errors are visible
                 with open(log_path, 'a', encoding='utf-8', errors='ignore') as fh:
                     fh.write(f"[web-ui] Launching: {' '.join(cmd_args)}\n")
                     fh.flush()
-                    subprocess.Popen(cmd_args, cwd=str(PROJECT_ROOT), stdout=fh, stderr=fh, env=extra_env)
+                    subprocess.Popen(
+                        cmd_args,
+                        cwd=str(PROJECT_ROOT),
+                        stdout=fh,
+                        stderr=fh,
+                        env=extra_env,
+                        preexec_fn=os.setsid  # Create new process group for clean signal handling
+                    )
             else:
-                subprocess.Popen(cmd_args, cwd=str(PROJECT_ROOT), env=extra_env)
+                subprocess.Popen(
+                    cmd_args,
+                    cwd=str(PROJECT_ROOT),
+                    env=extra_env,
+                    preexec_fn=os.setsid  # Create new process group for clean signal handling
+                )
             if log_path:
                 flash(f'Started {kind} pipeline. Logging to {log_path.name}', 'success')
             else:
@@ -1305,12 +1326,12 @@ def create_app():
         log_path = PROJECT_ROOT / f'maintenance_repair_publishing_{ts}.log'
         try:
             with open(log_path, 'a', encoding='utf-8') as fh:
-                fh.write(f"[web-ui] Launching: {sys.executable} run_publishing_pipeline.py -v\n")
+                fh.write(f"[web-ui] Launching: python3 scripts/run_publishing.py -v\n")
                 fh.flush()
                 extra_env = os.environ.copy()
                 extra_env.setdefault('PYTHONUNBUFFERED', '1')
                 import subprocess
-                subprocess.Popen([sys.executable, 'run_publishing_pipeline.py', '-v'], cwd=str(PROJECT_ROOT), stdout=fh, stderr=fh, env=extra_env)
+                subprocess.Popen(['python3', 'scripts/run_publishing.py', '-v'], cwd=str(PROJECT_ROOT), stdout=fh, stderr=fh, env=extra_env)
         except Exception as e:
             try:
                 with open(log_path, 'a', encoding='utf-8') as fh:

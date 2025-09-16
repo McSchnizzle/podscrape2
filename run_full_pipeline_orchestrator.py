@@ -62,8 +62,8 @@ class PipelineOrchestrator:
         self.episode_guid = episode_guid
         self.verbose = verbose
 
-        # Script paths
-        self.scripts_dir = Path(__file__).parent / 'scripts'
+        # Script paths - phase scripts are in the root directory
+        self.scripts_dir = Path(__file__).parent
 
         self.logger.info("="*100)
         self.logger.info("FULL RSS PODCAST PIPELINE ORCHESTRATOR")
@@ -91,6 +91,9 @@ class PipelineOrchestrator:
 
         # Build command
         cmd = ['python3', str(script_path)]
+
+        # Add JSON output flag for orchestrator compatibility
+        cmd.append('--json-output')
 
         # Add common flags
         if self.dry_run:
@@ -120,42 +123,92 @@ class PipelineOrchestrator:
             # Prepare input data
             input_json = None
             if input_data is not None:
-                input_json = json.dumps(input_data).encode('utf-8')
+                input_json = json.dumps(input_data)
 
-            # Run the script
-            result = subprocess.run(
+            # Run the script with real-time output streaming
+            process = subprocess.Popen(
                 cmd,
-                input=input_json,
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # Combine stderr with stdout
                 text=True,
-                timeout=1800  # 30 minute timeout
+                bufsize=1,  # Line buffered
+                universal_newlines=True
             )
 
-            # Parse output
-            if result.returncode == 0:
-                try:
-                    output_data = json.loads(result.stdout)
-                    self.logger.info(f"✅ Phase completed successfully")
-                    return output_data
-                except json.JSONDecodeError:
-                    self.logger.error(f"Invalid JSON output from {script_name}")
-                    self.logger.error(f"stdout: {result.stdout}")
-                    self.logger.error(f"stderr: {result.stderr}")
-                    return {'success': False, 'error': 'Invalid JSON output'}
-            else:
-                self.logger.error(f"❌ Phase failed with exit code {result.returncode}")
-                self.logger.error(f"stderr: {result.stderr}")
-                if result.stdout:
-                    try:
-                        error_data = json.loads(result.stdout)
-                        return error_data
-                    except json.JSONDecodeError:
-                        pass
-                return {'success': False, 'error': f'Script failed: {result.stderr}'}
+            # Send input if provided
+            if input_json:
+                process.stdin.write(input_json)
+                process.stdin.close()
 
-        except subprocess.TimeoutExpired:
-            self.logger.error(f"❌ Phase timed out after 30 minutes")
-            return {'success': False, 'error': 'Script timed out'}
+            # Stream output in real-time without timeout
+            # For production: audio processing of multi-hour podcasts cannot have arbitrary time limits
+            stdout_lines = []
+            json_output = None
+
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+
+                if line:
+                    line = line.rstrip()
+                    stdout_lines.append(line)
+
+                    # Try to parse as JSON (for final output)
+                    if line.startswith('{') and line.endswith('}'):
+                        try:
+                            json_output = json.loads(line)
+                        except json.JSONDecodeError:
+                            pass
+
+                    # Stream progress to log (filter out JSON output lines)
+                    if not (line.startswith('{') and line.endswith('}')):
+                        # Only show logs from script, not JSON output
+                        if any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG']):
+                            self.logger.info(f"  {line}")
+                    else:
+                        # This is likely JSON output - don't log it but ensure we capture it
+                        self.logger.debug(f"Captured potential JSON output: {line[:100]}...")
+
+            # Wait for process to complete
+            return_code = process.wait()
+
+            # Parse final output
+            if return_code == 0:
+                if json_output:
+                    self.logger.info(f"✅ Phase completed successfully")
+                    return json_output
+                else:
+                    # Try to find JSON in the last few lines
+                    for line in reversed(stdout_lines[-10:]):
+                        if line.startswith('{') and line.endswith('}'):
+                            try:
+                                json_output = json.loads(line)
+                                self.logger.info(f"✅ Phase completed successfully")
+                                return json_output
+                            except json.JSONDecodeError:
+                                continue
+
+                    self.logger.error(f"No valid JSON output found from {script_name}")
+                    return {'success': False, 'error': 'No valid JSON output'}
+            else:
+                self.logger.error(f"❌ Phase failed with exit code {return_code}")
+                # Look for error JSON in output
+                for line in reversed(stdout_lines[-10:]):
+                    if line.startswith('{') and line.endswith('}'):
+                        try:
+                            error_data = json.loads(line)
+                            return error_data
+                        except json.JSONDecodeError:
+                            continue
+
+                return {'success': False, 'error': f'Script failed with exit code {return_code}'}
+
+        except subprocess.TimeoutExpired as e:
+            # This should not happen since we removed timeouts, but keep for subprocess.wait() calls
+            self.logger.error(f"❌ Phase subprocess timeout: {e}")
+            return {'success': False, 'error': f'Subprocess timeout: {e}'}
         except Exception as e:
             self.logger.error(f"❌ Phase failed with exception: {e}")
             return {'success': False, 'error': str(e)}
@@ -264,7 +317,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 6: PUBLISHING")
             self.logger.info("="*80)
 
-            publishing_result = self.run_phase_script('run_publishing.py')
+            publishing_result = self.run_phase_script('scripts/run_publishing.py')
 
             if not publishing_result.get('success'):
                 self.logger.warning(f"Publishing phase had issues: {publishing_result.get('error')}")

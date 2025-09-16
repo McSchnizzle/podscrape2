@@ -105,15 +105,36 @@ class AudioProcessor:
             
             # Download with progress tracking
             total_size = int(response.headers.get('content-length', 0))
+            total_size_mb = total_size / (1024 * 1024) if total_size > 0 else 0
+
             if expected_size and abs(total_size - expected_size) > expected_size * 0.1:
                 logger.warning(f"Size mismatch: expected {expected_size}, got {total_size}")
-            
+
+            logger.info(f"📥 Starting download: {total_size_mb:.1f}MB")
+
             downloaded_size = 0
+            last_log_mb = 0
+            download_start = datetime.now()
+
             with open(file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:  # Filter out keep-alive chunks
                         f.write(chunk)
                         downloaded_size += len(chunk)
+
+                        # Log progress every 5MB or at completion
+                        downloaded_mb = downloaded_size / (1024 * 1024)
+                        if (downloaded_mb - last_log_mb >= 5.0) or (total_size > 0 and downloaded_size >= total_size):
+                            if total_size > 0:
+                                progress = (downloaded_size / total_size) * 100
+                                logger.info(f"📥 Download progress: {downloaded_mb:.1f}MB / {total_size_mb:.1f}MB ({progress:.1f}%)")
+                            else:
+                                logger.info(f"📥 Download progress: {downloaded_mb:.1f}MB")
+                            last_log_mb = downloaded_mb
+
+            download_duration = (datetime.now() - download_start).total_seconds()
+            download_speed_mbps = (downloaded_size / (1024 * 1024)) / max(download_duration, 1)
+            logger.info(f"📥 Download completed: {downloaded_size / (1024 * 1024):.1f}MB in {download_duration:.1f}s ({download_speed_mbps:.1f} MB/s)")
             
             # Validate downloaded file
             if not self._validate_audio_file(file_path, expected_size):
@@ -135,7 +156,8 @@ class AudioProcessor:
             if file_path.exists():
                 file_path.unlink()
             raise PodcastError(error_msg) from e
-    
+
+
     def chunk_audio(self, audio_file_path: str, episode_guid: str) -> List[str]:
         """
         Split audio file into chunks for processing
@@ -174,17 +196,26 @@ class AudioProcessor:
             # Split into chunks using FFmpeg
             chunk_paths = []
             num_chunks = int((duration + self.chunk_duration_seconds - 1) // self.chunk_duration_seconds)
-            
+
+            # Resource monitoring - track file descriptors to detect leaks
+            initial_fds = 0
+            if os.path.exists('/proc/self/fd'):
+                initial_fds = len(os.listdir('/proc/self/fd'))
+                logger.info(f"🔍 Starting chunking with {initial_fds} open file descriptors")
+
             for chunk_num in range(num_chunks):
                 start_time = chunk_num * self.chunk_duration_seconds
                 chunk_filename = f"{episode_id}_chunk_{chunk_num+1:03d}.mp3"
                 chunk_path = chunk_episode_dir / chunk_filename
-                
+
+                logger.info(f"🔧 Processing chunk {chunk_num+1}/{num_chunks} (start: {start_time}s)")
+
                 # FFmpeg command to extract chunk
+                # CRITICAL: -ss BEFORE -i enables fast seeking, avoiding slow decode to seek point
                 cmd = [
                     'ffmpeg', '-y',  # -y to overwrite existing files
+                    '-ss', str(start_time),  # MOVED: Fast seek to start time
                     '-i', str(audio_path),
-                    '-ss', str(start_time),
                     '-t', str(self.chunk_duration_seconds),
                     '-acodec', 'libmp3lame',
                     '-ar', '16000',  # 16kHz sample rate for ASR
@@ -192,27 +223,56 @@ class AudioProcessor:
                     '-q:a', '2',     # High quality
                     str(chunk_path)
                 ]
-                
+
                 logger.debug(f"Running FFmpeg: {' '.join(cmd)}")
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                
-                if result.returncode != 0:
-                    error_msg = f"FFmpeg failed for chunk {chunk_num+1}: {result.stderr}"
+
+                chunk_start_time = datetime.now()
+
+                try:
+                    # Remove timeout and fix output buffering to prevent deadlock
+                    # FFmpeg is very verbose - capturing all output can fill OS pipe buffer
+                    result = subprocess.run(
+                        cmd,
+                        stdout=subprocess.DEVNULL,  # Don't capture verbose output
+                        stderr=subprocess.PIPE,     # Keep stderr for error messages
+                        text=True
+                        # NO timeout - let FFmpeg run as long as needed for large files
+                    )
+                    chunk_duration = (datetime.now() - chunk_start_time).total_seconds()
+
+                    if result.returncode != 0:
+                        error_msg = f"FFmpeg failed for chunk {chunk_num+1}: exit code {result.returncode}"
+                        if result.stderr:
+                            error_msg += f"\nSTDERR: {result.stderr[:500]}"
+                        logger.error(error_msg)
+                        raise PodcastError(error_msg)
+
+                except subprocess.CalledProcessError as e:
+                    error_msg = f"FFmpeg subprocess error for chunk {chunk_num+1}: {e}"
                     logger.error(error_msg)
                     raise PodcastError(error_msg)
-                
+
                 if not chunk_path.exists() or chunk_path.stat().st_size == 0:
                     logger.warning(f"Empty or missing chunk: {chunk_path}")
                     continue
-                
+
+                chunk_size_mb = chunk_path.stat().st_size / (1024 * 1024)
                 chunk_paths.append(str(chunk_path))
-                logger.debug(f"Created chunk {chunk_num+1}/{num_chunks}: {chunk_path}")
+
+                # Monitor resource usage after each chunk
+                current_fds = 0
+                if os.path.exists('/proc/self/fd'):
+                    current_fds = len(os.listdir('/proc/self/fd'))
+                    fd_delta = current_fds - initial_fds
+                    logger.info(f"✅ Chunk {chunk_num+1}/{num_chunks} completed: {chunk_size_mb:.1f}MB, {chunk_duration:.1f}s processing time, FDs={current_fds} (Δ{fd_delta:+d})")
+                else:
+                    logger.info(f"✅ Chunk {chunk_num+1}/{num_chunks} completed: {chunk_size_mb:.1f}MB, {chunk_duration:.1f}s processing time")
             
             logger.info(f"Successfully created {len(chunk_paths)} audio chunks for {episode_guid}")
             return chunk_paths
             
         except subprocess.CalledProcessError as e:
-            error_msg = f"Audio chunking failed for {episode_guid}: {e}"
+            error_msg = f"FFmpeg chunking subprocess error for {episode_guid}: {e}"
             logger.error(error_msg)
             raise PodcastError(error_msg) from e
         except Exception as e:
@@ -267,10 +327,16 @@ class AudioProcessor:
                 '-show_format', '-show_streams',
                 audio_file_path
             ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True
+                # Removed timeout - ffprobe should be fast but shouldn't fail on large files
+            )
             if result.returncode != 0:
-                logger.warning(f"FFprobe failed for {audio_file_path}: {result.stderr}")
+                logger.warning(f"FFprobe failed for {audio_file_path}: exit code {result.returncode}")
                 return {}
             
             import json
@@ -293,6 +359,9 @@ class AudioProcessor:
                 'channels': int(stream.get('channels', 0)),
                 'codec': stream.get('codec_name', 'unknown')
             }
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"FFprobe subprocess error for {audio_file_path}: {e}")
+            return {}
         except Exception as e:
             logger.warning(f"Could not get audio info for {audio_file_path}: {e}")
             return {}
@@ -331,13 +400,22 @@ class AudioProcessor:
                 '-of', 'csv=p=0',
                 audio_file_path
             ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True
+                # Removed timeout - ffprobe should be fast but shouldn't fail on large files
+            )
             if result.returncode == 0 and result.stdout.strip():
                 return float(result.stdout.strip())
             
             return 0.0
-            
+
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"FFprobe duration check subprocess error for {audio_file_path}: {e}")
+            return 0.0
         except Exception as e:
             logger.warning(f"Could not get audio duration for {audio_file_path}: {e}")
             return 0.0
