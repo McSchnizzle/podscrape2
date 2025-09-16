@@ -3,6 +3,17 @@
 Full Pipeline Command - Complete RSS to Digest Workflow
 Processes one new episode through the entire pipeline: RSS → Download → Transcribe → Score → Digest
 Designed for terminal execution with comprehensive logging to file.
+
+⚠️  DEPRECATION NOTICE: This monolithic implementation is being replaced by modular phase scripts.
+For new deployments, use run_full_pipeline_orchestrator.py which calls individual phase scripts:
+- scripts/run_discovery.py - RSS feed discovery
+- scripts/run_audio.py - Download + transcription
+- scripts/run_scoring.py - AI content scoring
+- scripts/run_digest.py - Script generation
+- scripts/run_tts.py - Audio generation
+- scripts/run_publishing.py - GitHub + RSS + Vercel
+
+This ensures DRY principle compliance - both daily pipeline and Web UI use identical implementations.
 """
 
 import os
@@ -10,6 +21,7 @@ import sys
 import logging
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from typing import Optional
 import argparse
 
 # Add src to path
@@ -31,6 +43,7 @@ from src.publishing.github_publisher import create_github_publisher
 from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata
 from src.publishing.retention_manager import create_retention_manager
 from src.publishing.vercel_deployer import create_vercel_deployer
+from src.utils.rss_timestamps import generate_unique_pubdate
 import feedparser
 
 class FullPipelineRunner:
@@ -69,6 +82,9 @@ class FullPipelineRunner:
         self.days_back = days_back
         self.episode_guid = episode_guid
         self.verbose = verbose
+
+        # Instance variable to store discovered episodes for orchestrator access
+        self.discovered_episodes = []
 
         # Adjust logging level if verbose
         if verbose:
@@ -407,9 +423,13 @@ class FullPipelineRunner:
         if not discovered_episodes:
             self.logger.info(f"\n✅ NO NEW EPISODES FOUND - All recent episodes already processed")
             self.logger.info("This is normal - your system is up to date!")
+            # Store empty list for orchestrator access
+            self.discovered_episodes = []
             return []
-            
+
         self.logger.info(f"\n✅ DISCOVERED {len(discovered_episodes)} EPISODES for processing")
+        # Store discovered episodes for orchestrator access
+        self.discovered_episodes = discovered_episodes
         return discovered_episodes
     
     def process_audio(self, episode):
@@ -453,8 +473,10 @@ class FullPipelineRunner:
             self.logger.info(f"Resuming episode ID: {db_episode.id} (status: {db_episode.status})")
         
         try:
-            # Step 2.1: Download audio
-            self.logger.info(f"\n📥 STEP 2.1: Audio Download")
+            # Phase 2A: Download audio
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 2A: AUDIO DOWNLOAD")
+            self.logger.info("="*80)
             # Get episode data (handle both dict and Episode object)
             if isinstance(episode, dict):
                 audio_url = episode['audio_url']
@@ -469,8 +491,10 @@ class FullPipelineRunner:
             audio_size_mb = Path(audio_path).stat().st_size / (1024*1024)
             self.logger.info(f"✓ Downloaded {audio_size_mb:.1f}MB to: {audio_path}")
             
-            # Step 2.2: Chunk audio
-            self.logger.info(f"\n🔪 STEP 2.2: Audio Chunking")
+            # Phase 2B: Chunk audio
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 2B: AUDIO CHUNKING")
+            self.logger.info("="*80)
             chunk_paths = self.audio_processor.chunk_audio(audio_path, episode_guid)
 
             # Apply transcription limits based on Web UI settings
@@ -490,8 +514,10 @@ class FullPipelineRunner:
             total_duration_est = len(chunk_paths) * 3  # 3 minutes per chunk
             self.logger.info(f"✓ Processing {len(chunk_paths)} chunks (~{total_duration_est} minutes total)")
             
-            # Step 2.3: Full transcription with Parakeet MLX
-            self.logger.info(f"\n🎤 STEP 2.3: Full Transcription ({len(chunk_paths)} chunks)")
+            # Phase 2C: Full transcription with OpenAI Whisper
+            self.logger.info("\n" + "="*80)
+            self.logger.info(f"PHASE 2C: TRANSCRIPTION ({len(chunk_paths)} chunks)")
+            self.logger.info("="*80)
             
             if not self.transcriber:
                 self.logger.warning("Transcriber not available; skipping transcription for this episode")
@@ -574,8 +600,10 @@ class FullPipelineRunner:
             db_episode.chunk_count = len(chunk_paths)
             db_episode.status = 'transcribed'
             
-            # Cleanup: Delete audio chunks and in-progress file
-            self.logger.info(f"\n🧹 STEP 2.4: Cleanup")
+            # Phase 2D: Cleanup audio files
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 2D: CLEANUP")
+            self.logger.info("="*80)
             try:
                 # Delete ALL audio chunks for this episode (not just processed ones)
                 chunks_deleted = 0
@@ -596,9 +624,11 @@ class FullPipelineRunner:
                         self.logger.warning(f"⚠️ Could not remove chunk directory {chunk_episode_dir}: {e}")
                 
                 # Delete in-progress file
-                if in_progress_file.exists():
-                    in_progress_file.unlink()
-                    self.logger.info(f"✓ Deleted progress file: {in_progress_file}")
+                progress_filename = f"{episode_guid}-progress.txt"
+                progress_file = Path("data/transcripts") / progress_filename
+                if progress_file.exists():
+                    progress_file.unlink()
+                    self.logger.info(f"✓ Deleted progress file: {progress_file}")
                 
                 # Delete original audio file from cache (since transcription is complete)
                 original_deleted = 0
@@ -837,7 +867,7 @@ class FullPipelineRunner:
             # Optional stop after discovery
             if self.phase_stop == 'discovery':
                 self.logger.info("Stopping after discovery phase as requested (--phase discovery)")
-                return
+                return len(episodes)
             
             # Handle case where no new episodes are found
             if not episodes:
@@ -871,7 +901,7 @@ class FullPipelineRunner:
             # Optional stop after audio phase
             if self.phase_stop == 'audio':
                 self.logger.info("Stopping after audio processing phase as requested (--phase audio)")
-                return
+                return len(processed_episodes)
 
             # Phase 3: Content Scoring for all processed episodes
             for i, processed_episode in enumerate(processed_episodes, 1):
@@ -894,7 +924,7 @@ class FullPipelineRunner:
             # Optional stop after scoring phase
             if self.phase_stop == 'scoring':
                 self.logger.info("Stopping after scoring phase as requested (--phase scoring)")
-                return
+                return len(all_scored_episodes)
             
             # Phase 4: Digest Generation (uses all scored episodes collectively)
             self.logger.info(f"\n" + "="*100)
@@ -965,7 +995,7 @@ class FullPipelineRunner:
             # Optional stop after digest generation
             if self.phase_stop == 'digest':
                 self.logger.info("Stopping after digest generation phase as requested (--phase digest)")
-                return
+                return len(all_digests)
 
             # Phase 6: TTS & Audio Generation
             audio_results = self.generate_audio(all_digests)
@@ -989,7 +1019,7 @@ class FullPipelineRunner:
             # Optional stop after TTS
             if self.phase_stop == 'tts':
                 self.logger.info("Stopping after TTS phase as requested (--phase tts)")
-                return
+                return len([r for r in audio_results if r.get('success')])
 
             # Phase 7: Publishing Pipeline
             # Delegate publishing to the publishing pipeline to avoid divergence
@@ -1224,7 +1254,7 @@ class FullPipelineRunner:
                             title=digest.mp3_title or f"{digest.topic} - {digest.digest_date}",
                             description=digest.mp3_summary or f"Daily digest for {digest.topic}",
                             audio_url=mp3_url,
-                            pub_date=datetime.combine(digest.digest_date, datetime.min.time().replace(hour=12)),
+                            pub_date=generate_unique_pubdate(digest.digest_date.strftime('%Y-%m-%d'), digest.topic),
                             duration_seconds=digest.mp3_duration_seconds or 0,
                             file_size=Path(digest.mp3_path).stat().st_size if Path(digest.mp3_path).exists() else 0,
                             episode_id=f"digest-{date_str}-{digest.topic.lower().replace(' ', '-')}"
@@ -1339,7 +1369,16 @@ def main():
 
     args = parser.parse_args()
 
-    runner = FullPipelineRunner(
+    # Print transition notice
+    print("⚠️  NOTICE: Transitioning to modular phase scripts")
+    print("This script now uses the orchestrator for consistency with Web UI and CI/CD.")
+    print("Direct orchestrator usage: python3 run_full_pipeline_orchestrator.py")
+    print()
+
+    # Import and use the orchestrator
+    from run_full_pipeline_orchestrator import PipelineOrchestrator
+
+    orchestrator = PipelineOrchestrator(
         log_file=args.log,
         phase_stop=args.phase,
         dry_run=args.dry_run,
@@ -1348,7 +1387,7 @@ def main():
         episode_guid=args.episode_guid,
         verbose=args.verbose
     )
-    runner.run_pipeline()
+    orchestrator.run_pipeline()
 
 if __name__ == '__main__':
     main()

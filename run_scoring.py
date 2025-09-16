@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from run_full_pipeline import FullPipelineRunner
+from pipeline.phase_output import report_phase_result, should_output_json, setup_phase_logging, add_json_output_arg
 
 
 def main():
@@ -23,28 +24,57 @@ def main():
     parser.add_argument('--episode-guid', help='Process specific episode by GUID', default=None)
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
 
+    # Add JSON output support
+    add_json_output_arg(parser)
+
     args = parser.parse_args()
 
-    # Initialize logging with phase identifier
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info("🔧 PHASE SCRIPT: run_scoring.py v1.0 - Independent execution")
-    logger.info("🎯 Content Scoring Phase - AI-powered topic relevance scoring")
+    # Setup phase logging (goes to stderr, not stdout)
+    logger = setup_phase_logging('scoring')
 
-    # Create runner with scoring phase stop
-    runner = FullPipelineRunner(
-        log_file=args.log,
-        phase_stop='scoring',  # Stop after scoring
-        dry_run=args.dry_run,
-        limit=args.limit,
-        days_back=args.days_back,
-        episode_guid=args.episode_guid,
-        verbose=args.verbose
-    )
+    try:
+        # Create runner with scoring phase stop
+        runner = FullPipelineRunner(
+            log_file=args.log,
+            phase_stop='scoring',  # Stop after scoring
+            dry_run=args.dry_run,
+            limit=args.limit,
+            days_back=args.days_back,
+            episode_guid=args.episode_guid,
+            verbose=args.verbose
+        )
 
-    print("📊 Running Content Scoring Phase...")
-    runner.run_pipeline()
-    print("✅ Scoring phase complete!")
+        logger.info("📊 Running Content Scoring Phase...")
+        episode_count = runner.run_pipeline()
+        logger.info("✅ Scoring phase complete!")
+
+        # Capture episode count from runner - handle cases where run_pipeline returns None
+        if episode_count is None:
+            # If run_pipeline doesn't return count, get from stored episodes
+            episode_count = len(getattr(runner, 'discovered_episodes', []))
+
+        # Report result using unified function
+        exit_code = report_phase_result(
+            phase_name='scoring',
+            success=True,
+            metadata={'episodes_scored': episode_count},
+            json_mode=should_output_json(args)
+        )
+
+        sys.exit(exit_code)
+
+    except Exception as e:
+        logger.error(f"Scoring phase failed: {e}")
+
+        # Report error using unified function
+        exit_code = report_phase_result(
+            phase_name='scoring',
+            success=False,
+            error=str(e),
+            json_mode=should_output_json(args)
+        )
+
+        sys.exit(exit_code)
 
 
 if __name__ == '__main__':

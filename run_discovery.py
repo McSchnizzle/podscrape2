@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from run_full_pipeline import FullPipelineRunner
+from pipeline.phase_output import report_phase_result, should_output_json, setup_phase_logging, add_json_output_arg
 
 
 def main():
@@ -23,28 +24,57 @@ def main():
     parser.add_argument('--episode-guid', help='Process specific episode by GUID', default=None)
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
 
+    # Add JSON output support
+    add_json_output_arg(parser)
+
     args = parser.parse_args()
 
-    # Initialize logging with phase identifier
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info("🔧 PHASE SCRIPT: run_discovery.py v1.0 - Independent execution")
-    logger.info("📋 Discovery Phase - RSS Feed Discovery and Episode Identification")
+    # Setup phase logging (goes to stderr, not stdout)
+    logger = setup_phase_logging('discovery')
 
-    # Create runner with discovery phase stop
-    runner = FullPipelineRunner(
-        log_file=args.log,
-        phase_stop='discovery',  # Stop after discovery
-        dry_run=args.dry_run,
-        limit=args.limit,
-        days_back=args.days_back,
-        episode_guid=args.episode_guid,
-        verbose=args.verbose
-    )
+    try:
+        # Create runner with discovery phase stop
+        runner = FullPipelineRunner(
+            log_file=args.log,
+            phase_stop='discovery',  # Stop after discovery
+            dry_run=args.dry_run,
+            limit=args.limit,
+            days_back=args.days_back,
+            episode_guid=args.episode_guid,
+            verbose=args.verbose
+        )
 
-    print("🔍 Running RSS Discovery Phase...")
-    runner.run_pipeline()
-    print("✅ Discovery phase complete!")
+        logger.info("🔍 Running RSS Discovery Phase...")
+        episode_count = runner.run_pipeline()
+        logger.info("✅ Discovery phase complete!")
+
+        # Capture episode count from runner - handle cases where run_pipeline returns None
+        if episode_count is None:
+            # If run_pipeline doesn't return count, get from stored episodes
+            episode_count = len(getattr(runner, 'discovered_episodes', []))
+
+        # Report result using unified function
+        exit_code = report_phase_result(
+            phase_name='discovery',
+            success=True,
+            metadata={'episodes_found': episode_count},
+            json_mode=should_output_json(args)
+        )
+
+        sys.exit(exit_code)
+
+    except Exception as e:
+        logger.error(f"Discovery phase failed: {e}")
+
+        # Report error using unified function
+        exit_code = report_phase_result(
+            phase_name='discovery',
+            success=False,
+            error=str(e),
+            json_mode=should_output_json(args)
+        )
+
+        sys.exit(exit_code)
 
 
 if __name__ == '__main__':
