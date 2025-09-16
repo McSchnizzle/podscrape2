@@ -449,7 +449,8 @@ def main():
             with open(args.output, 'w') as f:
                 json.dump(result, f, indent=2)
         else:
-            print(json.dumps(result, indent=2))
+            print(json.dumps(result))
+            sys.stdout.flush()
 
         # Exit code
         sys.exit(0 if result['success'] else 1)
@@ -466,7 +467,8 @@ def main():
             with open(args.output, 'w') as f:
                 json.dump(error_result, f, indent=2)
         else:
-            print(json.dumps(error_result, indent=2))
+            print(json.dumps(error_result))
+            sys.stdout.flush()
 
         sys.exit(1)
 

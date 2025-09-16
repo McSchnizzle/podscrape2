@@ -85,7 +85,7 @@ class PipelineOrchestrator:
         # Add common flags
         if self.dry_run:
             cmd.append('--dry-run')
-        if self.limit and script_name != 'scripts/run_discovery.py':  # Discovery has its own limit handling
+        if self.limit and script_name not in ['scripts/run_discovery.py', 'scripts/run_publishing.py']:  # Discovery has its own limit handling, Publishing doesn't support limit
             cmd.extend(['--limit', str(self.limit)])
         if self.verbose:
             cmd.append('--verbose')

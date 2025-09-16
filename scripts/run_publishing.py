@@ -390,9 +390,28 @@ def main():
         )
         
         success = runner.run_complete_pipeline(args.days_back)
+
+        # Output JSON result for orchestrator
+        result = {
+            'success': success,
+            'message': 'Publishing pipeline completed successfully' if success else 'Publishing pipeline failed',
+            'phase': 'publishing'
+        }
+        print(json.dumps(result))
+        sys.stdout.flush()
+
         sys.exit(0 if success else 1)
         
     except Exception as e:
+        # Output JSON error for orchestrator
+        error_result = {
+            'success': False,
+            'error': str(e),
+            'phase': 'publishing'
+        }
+        print(json.dumps(error_result))
+        sys.stdout.flush()
+
         print(f"❌ Failed to run publishing pipeline: {e}")
         sys.exit(1)
 
