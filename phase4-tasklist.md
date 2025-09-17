@@ -36,6 +36,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Add aggressive caching (`actions/cache`) for `~/.cache/pip`, `.venv`, and feed data fixtures to keep reruns fast.
    - Upload log artifact (`discovery.log`) and JSON output for inspection.
    - Gate on pull requests + manual dispatch; allow concurrency cancel.
+   - ✅ Completed 2025‑09‑17: workflow `phase-discovery.yml` run ID `17810944886` (dry-run limit=1, days_back=3).
 2. **Testing**
    - Add pytest marker (e.g., `tests/test_phase_scripts.py::TestPhaseScripts::test_discovery_script_help`) to CI so dry-run executes quickly.
    - Ensure log parsing works locally via `python scripts/run_discovery.py --limit 1 --dry-run`.
