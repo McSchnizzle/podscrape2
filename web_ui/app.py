@@ -482,12 +482,31 @@ def create_app():
                 except Exception as e:
                     gh_detail = f'gh error: {e}'
             items['tools'].append({ 'name': 'GitHub CLI (gh)', 'ok': gh_ok, 'detail': gh_detail })
-            # parakeet-mlx
+
+            # pg_dump for database backups
+            pg_dump_path = shutil.which('pg_dump')
+            pg_dump_ok = False
+            pg_dump_detail = pg_dump_path or 'not found in PATH'
+            if pg_dump_path:
+                try:
+                    import subprocess
+                    r = subprocess.run(['pg_dump','--version'], capture_output=True, text=True, timeout=5)
+                    pg_dump_ok = (r.returncode == 0)
+                    if pg_dump_ok:
+                        version_line = r.stdout.split('\n')[0] if r.stdout else ''
+                        pg_dump_detail = f'PostgreSQL client for database backups - {version_line[:50]}'
+                    else:
+                        pg_dump_detail = 'pg_dump found but not working'
+                except Exception as e:
+                    pg_dump_detail = f'pg_dump error: {e}'
+            items['tools'].append({ 'name': 'PostgreSQL Client (pg_dump)', 'ok': pg_dump_ok, 'detail': pg_dump_detail })
+
+            # OpenAI Whisper (local)
             try:
-                import parakeet_mlx  # noqa: F401
-                items['tools'].append({ 'name': 'parakeet-mlx', 'ok': True, 'detail': 'available' })
+                import whisper  # noqa: F401
+                items['tools'].append({ 'name': 'OpenAI Whisper (local)', 'ok': True, 'detail': 'available' })
             except Exception as e:
-                items['tools'].append({ 'name': 'parakeet-mlx', 'ok': False, 'detail': str(e) })
+                items['tools'].append({ 'name': 'OpenAI Whisper (local)', 'ok': False, 'detail': f'not installed: {e}' })
             # API keys/auth
             items['apis'].append({ 'name': 'OPENAI_API_KEY', 'ok': bool(os.getenv('OPENAI_API_KEY')), 'detail': 'present' if os.getenv('OPENAI_API_KEY') else 'missing' })
             items['apis'].append({ 'name': 'ELEVENLABS_API_KEY', 'ok': bool(os.getenv('ELEVENLABS_API_KEY')), 'detail': 'present' if os.getenv('ELEVENLABS_API_KEY') else 'missing' })
