@@ -33,6 +33,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.1 — Discovery Workflow
 1. **GitHub Actions**
    - Create `.github/workflows/phase-discovery.yml` with steps: checkout, setup Python, install requirements, run `python scripts/run_discovery.py --limit 2 --verbose --dry-run`.
+   - Add aggressive caching (`actions/cache`) for `~/.cache/pip`, `.venv`, and feed data fixtures to keep reruns fast.
    - Upload log artifact (`discovery.log`) and JSON output for inspection.
    - Gate on pull requests + manual dispatch; allow concurrency cancel.
 2. **Testing**
@@ -46,6 +47,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.2 — Audio Workflow
 1. **GitHub Actions**
    - `.github/workflows/phase-audio.yml`: reuse discovery artifact or sample payload; run `python scripts/run_audio.py --limit 1 --dry-run` (no Whisper heavy lifting yet).
+   - Cache Whisper models, ffmpeg build downloads, and pip wheels between runs.
    - Cache Whisper model if needed; upload audio/transcript artifacts.
 2. **Testing**
    - Expand pytest to cover audio runner entrypoint stub (mock network / ffmpeg availability check).
@@ -57,6 +59,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.3 — Scoring Workflow
 1. **GitHub Actions**
    - `.github/workflows/phase-scoring.yml`: run `python scripts/run_scoring.py --limit 2 --dry-run`, mock GPT calls with existing fixtures to avoid live tokens.
+   - Cache pip deps plus prompt fixture archives for deterministic run times.
    - Persist scoring output JSON + structured logs.
 2. **Testing**
    - Ensure `tests/test_phase_scripts.py` covers scoring script import/help; add fixture verifying dry-run path.
@@ -67,6 +70,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.4 — Digest Workflow
 1. **GitHub Actions**
    - `.github/workflows/phase-digest.yml`: run `python scripts/run_digest.py --limit 1 --dry-run`, ensure dependencies on scoring outputs satisfied (use seeded DB fixture or artifact from prior run).
+   - Reuse cached pip deps and share digest template cache (Markdown/JSON) between runs.
    - Upload generated script markdown.
 2. **Testing**
    - Extend pytest fixtures to verify digest generation dry-run path using local sample transcripts.
@@ -77,6 +81,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.5 — TTS Workflow
 1. **GitHub Actions**
    - `.github/workflows/phase-tts.yml`: run `python scripts/run_tts.py --limit 1 --dry-run` with ElevenLabs disabled (mock) to avoid spending credits; perimeter check for required key.
+   - Cache ElevenLabs voice metadata and pip deps; reuse synthesized placeholder assets.
    - Upload synthesized audio placeholder or JSON summary.
 2. **Testing**
    - Add unit test to confirm dry-run returns structured response without calling ElevenLabs (`tests/test_phase_scripts.py`).
@@ -87,6 +92,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.6 — Publishing Workflow
 1. **GitHub Actions**
    - `.github/workflows/phase-publishing.yml`: run `python scripts/run_publishing.py --dry-run --verbose`; mock GitHub release calls via `GITHUB_TOKEN` fine-grained PAT + `--dry-run` coverage; push RSS diff to artifact only.
+   - Cache pip deps and GitHub release metadata (e.g., `~/.cache/gh`) to avoid redundant API calls.
    - Ensure retention manager cleanup tasks run safely (skip destructive actions in dry-run).
 2. **Testing**
    - Integration test verifying publishing runner respects dry-run and logs expected actions.
@@ -97,6 +103,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 ## Subphase 4.7 — Orchestrated Full Run
 1. **GitHub Actions**
    - Compose final `.github/workflows/full-pipeline.yml` pulling together validated steps; ensure concurrency, retention, artifact uploads for logs, transcripts, RSS, and optional `pg_dump`.
+   - Carry over caches from subphase workflows (pip, Whisper models, digest templates, gh metadata) so scheduled runs stay within time limits.
    - Schedule cron + manual dispatch; gate on previous phase success.
 2. **Testing**
    - Smoke test on staging branch; confirm orchestrator exit codes bubble up.
