@@ -85,98 +85,31 @@ class DigestRunner:
         if target_date is None:
             target_date = date.today()
 
-        # Handle different input types
-        if episodes_data is None:
-            # Generate for all qualifying episodes (no input provided)
-            self.logger.info("Generating digests for all qualifying episodes from database")
-            qualifying_topics = self._get_all_qualifying_topics()
-        elif isinstance(episodes_data, str):
-            # Load from JSON file
-            with open(episodes_data, 'r') as f:
-                data = json.load(f)
-            if not data.get('success', False):
-                return {
-                    'success': False,
-                    'error': f"Scoring phase failed: {data.get('error', 'Unknown error')}",
-                    'digests_generated': 0,
-                    'digests': []
-                }
-            qualifying_topics = self._extract_qualifying_topics_from_data(data)
-        elif isinstance(episodes_data, dict):
-            # Direct JSON data
-            if not episodes_data.get('success', False):
-                return {
-                    'success': False,
-                    'error': f"Scoring phase failed: {episodes_data.get('error', 'Unknown error')}",
-                    'digests_generated': 0,
-                    'digests': []
-                }
-            qualifying_topics = self._extract_qualifying_topics_from_data(episodes_data)
-        else:
+        # Validate input format (though we don't use episodes_data anymore with create_daily_digests)
+        if episodes_data is not None:
+            self.logger.warning("episodes_data parameter is ignored when using create_daily_digests - it discovers topics automatically")
+
+        self.logger.info("Generating daily digests for all active topics (automatic topic discovery)")
+
+        # Handle dry run mode
+        if self.dry_run:
+            self.logger.info("🔍 DRY RUN: Would generate digests for all active topics")
             return {
-                'success': False,
-                'error': "Invalid input format - expected JSON file path, dict, or None",
+                'success': True,
                 'digests_generated': 0,
-                'digests': []
+                'digests': [],
+                'message': "Dry run completed - no digests generated"
             }
 
-        if not qualifying_topics:
-            self.logger.info("No qualifying topics found - generating no-content digest example")
-            # Generate one no-content digest as example
-            try:
-                first_topic = list(self.script_generator.topic_instructions.keys())[0]
-                if self.dry_run:
-                    self.logger.info(f"🔍 DRY RUN: Would generate no-content digest for '{first_topic}'")
-                    return {
-                        'success': True,
-                        'digests_generated': 0,
-                        'digests': [],
-                        'message': "No qualifying episodes - dry run completed"
-                    }
-                else:
-                    digest = self.script_generator.create_digest(first_topic, target_date)
-                    return {
-                        'success': True,
-                        'digests_generated': 1,
-                        'digests': [self._digest_to_dict(digest)],
-                        'message': "No qualifying episodes - generated example digest"
-                    }
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Failed to generate no-content digest: {e}",
-                    'digests_generated': 0,
-                    'digests': []
-                }
+        # Use create_daily_digests for proper topic handling and fallback logic
+        self.logger.info("Generating daily digests for all qualifying topics")
+        try:
+            digests = self.script_generator.create_daily_digests(target_date)
 
-        # Apply limit
-        if self.limit:
-            qualifying_topics = list(qualifying_topics)[:self.limit]
-
-        self.logger.info(f"Generating digests for {len(qualifying_topics)} qualifying topics")
-
-        generated_digests = []
-        failed_digests = []
-
-        for topic in qualifying_topics:
-            try:
-                self.logger.info(f"🎯 Generating digest: {topic}")
-
-                if self.dry_run:
-                    self.logger.info("🔍 DRY RUN: Would generate digest")
-                    generated_digests.append({
-                        'topic': topic,
-                        'status': 'dry_run',
-                        'script_path': None,
-                        'script_word_count': 0,
-                        'episode_count': 0
-                    })
-                    continue
-
-                # Generate digest
-                digest = self.script_generator.create_digest(topic, target_date)
-
-                self.logger.info(f"   ✅ Generated successfully")
+            # Log details for each generated digest
+            generated_digests = []
+            for digest in digests:
+                self.logger.info(f"   ✅ Generated digest: {digest.topic}")
                 self.logger.info(f"      Words: {digest.script_word_count:,}")
                 self.logger.info(f"      Episodes: {digest.episode_count}")
                 self.logger.info(f"      Path: {digest.script_path}")
@@ -190,63 +123,32 @@ class DigestRunner:
 
                 generated_digests.append(self._digest_to_dict(digest))
 
-            except Exception as e:
-                self.logger.error(f"   ✗ Failed to generate digest for {topic}: {e}")
-                failed_digests.append({
-                    'topic': topic,
-                    'error': str(e)
-                })
+            # Log completion
+            self.pipeline_logger.log_phase_complete(
+                f"Generated {len(generated_digests)} digests successfully"
+            )
 
-        # Log completion
-        self.pipeline_logger.log_phase_complete(
-            f"Generated {len(generated_digests)} digests" +
-            (f" ({len(failed_digests)} failed)" if failed_digests else "")
-        )
-
-        return {
-            'success': len(failed_digests) == 0,
-            'digests_generated': len(generated_digests),
-            'digests_failed': len(failed_digests),
-            'digests': generated_digests,
-            'failed': failed_digests
-        }
-
-    def _get_all_qualifying_topics(self):
-        """Get all qualifying topics from database"""
-        try:
-            # Get threshold from web config
-            threshold = 0.65
-            if self.web_config:
-                try:
-                    threshold = float(self.web_config.get_setting('content_filtering', 'score_threshold', 0.65))
-                except Exception:
-                    pass
-
-            # Find all episodes with scores above threshold
-            episodes = self.episode_repo.get_scored_episodes()
-            qualifying_topics = set()
-
-            for episode in episodes:
-                if episode.scores:
-                    for topic, score in episode.scores.items():
-                        if score >= threshold:
-                            qualifying_topics.add(topic)
-
-            return qualifying_topics
+            return {
+                'success': True,
+                'digests_generated': len(generated_digests),
+                'digests_failed': 0,
+                'digests': generated_digests,
+                'failed': []
+            }
 
         except Exception as e:
-            self.logger.error(f"Failed to get qualifying topics from database: {e}")
-            return set()
+            self.logger.error(f"Failed to generate daily digests: {e}")
+            self.pipeline_logger.log_phase_complete("Failed to generate digests")
 
-    def _extract_qualifying_topics_from_data(self, data):
-        """Extract qualifying topics from scoring phase data"""
-        qualifying_topics = set()
+            return {
+                'success': False,
+                'error': str(e),
+                'digests_generated': 0,
+                'digests_failed': 1,
+                'digests': [],
+                'failed': [{'error': str(e)}]
+            }
 
-        for episode in data.get('episodes', []):
-            if episode.get('qualifying_topics'):
-                qualifying_topics.update(episode['qualifying_topics'])
-
-        return qualifying_topics
 
     def _digest_to_dict(self, digest):
         """Convert digest object to dictionary"""
@@ -298,8 +200,15 @@ def main():
             else:
                 raise ValueError(f"Invalid input format: {args.input}")
         elif not sys.stdin.isatty():
-            # Read from stdin
-            episodes_data = json.load(sys.stdin)
+            # Read from stdin if available
+            try:
+                stdin_content = sys.stdin.read().strip()
+                if stdin_content:
+                    episodes_data = json.loads(stdin_content)
+                # else: episodes_data remains None, which is fine for create_daily_digests
+            except (json.JSONDecodeError, EOFError):
+                # No valid JSON input from stdin, proceed with None
+                pass
 
         result = runner.generate_digests(episodes_data, target_date)
 

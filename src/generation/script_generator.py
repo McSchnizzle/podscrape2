@@ -305,9 +305,10 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
 
-        # TODO: Mark episodes as digested AFTER all daily digests are complete
-        # This allows episodes to appear in multiple topic digests
-        # self.mark_digest_episodes_as_digested(digest)
+        # Mark episodes as digested now that they're included in a digest
+        if episodes:  # Only if we actually used episodes
+            logger.info(f"Marking {len(episodes)} episodes as digested")
+            self.mark_digest_episodes_as_digested(digest)
 
         return digest
     
@@ -338,20 +339,8 @@ Thank you for your understanding, and we'll see you tomorrow!
                 logger.error(f"Failed to create general summary: {e}")
         
         logger.info(f"Created {len(digests)} digests for {digest_date}")
-        
-        # Mark all episodes used in digests as 'digested' after all daily digests are complete
-        all_used_episode_ids = set()
-        for digest in digests:
-            if digest.episode_ids:
-                all_used_episode_ids.update(digest.episode_ids)
-        
-        if all_used_episode_ids:
-            logger.info(f"Marking {len(all_used_episode_ids)} episodes as digested after completing all daily digests")
-            for episode_id in all_used_episode_ids:
-                episode = self.episode_repo.get_by_id(episode_id)
-                if episode:
-                    self.mark_episode_as_digested(episode)
-        
+
+        # Episodes are now marked as 'digested' automatically in create_digest()
         return digests
     
     def get_undigested_episodes(self, start_date: date = None, 
