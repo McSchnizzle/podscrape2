@@ -116,7 +116,7 @@ jobs:
             --dry-run \
             --verbose \
             --output artifacts/audio-output.json \
-            artifacts/discovery-output.json
+            < artifacts/discovery-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
