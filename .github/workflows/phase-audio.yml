@@ -115,8 +115,8 @@ jobs:
             --limit "$LIMIT" \
             --dry-run \
             --verbose \
-            --input artifacts/discovery-output.json \
-            --output artifacts/audio-output.json
+            --output artifacts/audio-output.json \
+            artifacts/discovery-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
@@ -142,4 +142,8 @@ jobs:
       - name: Summarize audio output
         if: success()
         run: |
-          jq '.' artifacts/audio-output.json || cat artifacts/audio-output.json
+          if [ -f artifacts/audio-output.json ]; then
+            jq '.' artifacts/audio-output.json || cat artifacts/audio-output.json
+          else
+            echo "audio-output.json not produced (likely no episodes)."
+          fi
