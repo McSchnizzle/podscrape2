@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from .voice_manager import VoiceManager, VoiceSettings
 from ..database.models import Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
+from ..config.web_config import WebConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,22 @@ class AudioGenerator:
     Handles voice mapping, rate limiting, and file management.
     """
     
-    def __init__(self, config_manager: ConfigManager = None):
+    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None):
         self.config = config_manager or ConfigManager()
+        self.web_config = web_config or self._safe_create_web_config()
         self.voice_manager = VoiceManager()
         self.digest_repo = get_digest_repo()
+
+        # Load AI configuration for TTS generation
+        if self.web_config:
+            self.ai_model = self.web_config.get_setting("ai_tts_generation", "model", "eleven_turbo_v2_5")
+            self.max_characters = self.web_config.get_setting("ai_tts_generation", "max_characters", 35000)
+
+            # Validate character limits against model capabilities
+            self.max_characters = self._validate_and_adjust_char_limit(self.ai_model, self.max_characters)
+        else:
+            self.ai_model = "eleven_turbo_v2_5"
+            self.max_characters = 35000
         
         # Setup output directory
         self.audio_dir = Path("data/completed-tts")
@@ -75,7 +88,27 @@ class AudioGenerator:
                 "xi-api-key": self.api_key
             }
             self._api_key_checked = True
-            logger.info("ElevenLabs API key initialized successfully")
+            logger.info(f"ElevenLabs API key initialized successfully with model: {self.ai_model}, max_characters: {self.max_characters}")
+
+    def _safe_create_web_config(self) -> Optional[WebConfigManager]:
+        """Safely create web config, return None if not available"""
+        try:
+            return WebConfigManager()
+        except Exception:
+            return None
+
+    def _validate_and_adjust_char_limit(self, model: str, requested_chars: int) -> int:
+        """Validate and adjust character limit based on model capabilities"""
+        if not self.web_config:
+            return requested_chars
+
+        # Get model's maximum character limit
+        max_limit = self.web_config.get_model_limit('elevenlabs', model, 'max_characters')
+        if max_limit > 0 and requested_chars > max_limit:
+            logger.warning(f"Requested {requested_chars} characters exceeds {model} limit of {max_limit}, adjusting to {max_limit}")
+            return max_limit
+
+        return requested_chars
         
     def _rate_limit_delay(self):
         """Enforce rate limiting between API requests"""
@@ -124,15 +157,14 @@ class AudioGenerator:
         text = text.replace('! ', '! ... ')  # Pause after exclamations
         text = text.replace('? ', '? ... ')  # Pause after questions
         
-        # Limit text length for API (ElevenLabs turbo_v2_5 supports 40,000 chars)
-        max_chars = 40000  # Match actual API limit for content creation
-        if len(text) > max_chars:
+        # Limit text length for API using configured character limit
+        if len(text) > self.max_characters:
             # Find a good breaking point
-            text = text[:max_chars]
+            text = text[:self.max_characters]
             last_sentence = max(text.rfind('. '), text.rfind('! '), text.rfind('? '))
-            if last_sentence > max_chars * 0.8:  # If we can find a sentence ending
+            if last_sentence > self.max_characters * 0.8:  # If we can find a sentence ending
                 text = text[:last_sentence + 1]
-            logger.warning(f"Script truncated to {len(text)} characters for TTS")
+            logger.warning(f"Script truncated to {len(text)} characters for TTS (limit: {self.max_characters})")
         
         return text
     
@@ -221,7 +253,7 @@ class AudioGenerator:
         
         payload = {
             "text": text,
-            "model_id": "eleven_turbo_v2_5",  # High quality, 40K char limit, optimized for content creation
+            "model_id": self.ai_model,  # Use configured model
             "voice_settings": {
                 "stability": voice_settings.stability,
                 "similarity_boost": voice_settings.similarity_boost,
@@ -230,7 +262,7 @@ class AudioGenerator:
             }
         }
         
-        logger.info(f"Sending TTS request: {len(text)} chars, voice {voice_id}")
+        logger.info(f"Sending TTS request: {len(text)} chars, voice {voice_id}, model {self.ai_model}")
         
         # Retry logic for transient failures
         max_retries = 2

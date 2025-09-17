@@ -14,6 +14,12 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 
+try:
+    from ...config.web_config import WebConfigManager
+except ImportError:
+    # Fallback in case WebConfigManager is not available
+    WebConfigManager = None
+
 # Self-contained error handling and logging to avoid import issues
 class PodcastError(Exception):
     """Raised when podcast processing operations fail"""
@@ -220,7 +226,8 @@ class OpenAIWhisperProvider(STTProvider):
                  chunk_duration_minutes: int = 3,
                  model: str = "whisper-1",
                  max_cost_per_hour: float = 10.0,
-                 max_retries: int = 3):
+                 max_retries: int = 3,
+                 web_config: Optional['WebConfigManager'] = None):
         """
         Initialize OpenAI Whisper provider
 
@@ -229,10 +236,23 @@ class OpenAIWhisperProvider(STTProvider):
             model: OpenAI Whisper model to use
             max_cost_per_hour: Maximum cost per hour of audio (USD)
             max_retries: Maximum retry attempts for failed requests
+            web_config: Web configuration manager for settings
         """
         super().__init__(chunk_duration_minutes)
 
-        self.model = model
+        self.web_config = web_config or self._safe_create_web_config()
+
+        # Load AI configuration for STT transcription
+        if self.web_config:
+            self.model = self.web_config.get_setting("ai_stt_transcription", "model", model)
+            self.max_file_size_mb = self.web_config.get_setting("ai_stt_transcription", "max_file_size_mb", 20)
+
+            # Validate file size limits against model capabilities
+            self.max_file_size_mb = self._validate_and_adjust_file_size_limit(self.model, self.max_file_size_mb)
+        else:
+            self.model = model
+            self.max_file_size_mb = 20
+
         self.max_cost_per_hour = max_cost_per_hour
         self.max_retries = max_retries
 
@@ -245,7 +265,29 @@ class OpenAIWhisperProvider(STTProvider):
         self._client = None
         self._initialized = False
 
-        logger.info(f"OpenAI Whisper provider initialized: model={model}, max_cost=${max_cost_per_hour}/hour")
+        logger.info(f"OpenAI Whisper provider initialized: model={self.model}, max_cost=${max_cost_per_hour}/hour, max_file_size={self.max_file_size_mb}MB")
+
+    def _safe_create_web_config(self) -> Optional['WebConfigManager']:
+        """Safely create web config, return None if not available"""
+        if WebConfigManager is None:
+            return None
+        try:
+            return WebConfigManager()
+        except Exception:
+            return None
+
+    def _validate_and_adjust_file_size_limit(self, model: str, requested_size_mb: int) -> int:
+        """Validate and adjust file size limit based on model capabilities"""
+        if not self.web_config:
+            return requested_size_mb
+
+        # Get model's maximum file size limit
+        max_limit = self.web_config.get_model_limit('whisper', model, 'max_file_size_mb')
+        if max_limit > 0 and requested_size_mb > max_limit:
+            logger.warning(f"Requested {requested_size_mb}MB exceeds {model} limit of {max_limit}MB, adjusting to {max_limit}MB")
+            return max_limit
+
+        return requested_size_mb
 
     def initialize(self) -> bool:
         """Initialize OpenAI client"""
@@ -374,6 +416,19 @@ class OpenAIWhisperProvider(STTProvider):
         try:
             logger.debug(f"Transcribing chunk {chunk_number}: {chunk_path}")
 
+            # Validate file size
+            chunk_file = Path(chunk_path)
+            if not chunk_file.exists():
+                raise PodcastError(f"Chunk file not found: {chunk_path}")
+
+            file_size_bytes = chunk_file.stat().st_size
+            file_size_mb = file_size_bytes / (1024 * 1024)
+
+            if file_size_mb > self.max_file_size_mb:
+                raise PodcastError(f"Chunk file {chunk_path} ({file_size_mb:.1f}MB) exceeds maximum size limit of {self.max_file_size_mb}MB")
+
+            logger.debug(f"Chunk file size: {file_size_mb:.2f}MB (within {self.max_file_size_mb}MB limit)")
+
             # Open audio file
             with open(chunk_path, 'rb') as audio_file:
                 # Call OpenAI Whisper API
@@ -422,7 +477,8 @@ class OpenAIWhisperProvider(STTProvider):
             "status": "initialized" if self._initialized else "not_initialized",
             "cost_per_minute": self.cost_per_minute,
             "max_cost_per_hour": self.max_cost_per_hour,
-            "session_cost": self.session_cost
+            "session_cost": self.session_cost,
+            "max_file_size_mb": self.max_file_size_mb
         }
 
         if self._initialized and self._client:

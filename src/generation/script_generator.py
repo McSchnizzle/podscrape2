@@ -56,14 +56,56 @@ class ScriptGenerator:
         self.topics = self.config.get_topics()
         self.score_threshold = self.config.get_score_threshold()
         self.max_words = self.config.get_max_words_per_script()
-        
+
+        # Load AI configuration for digest generation
+        if self.web_config:
+            self.ai_model = self.web_config.get_setting("ai_digest_generation", "model", "gpt-5")
+            self.max_output_tokens = self.web_config.get_setting("ai_digest_generation", "max_output_tokens", 25000)
+            self.max_input_tokens = self.web_config.get_setting("ai_digest_generation", "max_input_tokens", 150000)
+
+            # Validate token limits against model capabilities
+            self.max_output_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_output_tokens, 'max_output')
+            self.max_input_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_input_tokens, 'max_input')
+        else:
+            self.ai_model = "gpt-5"
+            self.max_output_tokens = 25000
+            self.max_input_tokens = 150000
+
         # Load topic instructions
         self.topic_instructions = self._load_topic_instructions()
+
+        logger.info(f"ScriptGenerator initialized with model: {self.ai_model}, max_output_tokens: {self.max_output_tokens}, max_input_tokens: {self.max_input_tokens}")
         
         # Create scripts directory
         self.scripts_dir = Path('data/scripts')
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int, limit_type: str) -> int:
+        """Validate and adjust token limit based on model capabilities"""
+        if not self.web_config:
+            return requested_tokens
+
+        # Get model's maximum token limit for the specified type
+        max_limit = self.web_config.get_model_limit('openai', model, limit_type)
+        if max_limit > 0 and requested_tokens > max_limit:
+            logger.warning(f"Requested {requested_tokens} {limit_type} tokens exceeds {model} limit of {max_limit}, adjusting to {max_limit}")
+            return max_limit
+
+        return requested_tokens
+
+    def _calculate_transcript_limit(self, num_episodes: int) -> int:
+        """Calculate appropriate transcript character limit based on input token limits"""
+        # Rough estimate: 1 token ≈ 4 characters
+        # Reserve space for prompt and instructions (about 20% of input tokens)
+        available_input_tokens = int(self.max_input_tokens * 0.8)
+        available_chars = available_input_tokens * 4
+
+        # Distribute available characters across episodes
+        chars_per_episode = available_chars // max(num_episodes, 1)
+
+        # Set reasonable bounds (minimum 2000, maximum 20000 characters per episode)
+        return min(max(chars_per_episode, 2000), 20000)
+
     def _load_topic_instructions(self) -> Dict[str, TopicInstruction]:
         """Load topic instructions from digest_instructions/ directory"""
         instructions = {}
@@ -186,15 +228,18 @@ Date: {digest_date.strftime('%B %d, %Y')}
 Topic: {topic}
 Episodes: {len(transcripts)}"""
 
+        # Calculate appropriate transcript limit based on input token constraints
+        transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
         user_prompt = f"""Create a digest script from these {len(transcripts)} episode(s):
 
 """
-        
+
         for i, transcript_data in enumerate(transcripts, 1):
             user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
 
 Transcript:
-{transcript_data['transcript'][:8000]}  # Limit transcript length for token management
+{transcript_data['transcript'][:transcript_limit]}  # Limit based on model input token constraints
 
 ---
 
@@ -204,13 +249,13 @@ Transcript:
         
         try:
             response = self.client.responses.create(
-                model="gpt-5",  # Using GPT-5 with Responses API as specified
+                model=self.ai_model,  # Using configured AI model with Responses API
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 reasoning={"effort": "medium"},  # Medium effort for quality script generation
-                max_output_tokens=8000  # GPT-5 supports much larger output tokens
+                max_output_tokens=self.max_output_tokens
             )
             
             script_content = response.output_text  # GPT-5 Responses API format
@@ -475,12 +520,13 @@ Transcript: {transcript['transcript']}
 
         try:
             response = self.client.responses.create(
-                model="gpt-5",
-                messages=[
+                model=self.ai_model,
+                input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=2000
+                reasoning={"effort": "medium"},
+                max_output_tokens=min(self.max_output_tokens, 2000)  # Keep general summary shorter
             )
             
             script = response.output_text

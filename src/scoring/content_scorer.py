@@ -73,18 +73,44 @@ class ContentScorer:
         # Load topics and score threshold via ConfigManager (Web UI settings override JSON where applicable)
         self.topics = self.config_manager.get_topics()
         self.score_threshold = self.config_manager.get_score_threshold()
-        
-        logger.info(f"ContentScorer initialized with {len(self.topics)} active topics")
+
+        # Load AI configuration for content scoring
+        if self.web_config:
+            self.ai_model = self.web_config.get_setting("ai_content_scoring", "model", "gpt-5-mini")
+            self.max_tokens = self.web_config.get_setting("ai_content_scoring", "max_tokens", 1000)
+            self.max_episodes_per_batch = self.web_config.get_setting("ai_content_scoring", "max_episodes_per_batch", 10)
+
+            # Validate token limit against model capabilities
+            self.max_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_tokens)
+        else:
+            self.ai_model = "gpt-5-mini"
+            self.max_tokens = 1000
+            self.max_episodes_per_batch = 10
+
+        logger.info(f"ContentScorer initialized with {len(self.topics)} active topics, model: {self.ai_model}, max_tokens: {self.max_tokens}")
     
     def _safe_create_web_config(self) -> Optional[WebConfigManager]:
         try:
             return WebConfigManager()
         except Exception:
             return None
-    
+
+    def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int) -> int:
+        """Validate and adjust token limit based on model capabilities"""
+        if not self.web_config:
+            return requested_tokens
+
+        # Get model's maximum output token limit
+        max_limit = self.web_config.get_model_limit('openai', model, 'max_output')
+        if max_limit > 0 and requested_tokens > max_limit:
+            logger.warning(f"Requested {requested_tokens} tokens exceeds {model} limit of {max_limit}, adjusting to {max_limit}")
+            return max_limit
+
+        return requested_tokens
+
     def _create_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
         """
-        Create GPT-5-mini prompt for transcript scoring.
+        Create AI model prompt for transcript scoring.
         
         Args:
             transcript: The podcast transcript text
@@ -189,14 +215,14 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             prompt = self._create_scoring_prompt(cleaned_transcript, self.topics)
             schema = self._create_json_schema(self.topics)
             
-            # Call GPT-5-mini using Responses API (correct format from gpt5-implementation-learnings.md)
+            # Call configured AI model using Responses API (correct format from gpt5-implementation-learnings.md)
             response = self.client.responses.create(
-                model="gpt-5-mini",
+                model=self.ai_model,
                 input=[
                     {"role": "user", "content": prompt}
                 ],
                 reasoning={"effort": "minimal"},  # Minimal effort for scoring tasks
-                max_output_tokens=1000,
+                max_output_tokens=self.max_tokens,
                 text={
                     "format": {
                         "type": "json_schema",

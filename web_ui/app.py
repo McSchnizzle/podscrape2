@@ -587,7 +587,13 @@ def create_app():
             'audio_processing': web_config.get_category('audio_processing'),
             'pipeline': web_config.get_category('pipeline'),
             'retention': web_config.get_category('retention'),
+            'ai_content_scoring': web_config.get_category('ai_content_scoring'),
+            'ai_digest_generation': web_config.get_category('ai_digest_generation'),
+            'ai_metadata_generation': web_config.get_category('ai_metadata_generation'),
+            'ai_tts_generation': web_config.get_category('ai_tts_generation'),
+            'ai_stt_transcription': web_config.get_category('ai_stt_transcription'),
         }
+        ai_models = web_config.get_ai_models()
         if request.method == 'POST':
             errors = []
             # Collect posted values
@@ -631,13 +637,42 @@ def create_app():
                 web_config.set_setting('retention', 'github_releases_days', int(request.form.get('ret_github_releases', current['retention'].get('github_releases_days', 14))))
             except Exception as e:
                 errors.append(f'retention: {e}')
+
+            # AI Configuration settings
+            try:
+                # Content Scoring
+                web_config.set_setting('ai_content_scoring', 'model', request.form.get('ai_content_scoring_model', current['ai_content_scoring'].get('model', 'gpt-5-mini')))
+                web_config.set_setting('ai_content_scoring', 'max_tokens', int(request.form.get('ai_content_scoring_max_tokens', current['ai_content_scoring'].get('max_tokens', 1000))))
+                web_config.set_setting('ai_content_scoring', 'max_episodes_per_batch', int(request.form.get('ai_content_scoring_max_episodes_per_batch', current['ai_content_scoring'].get('max_episodes_per_batch', 10))))
+
+                # Digest Generation
+                web_config.set_setting('ai_digest_generation', 'model', request.form.get('ai_digest_generation_model', current['ai_digest_generation'].get('model', 'gpt-5')))
+                web_config.set_setting('ai_digest_generation', 'max_output_tokens', int(request.form.get('ai_digest_generation_max_output_tokens', current['ai_digest_generation'].get('max_output_tokens', 25000))))
+                web_config.set_setting('ai_digest_generation', 'max_input_tokens', int(request.form.get('ai_digest_generation_max_input_tokens', current['ai_digest_generation'].get('max_input_tokens', 150000))))
+
+                # Metadata Generation
+                web_config.set_setting('ai_metadata_generation', 'model', request.form.get('ai_metadata_generation_model', current['ai_metadata_generation'].get('model', 'gpt-5-mini')))
+                web_config.set_setting('ai_metadata_generation', 'max_title_tokens', int(request.form.get('ai_metadata_generation_max_title_tokens', current['ai_metadata_generation'].get('max_title_tokens', 50))))
+                web_config.set_setting('ai_metadata_generation', 'max_summary_tokens', int(request.form.get('ai_metadata_generation_max_summary_tokens', current['ai_metadata_generation'].get('max_summary_tokens', 200))))
+                web_config.set_setting('ai_metadata_generation', 'max_description_tokens', int(request.form.get('ai_metadata_generation_max_description_tokens', current['ai_metadata_generation'].get('max_description_tokens', 500))))
+
+                # TTS Generation
+                web_config.set_setting('ai_tts_generation', 'model', request.form.get('ai_tts_generation_model', current['ai_tts_generation'].get('model', 'eleven_turbo_v2_5')))
+                web_config.set_setting('ai_tts_generation', 'max_characters', int(request.form.get('ai_tts_generation_max_characters', current['ai_tts_generation'].get('max_characters', 35000))))
+
+                # STT Transcription
+                web_config.set_setting('ai_stt_transcription', 'model', request.form.get('ai_stt_transcription_model', current['ai_stt_transcription'].get('model', 'whisper-1')))
+                web_config.set_setting('ai_stt_transcription', 'max_file_size_mb', int(request.form.get('ai_stt_transcription_max_file_size_mb', current['ai_stt_transcription'].get('max_file_size_mb', 20))))
+            except Exception as e:
+                errors.append(f'ai_configuration: {e}')
+
             if errors:
                 for msg in errors:
                     flash(msg, 'error')
             else:
                 flash('Settings saved', 'success')
             return redirect(url_for('settings'))
-        return render_template('settings.html', current=current, defaults=DEFAULTS)
+        return render_template('settings.html', current=current, defaults=DEFAULTS, ai_models=ai_models)
 
     @app.get('/maintenance')
     def maintenance_page():

@@ -12,6 +12,8 @@ from typing import Dict, Tuple, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
+from ..config.web_config import WebConfigManager
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -29,15 +31,55 @@ class MetadataGenerationError(Exception):
 
 class MetadataGenerator:
     """
-    Generates podcast episode metadata from digest scripts using GPT-5.
+    Generates podcast episode metadata from digest scripts using configurable AI models.
     Creates compelling titles, summaries, and other metadata for RSS feed.
     """
     
-    def __init__(self):
+    def __init__(self, web_config: WebConfigManager = None):
+        self.web_config = web_config or self._safe_create_web_config()
         self.client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         if not os.getenv('OPENAI_API_KEY'):
             raise ValueError("OPENAI_API_KEY environment variable is required")
-    
+
+        # Load AI configuration for metadata generation
+        if self.web_config:
+            self.ai_model = self.web_config.get_setting("ai_metadata_generation", "model", "gpt-5-mini")
+            self.max_title_tokens = self.web_config.get_setting("ai_metadata_generation", "max_title_tokens", 50)
+            self.max_summary_tokens = self.web_config.get_setting("ai_metadata_generation", "max_summary_tokens", 200)
+            self.max_description_tokens = self.web_config.get_setting("ai_metadata_generation", "max_description_tokens", 500)
+
+            # Validate token limits against model capabilities
+            self.max_title_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_title_tokens)
+            self.max_summary_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_summary_tokens)
+            self.max_description_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_description_tokens)
+        else:
+            self.ai_model = "gpt-5-mini"
+            self.max_title_tokens = 50
+            self.max_summary_tokens = 200
+            self.max_description_tokens = 500
+
+        logger.info(f"MetadataGenerator initialized with model: {self.ai_model}, title: {self.max_title_tokens}, summary: {self.max_summary_tokens}, description: {self.max_description_tokens} tokens")
+
+    def _safe_create_web_config(self) -> Optional[WebConfigManager]:
+        """Safely create web config, return None if not available"""
+        try:
+            return WebConfigManager()
+        except Exception:
+            return None
+
+    def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int) -> int:
+        """Validate and adjust token limit based on model capabilities"""
+        if not self.web_config:
+            return requested_tokens
+
+        # Get model's maximum output token limit
+        max_limit = self.web_config.get_model_limit('openai', model, 'max_output')
+        if max_limit > 0 and requested_tokens > max_limit:
+            logger.warning(f"Requested {requested_tokens} tokens exceeds {model} limit of {max_limit}, adjusting to {max_limit}")
+            return max_limit
+
+        return requested_tokens
+
     def _extract_script_content(self, script_path: str) -> str:
         """Extract clean content from script file for analysis"""
         script_file = Path(script_path)
@@ -90,7 +132,7 @@ class MetadataGenerator:
             script_content = script_content[:15000] + "..."
             logger.info(f"Truncated script content from {content_length} to {len(script_content)} characters")
         
-        # Generate metadata using GPT-5
+        # Generate metadata using configured AI model
         system_prompt = f"""You are a professional podcast producer creating metadata for a daily digest podcast.
 
 Topic: {topic}
@@ -113,16 +155,16 @@ CONTENT: {script_content}
 Generate metadata that accurately reflects the content and would attract the target audience."""
 
         try:
-            logger.info(f"Calling GPT-5 for metadata generation...")
+            logger.info(f"Calling {self.ai_model} for metadata generation...")
             
             response = self.client.responses.create(
-                model="gpt-5-mini",  # Use mini model for metadata generation
+                model=self.ai_model,  # Use configured model
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 reasoning={"effort": "minimal"},
-                max_output_tokens=500,
+                max_output_tokens=self.max_description_tokens,  # Use configured token limit
                 text={
                     "format": {
                         "type": "json_schema",
@@ -156,7 +198,7 @@ Generate metadata that accurately reflects the content and would attract the tar
                 metadata_dict = json.loads(metadata_json)
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON response: {metadata_json}")
-                raise MetadataGenerationError(f"Invalid JSON response from GPT-5: {e}")
+                raise MetadataGenerationError(f"Invalid JSON response from {self.ai_model}: {e}")
             
             # Validate required fields
             required_fields = ['title', 'summary', 'keywords', 'category']
@@ -177,7 +219,7 @@ Generate metadata that accurately reflects the content and would attract the tar
             return metadata
             
         except Exception as e:
-            logger.error(f"GPT-5 metadata generation failed: {e}")
+            logger.error(f"{self.ai_model} metadata generation failed: {e}")
             
             # Fallback to generated metadata
             return self._generate_fallback_metadata(script_path, topic, digest_date)
@@ -194,7 +236,7 @@ Generate metadata that accurately reflects the content and would attract the tar
     
     def _generate_fallback_metadata(self, script_path: str, topic: str, 
                                   digest_date: date) -> EpisodeMetadata:
-        """Generate basic metadata when GPT-5 fails"""
+        """Generate basic metadata when AI model fails"""
         logger.info("Using fallback metadata generation")
         
         # Try to extract some keywords from script content
