@@ -25,6 +25,12 @@ Working file for incremental CI/CD rollout. Review this document before starting
 - Apt install `ffmpeg` every run; acceptable but keep in mind for runtime budgeting.
 - Whisper cache paths are empty during dry-run, causing cache-save warnings—documented as expected until real runs download models.
 
+## Phase 4.3 — Scoring Workflow
+- Chain discovery and audio steps inside the scoring workflow so the DB state is consistent before scoring.
+- Dry-run logic must come before transcript existence checks; otherwise the script throws when transcripts are missing.
+- Reuse stdin piping pattern for passing JSON between phases.
+- Expect Whisper cache warnings (audio still runs), but scoring itself has no extra system dependencies.
+
 ## TODO for Upcoming Phases
 - Ensure scoring workflow reuses discovery output artifact (stdin) and that dry-run skips transcript checks (already patched).
 - Keep artifact naming consistent (`scoring-phase`, `digest-phase`, etc.).
