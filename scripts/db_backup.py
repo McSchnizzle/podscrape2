@@ -26,6 +26,52 @@ from dotenv import load_dotenv
 from src.config.env import require_database_url
 
 
+def find_pg_dump_executable():
+    """
+    Find pg_dump executable in PATH or common installation locations.
+
+    Returns:
+        str: Path to pg_dump executable, or None if not found
+    """
+    import platform
+    import shutil
+
+    # First try standard PATH
+    pg_dump = shutil.which('pg_dump')
+    if pg_dump:
+        return pg_dump
+
+    # Platform-specific fallback paths
+    common_paths = {
+        'Darwin': [  # macOS
+            '/opt/homebrew/opt/libpq/bin/pg_dump',  # Homebrew libpq (M1 Mac)
+            '/usr/local/opt/libpq/bin/pg_dump',     # Homebrew libpq (Intel Mac)
+            '/opt/homebrew/bin/pg_dump',            # Homebrew postgresql
+            '/usr/local/bin/pg_dump',               # Homebrew postgresql (Intel)
+            '/Applications/Postgres.app/Contents/Versions/latest/bin/pg_dump',  # Postgres.app
+        ],
+        'Linux': [
+            '/usr/bin/pg_dump',                     # Standard package manager
+            '/usr/local/bin/pg_dump',               # Manual installation
+            '/usr/local/pgsql/bin/pg_dump',         # PostgreSQL source install
+        ],
+        'Windows': [
+            'C:\\Program Files\\PostgreSQL\\15\\bin\\pg_dump.exe',
+            'C:\\Program Files\\PostgreSQL\\14\\bin\\pg_dump.exe',
+            'C:\\Program Files\\PostgreSQL\\13\\bin\\pg_dump.exe',
+            'C:\\PostgreSQL\\bin\\pg_dump.exe',
+        ]
+    }
+
+    current_platform = platform.system()
+    if current_platform in common_paths:
+        for pg_dump_path in common_paths[current_platform]:
+            if Path(pg_dump_path).exists():
+                return pg_dump_path
+
+    return None
+
+
 def compress_file(file_path: Path) -> Path:
     """
     Compress a file using gzip
@@ -184,9 +230,19 @@ Examples:
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         out_path = out_dir / f"pg_dump_{ts}.sql"
 
+        # Find pg_dump executable (with fallback paths)
+        pg_dump_exe = find_pg_dump_executable()
+        if not pg_dump_exe:
+            print("❌ pg_dump not found in PATH or common installation locations")
+            print("Install PostgreSQL client tools:")
+            print("  macOS: brew install libpq")
+            print("  Ubuntu/Debian: sudo apt-get install postgresql-client")
+            print("  RHEL/CentOS: sudo yum install postgresql")
+            sys.exit(1)
+
         # Build pg_dump command
         cmd = [
-            "pg_dump",
+            pg_dump_exe,
             "--no-owner",
             "--no-privileges",
             "--format=plain",

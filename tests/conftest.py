@@ -15,6 +15,54 @@ from typing import Generator
 
 import pytest
 
+# FAIL FAST: Test Environment Validation
+def pytest_configure(config):
+    """
+    Validate test environment BEFORE running any tests.
+    Implements FAIL FAST principle - exit immediately if configuration is incomplete.
+    """
+    # Critical environment variables for full test functionality
+    required_env_vars = {
+        'DATABASE_URL': 'Database connection (set automatically to sqlite:///:memory: for tests)',
+        'OPENAI_API_KEY': 'OpenAI API access for content scoring and script generation tests',
+        'ELEVENLABS_API_KEY': 'ElevenLabs TTS API for audio generation tests',
+        'GITHUB_TOKEN': 'GitHub repository access for publishing tests',
+        'GITHUB_REPOSITORY': 'Target repository in format owner/repo'
+    }
+
+    missing_vars = []
+    for var_name, description in required_env_vars.items():
+        if var_name not in os.environ or not os.environ[var_name].strip():
+            # DATABASE_URL is auto-set for tests, others must be provided
+            if var_name != 'DATABASE_URL':
+                missing_vars.append(f"  ❌ {var_name}: {description}")
+
+    if missing_vars:
+        error_msg = "\n" + "="*80 + "\n"
+        error_msg += "🚨 CRITICAL: Test Environment Validation Failed (FAIL FAST)\n"
+        error_msg += "="*80 + "\n"
+        error_msg += "Required environment variables are missing or empty:\n\n"
+        error_msg += "\n".join(missing_vars)
+        error_msg += "\n\n"
+        error_msg += "FAIL FAST Principle: Tests cannot run with incomplete configuration.\n"
+        error_msg += "Fix environment configuration before running tests.\n"
+        error_msg += "\n"
+        error_msg += "Quick setup:\n"
+        error_msg += "  1. Copy .env.example to .env\n"
+        error_msg += "  2. Fill in all required API keys and configuration\n"
+        error_msg += "  3. Source the environment: source .env\n"
+        error_msg += "  4. Validate with: python3 scripts/doctor.py\n"
+        error_msg += "="*80 + "\n"
+
+        # Print to stderr and exit immediately
+        import sys
+        sys.stderr.write(error_msg)
+        sys.stderr.flush()
+        sys.exit(2)  # Exit code 2 indicates critical failure
+
+    # Success: Environment validation passed
+    print("✅ Test Environment Validation: All required environment variables present")
+
 # Ensure CLI tests can run even when the legacy runner module is absent
 if 'run_full_pipeline' not in sys.modules:
     try:
@@ -294,3 +342,58 @@ def real_database_test():
 
     # Cleanup - this fixture should be used carefully
     # to avoid affecting production data
+
+
+@pytest.fixture
+def real_feed_data():
+    """
+    Provides real RSS feed data with optional caching for performance.
+    Maintains real data testing philosophy while allowing performance optimization.
+    """
+    from tests.test_data_cache import test_cache
+
+    def get_feed(feed_name: str = "bridge", use_cache: bool = True):
+        """Get real RSS feed data, optionally cached."""
+        return test_cache.get_feed_data(feed_name, use_cache)
+
+    return get_feed
+
+
+@pytest.fixture
+def real_episode_data():
+    """
+    Provides real episode data from RSS feeds with optional caching.
+    """
+    from tests.test_data_cache import test_cache
+
+    def get_episodes(feed_name: str = "bridge", count: int = 3, use_cache: bool = True):
+        """Get real episode data from RSS feeds."""
+        return test_cache.get_sample_episodes(feed_name, count, use_cache)
+
+    return get_episodes
+
+
+@pytest.fixture
+def test_data_cache():
+    """
+    Direct access to test data cache for advanced test scenarios.
+    """
+    from tests.test_data_cache import test_cache
+    return test_cache
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_cache():
+    """
+    Clean up test cache after test session.
+    Ensures fresh state for next test run.
+    """
+    yield
+
+    # Clean up cache directory if it exists
+    from tests.test_data_cache import test_cache
+    cache_dir = test_cache.cache_dir
+    if cache_dir.exists():
+        import shutil
+        shutil.rmtree(cache_dir)
+        print(f"🗑️  Cleaned up test cache directory: {cache_dir}")

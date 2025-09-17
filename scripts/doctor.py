@@ -121,14 +121,85 @@ def check_data_directory_structure() -> List[Tuple[str, bool, str]]:
     return checks
 
 
+def check_pg_dump_with_paths() -> Tuple[str, bool, str]:
+    """
+    Check pg_dump availability with fallback to common installation paths.
+    Provides platform-specific installation guidance if not found.
+    """
+    import subprocess
+    import platform
+    import os
+    from pathlib import Path
+
+    # Common pg_dump installation paths by platform
+    common_paths = {
+        'Darwin': [  # macOS
+            '/opt/homebrew/opt/libpq/bin/pg_dump',  # Homebrew libpq (M1 Mac)
+            '/usr/local/opt/libpq/bin/pg_dump',     # Homebrew libpq (Intel Mac)
+            '/opt/homebrew/bin/pg_dump',            # Homebrew postgresql
+            '/usr/local/bin/pg_dump',               # Homebrew postgresql (Intel)
+            '/Applications/Postgres.app/Contents/Versions/latest/bin/pg_dump',  # Postgres.app
+        ],
+        'Linux': [
+            '/usr/bin/pg_dump',                     # Standard package manager
+            '/usr/local/bin/pg_dump',               # Manual installation
+            '/usr/local/pgsql/bin/pg_dump',         # PostgreSQL source install
+        ],
+        'Windows': [
+            'C:\\Program Files\\PostgreSQL\\*\\bin\\pg_dump.exe',
+            'C:\\PostgreSQL\\*\\bin\\pg_dump.exe',
+        ]
+    }
+
+    # First try standard PATH
+    try:
+        result = subprocess.run(['pg_dump', '--version'],
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            version_line = result.stdout.split('\n')[0]
+            return (f"✅ pg_dump", True, f"PostgreSQL client for database backups - {version_line[:50]}")
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    # Try platform-specific paths
+    current_platform = platform.system()
+    if current_platform in common_paths:
+        for pg_dump_path in common_paths[current_platform]:
+            try:
+                if Path(pg_dump_path).exists():
+                    result = subprocess.run([pg_dump_path, '--version'],
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        version_line = result.stdout.split('\n')[0]
+                        path_info = f"Found at {pg_dump_path}"
+                        return (f"⚠️  pg_dump", True, f"PostgreSQL client - {version_line[:30]} - {path_info}")
+            except Exception:
+                continue
+
+    # Generate platform-specific installation instructions
+    install_instructions = {
+        'Darwin': "Install: brew install libpq && export PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\"",
+        'Linux': "Install: sudo apt-get install postgresql-client (Debian/Ubuntu) or sudo yum install postgresql (RHEL/CentOS)",
+        'Windows': "Install: Download PostgreSQL from https://www.postgresql.org/download/windows/"
+    }
+
+    instruction = install_instructions.get(current_platform, "Install PostgreSQL client tools for your platform")
+    return (f"❌ pg_dump", False, f"PostgreSQL client for database backups - not found. {instruction}")
+
+
 def check_external_tools() -> List[Tuple[str, bool, str]]:
     """Check availability of external tools."""
     checks = []
 
+    # Handle pg_dump specially with path detection
+    checks.append(check_pg_dump_with_paths())
+
+    # Handle other tools normally
     tools = [
         ('ffmpeg', 'Required for audio chunking and format conversion', '-version'),  # ffmpeg uses single dash
         ('gh', 'GitHub CLI for publishing (optional if GITHUB_TOKEN is available)', '--version'),
-        ('pg_dump', 'PostgreSQL client for database backups', '--version'),
     ]
 
     for tool_info in tools:
