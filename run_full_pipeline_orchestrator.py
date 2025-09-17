@@ -282,7 +282,7 @@ class PipelineOrchestrator:
             self.logger.info("PHASE 4: DIGEST GENERATION")
             self.logger.info("="*80)
 
-            digest_result = self.run_phase_script('scripts/run_digest.py', scoring_result)
+            digest_result = self.run_phase_script('scripts/run_digest.py')
 
             if not digest_result.get('success'):
                 self.logger.error(f"Digest phase failed: {digest_result.get('error')}")
@@ -303,11 +303,12 @@ class PipelineOrchestrator:
             tts_result = self.run_phase_script('scripts/run_tts.py', digest_result)
 
             if not tts_result.get('success'):
-                self.logger.error(f"TTS phase failed: {tts_result.get('error')}")
-                return self._log_failure(start_time, "TTS phase failed")
-
-            audio_generated = tts_result.get('audio_generated', 0)
-            self.logger.info(f"🎤 Audio files generated: {audio_generated}")
+                self.logger.warning(f"TTS phase failed: {tts_result.get('error')}")
+                self.logger.info("📡 Continuing to publishing phase to publish any completed digests...")
+                audio_generated = 0
+            else:
+                audio_generated = tts_result.get('audio_generated', 0)
+                self.logger.info(f"🎤 Audio files generated: {audio_generated}")
 
             if self.phase_stop == 'tts':
                 self.logger.info("Stopping after TTS phase as requested")
@@ -331,7 +332,7 @@ class PipelineOrchestrator:
                 episodes_found,
                 scoring_result.get('episodes', []),
                 digest_result.get('digests', []),
-                tts_result.get('audio_results', [])
+                tts_result.get('audio_results', []) if tts_result.get('success') else []
             )
 
         except Exception as e:

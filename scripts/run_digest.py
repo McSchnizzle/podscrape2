@@ -85,10 +85,9 @@ class DigestRunner:
         if target_date is None:
             target_date = date.today()
 
-        # Validate input format (though we don't use episodes_data anymore with create_daily_digests)
-        if episodes_data is not None:
-            self.logger.warning("episodes_data parameter is ignored when using create_daily_digests - it discovers topics automatically")
-
+        # Note: episodes_data parameter is intentionally ignored when using create_daily_digests
+        # This allows the digest phase to work with all qualifying episodes from database,
+        # supporting scenarios where no new episodes were scored but backlog exists
         self.logger.info("Generating daily digests for all active topics (automatic topic discovery)")
 
         # Handle dry run mode

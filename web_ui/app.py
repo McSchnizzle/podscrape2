@@ -401,7 +401,7 @@ def create_app():
             except Exception:
                 pass
 
-        # Episodes that are transcribed but not digested
+        # Episodes that are ready for processing (transcribed) or digestion (scored)
         undigested = []
         try:
             transcribed = episode_repo.get_by_status('transcribed')

@@ -228,18 +228,25 @@ class ScoringRunner:
                 if score >= threshold:
                     qualifying_topics.append(topic)
 
-            self.logger.info("📈 Qualification Summary:")
+            # Determine final episode status based on qualification
             if qualifying_topics:
+                episode_status = 'scored'
+                self.logger.info("📈 Qualification Summary:")
                 self.logger.info(f"   ✅ Qualifies for {len(qualifying_topics)} topics: {', '.join(qualifying_topics)}")
             else:
+                episode_status = 'not_relevant'
                 max_score = max(scoring_result.scores.values()) if scoring_result.scores else 0
-                self.logger.info(f"   ❌ No topics meet {threshold} threshold (highest: {max_score:.2f})")
+                self.logger.info("📈 Qualification Summary:")
+                self.logger.info(f"   ❌ No topics meet {threshold} threshold (highest: {max_score:.2f}) - marking as not relevant")
+
+            # Update episode status in database
+            self.episode_repo.update_status(db_episode.episode_guid, episode_status)
 
             return {
                 'success': True,
                 'guid': db_episode.episode_guid,
                 'title': db_episode.title,
-                'status': 'scored',
+                'status': episode_status,
                 'scores': scoring_result.scores,
                 'qualifying_topics': qualifying_topics,
                 'threshold': threshold,

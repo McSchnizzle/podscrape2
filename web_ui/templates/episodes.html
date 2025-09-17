@@ -11,7 +11,7 @@
       <label class="block text-xs text-gray-600 mb-1">Status</label>
       <select name="status" class="border px-2 py-2 rounded w-full">
         <option value="" {% if not status %}selected{% endif %}>Any</option>
-        {% for s in ['pending','downloading','chunking','transcribing','transcribed','scoring','scored','digested','failed'] %}
+        {% for s in ['pending','transcribed','scored','digested','not_relevant','failed'] %}
           <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>

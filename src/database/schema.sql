@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS episodes (
         'scoring',
         'scored',
         'digested',
+        'not_relevant',
         'failed'
     )) DEFAULT 'pending',
     failure_count INTEGER DEFAULT 0,

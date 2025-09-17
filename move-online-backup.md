@@ -308,6 +308,44 @@ Acceptance criteria
 - UI tests green locally and in CI.
 
 
+## Phase 6.5 — Analytics & Metrics Dashboard
+
+- [ ] **Analytics Page in Web UI**: Create comprehensive analytics dashboard for feed processing pipeline
+  - **Feed Performance Metrics**: Episodes processed, success rates, relevance rates by feed
+  - **Episode Status Distribution**: Breakdown by status (pending, transcribed, scored, digested, not_relevant, failed)
+  - **Topic Coverage Analysis**: Which topics are getting the most qualifying episodes
+  - **Processing Pipeline Statistics**: Average processing times, failure rates, bottlenecks
+  - **Feed Quality Assessment**: Identify feeds with high 'not_relevant' rates for potential deactivation
+  - **Historical Trends**: Charts showing processing volume and quality over time
+- [ ] **Relevance Tracking**: Monitor feeds that consistently produce irrelevant content
+  - Track percentage of episodes marked as 'not_relevant' by feed
+  - Alert when feeds exceed threshold (e.g., >80% not_relevant over 30 days)
+  - Provide recommendations for feed deactivation based on performance data
+
+Acceptance criteria
+- Analytics dashboard shows real-time feed performance and processing metrics
+- Clear visibility into which feeds are producing relevant vs irrelevant content
+- Historical trend analysis for feed quality assessment
+
+## Phase 6.6 — Topic-Specific RSS Feeds
+
+- [ ] **Multi-Feed RSS Architecture**: Replace single `daily-digest.xml` with topic-specific feeds
+  - **Individual Topic Feeds**: Generate separate RSS feeds for each topic (e.g., `tech-digest.xml`, `organizing-digest.xml`)
+  - **Feed Discovery**: Create master index page listing all available topic feeds
+  - **RSS Metadata**: Ensure each topic feed has proper podcast metadata (title, description, artwork)
+  - **URL Structure**: Organize feeds at `/feeds/{topic-slug}.xml` for clean URLs
+  - **Backward Compatibility**: Consider maintaining legacy `daily-digest.xml` as aggregate feed or redirect
+- [ ] **Publishing Pipeline Updates**: Modify publishing logic to generate multiple RSS files
+  - Update RSS generation to create per-topic files instead of single aggregate
+  - Ensure proper enclosure URLs pointing to topic-specific MP3s
+  - Update Vercel deployment to serve multiple feed files
+  - Test RSS feeds in podcast clients for proper topic separation
+
+Acceptance criteria
+- Each topic has its own dedicated RSS feed with appropriate metadata
+- Podcast clients can subscribe to individual topics separately
+- RSS feeds validate against podcast standards and work in major podcast apps
+
 ## Phase 7 — Rollout and Hardening
 
 - [ ] Staging dry‑runs: schedule job against non‑prod storage (or with `--dry-run`).
