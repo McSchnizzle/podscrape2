@@ -23,7 +23,6 @@ jobs:
 
     env:
       PYTHON_VERSION: "3.11"
-      PIP_CACHE_KEY_PREFIX: ${{ runner.os }}-pip
       VENV_PATH: .venv
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -60,10 +59,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ env.PIP_CACHE_KEY_PREFIX }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ env.PIP_CACHE_KEY_PREFIX }}-${{ env.PYTHON_VERSION }}-
-            ${{ env.PIP_CACHE_KEY_PREFIX }}-
+            pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            pip-${{ runner.os }}-
 
       - name: Cache virtual environment
         id: venv-cache
