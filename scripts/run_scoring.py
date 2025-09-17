@@ -131,15 +131,6 @@ class ScoringRunner:
                     })
                     continue
 
-                if not db_episode.transcript_path or not Path(db_episode.transcript_path).exists():
-                    self.logger.error(f"No transcript found for episode {episode_guid}")
-                    failed_episodes.append({
-                        'guid': episode_guid,
-                        'title': db_episode.title,
-                        'error': 'No transcript available'
-                    })
-                    continue
-
                 self.logger.info(f"\n[{i}/{len(episodes)}] Scoring: {db_episode.title}")
 
                 if self.dry_run:
@@ -149,6 +140,15 @@ class ScoringRunner:
                         'title': db_episode.title,
                         'status': 'dry_run',
                         'scores': {}
+                    })
+                    continue
+
+                if not db_episode.transcript_path or not Path(db_episode.transcript_path).exists():
+                    self.logger.error(f"No transcript found for episode {episode_guid}")
+                    failed_episodes.append({
+                        'guid': episode_guid,
+                        'title': db_episode.title,
+                        'error': 'No transcript available'
                     })
                     continue
 
