@@ -7,6 +7,7 @@ Handles uploading MP3 files to GitHub releases and managing release lifecycle
 import os
 import json
 import logging
+import shutil
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
@@ -17,6 +18,65 @@ from ..utils.error_handling import retry_with_backoff, PodcastError
 from ..utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _validate_github_tools(require_gh_cli: bool = False) -> None:
+    """Validate GitHub publishing tools availability.
+
+    Args:
+        require_gh_cli: If True, require GitHub CLI authentication
+
+    FAIL FAST: Raises PodcastError immediately if required tools are missing.
+    """
+    github_token = os.getenv('GITHUB_TOKEN')
+
+    # Check for GitHub CLI if requested
+    if require_gh_cli:
+        if not shutil.which('gh'):
+            raise PodcastError(
+                "CRITICAL: GitHub CLI (gh) is required but not found in PATH. "
+                "Install GitHub CLI:\n"
+                "  macOS: brew install gh\n"
+                "  Ubuntu: curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt update && sudo apt install gh\n"
+                "  Windows: Download from https://cli.github.com/"
+            )
+
+        # Test GitHub CLI authentication
+        try:
+            import subprocess
+            env_nt = os.environ.copy()
+            env_nt.pop('GITHUB_TOKEN', None)  # Test CLI auth, not token
+            result = subprocess.run(['gh', 'auth', 'status'],
+                                   capture_output=True, text=True, timeout=10, env=env_nt)
+            if result.returncode != 0:
+                raise PodcastError(
+                    "CRITICAL: GitHub CLI is not authenticated. Run: gh auth login"
+                )
+        except subprocess.TimeoutExpired:
+            raise PodcastError("CRITICAL: GitHub CLI command timed out - check installation")
+        except Exception as e:
+            raise PodcastError(f"CRITICAL: Failed to validate GitHub CLI: {str(e)}")
+
+    # Validate at least one authentication method is available
+    if not github_token and not (shutil.which('gh') and _is_gh_authenticated()):
+        raise PodcastError(
+            "CRITICAL: No GitHub authentication available. Choose ONE:\n"
+            "  Option 1 - Set GITHUB_TOKEN environment variable\n"
+            "  Option 2 - Install and authenticate GitHub CLI: gh auth login"
+        )
+
+
+def _is_gh_authenticated() -> bool:
+    """Check if GitHub CLI is authenticated."""
+    try:
+        import subprocess
+        env_nt = os.environ.copy()
+        env_nt.pop('GITHUB_TOKEN', None)
+        result = subprocess.run(['gh', 'auth', 'status'],
+                               capture_output=True, text=True, timeout=5, env=env_nt)
+        return result.returncode == 0
+    except Exception:
+        return False
 
 @dataclass
 class GitHubRelease:
@@ -51,30 +111,24 @@ class GitHubPublisher:
         Args:
             github_token: GitHub personal access token (if not provided, uses GITHUB_TOKEN env var)
             repository: Repository name in format "owner/repo" (if not provided, uses GITHUB_REPOSITORY env var)
+
+        Raises:
+            PodcastError: If required GitHub authentication is not available
         """
+        # FAIL FAST: Validate GitHub tools before proceeding
+        _validate_github_tools()
+
         self.github_token = github_token or os.getenv('GITHUB_TOKEN')
         self.repository = repository or os.getenv('GITHUB_REPOSITORY')
 
-        if not self.github_token:
-            logger.warning("GITHUB_TOKEN not set; will attempt GH CLI fallback for publishing operations")
-        # Detect gh CLI availability/auth
-        self.gh_cli_ok = False
-        try:
-            import subprocess
-            chk = subprocess.run(['gh', '--version'], capture_output=True, text=True, timeout=5)
-            if chk.returncode == 0:
-                # Ensure we don't let env tokens override local gh auth status
-                env_nt = os.environ.copy()
-                env_nt.pop('GITHUB_TOKEN', None)
-                auth = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True, timeout=10, env=env_nt)
-                self.gh_cli_ok = (auth.returncode == 0)
-            if not self.gh_cli_ok:
-                logger.warning("GitHub CLI not available or not authenticated; REST token will be required for publishing")
-        except Exception:
-            logger.warning("GitHub CLI not available; REST token will be required for publishing")
-        
+        # Detect gh CLI availability/auth (now we know at least one method works)
+        self.gh_cli_ok = _is_gh_authenticated()
+
         if not self.repository:
-            raise PodcastError("Repository not provided and GITHUB_REPOSITORY env var not set")
+            raise PodcastError(
+                "Repository not provided and GITHUB_REPOSITORY env var not set. "
+                "Set GITHUB_REPOSITORY=owner/repo in .env file."
+            )
         
         self.api_base = "https://api.github.com"
         self.headers = {

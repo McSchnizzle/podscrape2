@@ -444,7 +444,7 @@ class TestVercelDeployer(unittest.TestCase):
         
         deployer = create_vercel_deployer()
         
-        is_valid = deployer.validate_deployment("https://test.example.com/daily-digest2.xml")
+        is_valid = deployer.validate_deployment("https://test.example.com/daily-digest.xml")
         self.assertTrue(is_valid)
     
     @patch('subprocess.run')

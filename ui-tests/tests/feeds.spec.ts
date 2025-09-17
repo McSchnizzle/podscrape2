@@ -7,7 +7,7 @@ test.describe('Feeds management', () => {
     await expect(page.getByRole('heading', { name: 'Feeds' })).toBeVisible();
 
     // Use local RSS file for deterministic parsing
-    const rssPath = path.resolve(process.cwd(), '..', 'daily-digest2.xml');
+    const rssPath = path.resolve(process.cwd(), '..', 'daily-digest.xml');
     const fileUrl = 'file://' + rssPath;
 
     await page.fill('input[name="feed_url"]', fileUrl);

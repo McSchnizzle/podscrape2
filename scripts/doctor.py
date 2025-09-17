@@ -126,21 +126,27 @@ def check_external_tools() -> List[Tuple[str, bool, str]]:
     checks = []
 
     tools = [
-        ('ffmpeg', 'Required for audio chunking and format conversion'),
-        ('gh', 'GitHub CLI for publishing (optional if GITHUB_TOKEN is available)'),
-        ('pg_dump', 'PostgreSQL client for database backups'),
+        ('ffmpeg', 'Required for audio chunking and format conversion', '-version'),  # ffmpeg uses single dash
+        ('gh', 'GitHub CLI for publishing (optional if GITHUB_TOKEN is available)', '--version'),
+        ('pg_dump', 'PostgreSQL client for database backups', '--version'),
     ]
 
-    for tool, description in tools:
+    for tool_info in tools:
+        tool = tool_info[0]
+        description = tool_info[1]
+        version_flag = tool_info[2] if len(tool_info) > 2 else '--version'
+
         try:
             import subprocess
-            result = subprocess.run([tool, '--version'],
+            result = subprocess.run([tool, version_flag],
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 version_line = result.stdout.split('\n')[0] if result.stdout else result.stderr.split('\n')[0]
                 checks.append((f"✅ {tool}", True, f"{description} - {version_line[:50]}"))
             else:
-                checks.append((f"❌ {tool}", False, f"{description} - command failed"))
+                # Show actual exit code and stderr to help diagnose the issue
+                stderr_snippet = result.stderr[:100] if result.stderr else "no error output"
+                checks.append((f"❌ {tool}", False, f"{description} - exit code {result.returncode}: {stderr_snippet}"))
         except FileNotFoundError:
             checks.append((f"❌ {tool}", False, f"{description} - not found in PATH"))
         except subprocess.TimeoutExpired:

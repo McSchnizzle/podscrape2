@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from pathlib import Path
 from sqlalchemy import text, Column, Integer, String, DateTime, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import insert
 
 from src.database.models import get_database_manager

@@ -13,11 +13,43 @@ import requests
 from datetime import datetime
 import subprocess
 import tempfile
+import shutil
 
 from ..utils.error_handling import retry_with_backoff, PodcastError
 from ..utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _validate_external_tools():
+    """Validate that required external tools are available.
+
+    FAIL FAST: Raises PodcastError immediately if required tools are missing.
+    """
+    # Check for ffmpeg
+    if not shutil.which('ffmpeg'):
+        raise PodcastError(
+            "CRITICAL: ffmpeg is required for audio processing but not found in PATH. "
+            "Install ffmpeg:\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Ubuntu: sudo apt update && sudo apt install ffmpeg\n"
+            "  Windows: Download from https://ffmpeg.org/download.html"
+        )
+
+    # Test ffmpeg is working (ffmpeg uses -version, not --version)
+    try:
+        result = subprocess.run(['ffmpeg', '-version'],
+                               capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            raise PodcastError(
+                f"CRITICAL: ffmpeg command failed with exit code {result.returncode}. "
+                f"Output: {result.stdout[:100] if result.stdout else 'no stdout'} "
+                f"Error: {result.stderr[:100] if result.stderr else 'no stderr'}"
+            )
+    except subprocess.TimeoutExpired:
+        raise PodcastError("CRITICAL: ffmpeg command timed out - check ffmpeg installation")
+    except Exception as e:
+        raise PodcastError(f"CRITICAL: Failed to validate ffmpeg: {str(e)}")
 
 class AudioProcessor:
     """
@@ -30,16 +62,22 @@ class AudioProcessor:
                  chunk_duration_minutes: int = 3):
         """
         Initialize audio processor
-        
+
         Args:
             audio_cache_dir: Directory to cache downloaded audio files
             chunk_dir: Directory for audio chunks
             chunk_duration_minutes: Duration of each audio chunk in minutes
+
+        Raises:
+            PodcastError: If required external tools (ffmpeg) are not available
         """
+        # FAIL FAST: Validate external tools before proceeding
+        _validate_external_tools()
+
         self.audio_cache_dir = Path(audio_cache_dir)
         self.chunk_dir = Path(chunk_dir)
         self.chunk_duration_seconds = chunk_duration_minutes * 60
-        
+
         # Create directories if they don't exist
         self.audio_cache_dir.mkdir(parents=True, exist_ok=True)
         self.chunk_dir.mkdir(parents=True, exist_ok=True)
