@@ -31,4 +31,15 @@ Keep these secrets updated whenever credentials rotate. Validate the full set wi
 - Artifact: `ci-bootstrap-report/ci-bootstrap-report.json` (download with `gh run download 17810460258 -n ci-bootstrap-report`).
 - Notes: Workflow now caches pip wheels in later phases; rerun after any credential updates.
 
+### 2025-09-17 — Subphase 4.1 Discovery Dry Run
+- Workflow: `Phase Discovery` (`.github/workflows/phase-discovery.yml`)
+- Run ID: `17810944886` (`gh run view 17810944886`)
+- Status: ✅ Success (limit=1, days_back=3, dry run)
+- Summary:
+  - Discovery scanned 29 feeds, skipped historical items, and produced a dry-run JSON output at `artifacts/discovery-output.json`.
+  - Pip/virtualenv caches populated (`pip-Linux-3.11-…`, `venv-Linux-3.11-…`) to accelerate future runs.
+  - Logs archived in the `discovery-phase` artifact along with summary JSON.
+- Artifact download: `gh run download 17810944886 -n discovery-phase -D ./tmp/discovery-phase`
+- Notes: First run incurred full dependency installation (~4m28s). Subsequent runs should re-use caches.
+
 Add new entries below as additional Phase 4 subphases go live.
