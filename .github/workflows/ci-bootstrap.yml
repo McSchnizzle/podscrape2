@@ -148,7 +148,7 @@ jobs:
               record("github", "error", str(exc))
               failed = True
 
-          report_path = ".github-ci-bootstrap-report.json"
+          report_path = "ci-bootstrap-report.json"
           with open(report_path, "w", encoding="utf-8") as fh:
               json.dump({"results": results}, fh, indent=2)
 
@@ -163,5 +163,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ci-bootstrap-report
-          path: .github-ci-bootstrap-report.json
+          path: ci-bootstrap-report.json
           if-no-files-found: error
