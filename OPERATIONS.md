@@ -55,3 +55,15 @@ Add new entries below as additional Phase 4 subphases go live.
   - Artifact `audio-phase` contains discovery JSON, audio JSON, and logs (`audio_20250917_214614.log`).
 - Artifact download: `gh run download 17811446743 -n audio-phase -D ./tmp/audio-phase`
 - Notes: Whisper cache path currently empty on runners; warning during cache save is expected until models are downloaded in a non–dry-run future phase.
+
+### 2025-09-17 — Subphase 4.3 Scoring Dry Run
+- Workflow: `Phase Scoring` (`.github/workflows/phase-scoring.yml`)
+- Run ID: `17811674774` (`gh run view 17811674774`)
+- Status: ✅ Success (limit=1, days_back=3, dry run end-to-end)
+- Summary:
+  - Discovery and audio dry-run steps executed inline so scoring has seeded data.
+  - Scoring dry-run reported one episode with empty `scores` map (expected because GPT call is skipped).
+  - Artifacts: `scoring-phase` zip containing discovery/audio/scoring JSON outputs and logs (`scoring_*.log`, `audio_*.log`, `discovery_*.log`).
+  - Pip/venv caches hit; Whisper cache still empty (warning noted).
+- Artifact download: `gh run download 17811674774 -n scoring-phase -D ./tmp/scoring-phase`
+- Notes: Future real runs must ensure transcripts exist before removing dry-run guard.

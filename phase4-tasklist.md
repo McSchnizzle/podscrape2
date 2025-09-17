@@ -63,6 +63,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - `.github/workflows/phase-scoring.yml`: run `python scripts/run_scoring.py --limit 2 --dry-run`, mock GPT calls with existing fixtures to avoid live tokens.
    - Cache pip deps plus prompt fixture archives for deterministic run times.
    - Persist scoring output JSON + structured logs.
+   - ✅ Completed 2025‑09‑17: workflow `phase-scoring.yml` run ID `17811674774` (dry-run limit=1, days_back=3).
 2. **Testing**
    - Ensure `tests/test_phase_scripts.py` covers scoring script import/help; add fixture verifying dry-run path.
    - Validate environment guard prevents accidental live token use on CI.
