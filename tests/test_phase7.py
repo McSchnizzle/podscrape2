@@ -38,6 +38,7 @@ class TestGitHubPublisher(unittest.TestCase):
             'created_at': '2024-12-10T12:00:00Z',
             'published_at': '2024-12-10T12:00:00Z',
             'assets': [],
+            'html_url': 'https://github.com/test/test/releases/daily-2024-12-10',
             'upload_url': 'https://uploads.github.com/repos/test/test/releases/123456/assets{?name,label}'
         }
     
@@ -409,18 +410,19 @@ class TestVercelDeployer(unittest.TestCase):
             deployer._create_deployment_structure(temp_path, self.test_rss)
             
             # Check files were created
-            self.assertTrue((temp_path / "public" / "daily-digest2.xml").exists())
+            rss_path = temp_path / "public" / "daily-digest.xml"
+            self.assertTrue(rss_path.exists())
             self.assertTrue((temp_path / "public" / "index.html").exists())
             self.assertTrue((temp_path / "vercel.json").exists())
-            
+
             # Check RSS content
-            rss_content = (temp_path / "public" / "daily-digest2.xml").read_text()
+            rss_content = rss_path.read_text()
             self.assertEqual(rss_content, self.test_rss)
-            
+
             # Check vercel.json
             vercel_config = json.loads((temp_path / "vercel.json").read_text())
-            self.assertIn("routes", vercel_config)
             self.assertIn("headers", vercel_config)
+            self.assertIn("redirects", vercel_config)
     
     @patch('subprocess.run')
     @patch('requests.get')

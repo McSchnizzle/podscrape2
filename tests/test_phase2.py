@@ -15,6 +15,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
+pytest.importorskip("sqlalchemy", reason="SQLAlchemy is required for Phase 2 tests")
+
 # Add project root to path for imports
 project_root = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, project_root)
