@@ -75,6 +75,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - `.github/workflows/phase-digest.yml`: run `python scripts/run_digest.py --limit 1 --dry-run`, ensure dependencies on scoring outputs satisfied (use seeded DB fixture or artifact from prior run).
    - Reuse cached pip deps and share digest template cache (Markdown/JSON) between runs.
    - Upload generated script markdown.
+   - ✅ Completed 2025‑09‑17: workflow `phase-digest.yml` run ID `17812724198` (dry-run limit=1, days_back=3).
 2. **Testing**
    - Extend pytest fixtures to verify digest generation dry-run path using local sample transcripts.
    - Confirm Alembic migrations run before pipeline step to keep schema aligned.

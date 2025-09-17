@@ -67,3 +67,15 @@ Add new entries below as additional Phase 4 subphases go live.
   - Pip/venv caches hit; Whisper cache still empty (warning noted).
 - Artifact download: `gh run download 17811674774 -n scoring-phase -D ./tmp/scoring-phase`
 - Notes: Future real runs must ensure transcripts exist before removing dry-run guard.
+
+### 2025-09-17 — Subphase 4.4 Digest Dry Run
+- Workflow: `Phase Digest` (`.github/workflows/phase-digest.yml`)
+- Run ID: `17812724198` (`gh run view 17812724198`)
+- Status: ✅ Success (limit=1, days_back=3, dry run across discovery/audio/scoring/digest)
+- Summary:
+  - Replayed discovery → audio → scoring dry-run steps before invoking digest to ensure DB state consistent.
+  - Digest dry-run reports zero generated digests (expected) and confirms the pipeline wiring.
+  - Artifact `digest-phase` contains discovery/audio/scoring outputs, digest output (dry-run message), and combined logs.
+  - Caches reused from prior runs; Whisper cache still empty (warning remains expected).
+- Artifact download: `gh run download 17812724198 -n digest-phase -D ./tmp/digest-phase`
+- Notes: When enabling real digest generation, remove dry-run flag and ensure transcripts/scoring data exist for the target date.

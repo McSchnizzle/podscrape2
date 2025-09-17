@@ -31,6 +31,12 @@ Working file for incremental CI/CD rollout. Review this document before starting
 - Reuse stdin piping pattern for passing JSON between phases.
 - Expect Whisper cache warnings (audio still runs), but scoring itself has no extra system dependencies.
 
+## Phase 4.4 — Digest Workflow
+- Reuse discovery → audio → scoring steps inside digest workflow to ensure downstream tables are populated.
+- Digest dry-run returns zero digests; treat that as success but capture message in artifacts.
+- Logs volume grows quickly; continue collecting only the most recent `*_phase` logs to keep artifacts small.
+- Whisper cache remains unused in dry-run—warnings are acceptable until real TTS runs populate it.
+
 ## TODO for Upcoming Phases
 - Ensure scoring workflow reuses discovery output artifact (stdin) and that dry-run skips transcript checks (already patched).
 - Keep artifact naming consistent (`scoring-phase`, `digest-phase`, etc.).
