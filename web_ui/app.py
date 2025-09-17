@@ -149,9 +149,9 @@ def create_app():
                         starts['scoring'] = ts
                     elif (('phase 4' in low and 'digest' in low) or 'digest generation for all' in low) and starts['digests'] is None:
                         starts['digests'] = ts
-                    elif ('phase 6' in low and 'tts' in low) and starts['tts'] is None:
+                    elif ('phase 5' in low and 'tts' in low) and starts['tts'] is None:
                         starts['tts'] = ts
-                    elif (('phase 7' in low and 'publishing' in low) or 'handing off to publishing pipeline' in low) and starts['publishing'] is None:
+                    elif (('phase 6' in low and 'publishing' in low) or 'handing off to publishing pipeline' in low) and starts['publishing'] is None:
                         starts['publishing'] = ts
                     elif 'pipeline execution complete' in low:
                         end_ts = ts

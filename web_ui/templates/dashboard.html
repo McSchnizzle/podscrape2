@@ -117,8 +117,8 @@
           else if (line.includes('PHASE 2:') || line.includes(' — AUDIO')) this.setPhase('audio');
           else if (line.includes('PHASE 3:') || line.includes(' — SCORING')) this.setPhase('scoring');
           else if (line.includes('PHASE 4:') || line.includes('DIGEST GENERATION FOR ALL')) this.setPhase('digest');
-          else if (line.includes('PHASE 6: TTS')) this.setPhase('tts');
-          else if (line.includes('PHASE 7:') || line.includes('PUBLISHING PIPELINE')) this.setPhase('publishing');
+          else if (line.includes('PHASE 5: TTS')) this.setPhase('tts');
+          else if (line.includes('PHASE 6:') || line.includes('PUBLISHING PIPELINE')) this.setPhase('publishing');
           else if (line.includes('PIPELINE EXECUTION COMPLETE') || line.includes('PUBLISHING SUMMARY') || line.includes('PIPELINE SUCCESS')) this.markComplete();
         },
         start() {

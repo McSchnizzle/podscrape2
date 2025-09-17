@@ -230,6 +230,37 @@ Acceptance criteria
 - [ ] **PENDING**: Web UI integration refactoring to use phase scripts
 
 
+## Phase 3.5 — AI Token Configuration Management **[🆕 NEW REQUIREMENT]**
+
+**Add comprehensive AI token limit controls to Web UI for all AI interactions:**
+
+- [ ] **Scoring Configuration**:
+  - `ai_scoring.max_tokens_per_request` (current: ~1000 tokens for GPT-5-mini scoring)
+  - `ai_scoring.max_episodes_per_batch` (batch processing limits)
+- [ ] **Digest Generation Configuration**:
+  - `digest_generation.max_output_tokens` (current: ~25,000 word limit per script)
+  - `digest_generation.max_input_tokens` (episode transcript limits)
+- [ ] **TTS Phase Configuration**:
+  - `tts_generation.max_title_tokens` (episode title generation via GPT-5-nano)
+  - `tts_generation.max_summary_tokens` (episode summary generation)
+- [ ] **Metadata Generation Configuration**:
+  - `metadata.max_description_tokens` (RSS episode descriptions)
+  - `metadata.max_topic_analysis_tokens` (topic relevance analysis)
+
+**Implementation Tasks**:
+- [ ] Audit all AI API calls across the codebase to identify max_tokens parameters
+- [ ] Add `ai_configuration` section to `web_settings` database table
+- [ ] Create Web UI settings page for AI token configuration
+- [ ] Update all AI service classes to read token limits from WebConfig
+- [ ] Add validation and reasonable defaults for all token settings
+- [ ] Document token usage implications (cost, quality, performance trade-offs)
+
+**Acceptance Criteria**:
+- All AI interactions have configurable token limits via Web UI
+- Settings persist in database and affect pipeline execution
+- Clear documentation of token usage implications
+- Validation prevents unreasonably high/low token limits
+
 ## Phase 4 — CI/CD **[✅ READY - Phase 2.5 STT Migration Complete]**
 
 - [ ] `ci.yml` (PRs):

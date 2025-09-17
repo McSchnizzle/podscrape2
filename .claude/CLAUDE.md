@@ -28,6 +28,24 @@
 - Tests should validate error handling behavior, not avoid triggering it
 - Log warnings for invalid data but don't fail tests unnecessarily
 
+## Environment Configuration - FAIL FAST PRINCIPLE
+**CRITICAL**: Environment configuration issues must FAIL IMMEDIATELY and LOUDLY. No fallbacks, no silent failures.
+
+**Core Philosophy**: If any required environment variable or dependency is missing or misconfigured, the system must:
+1. Stop immediately with a clear error message
+2. Exit with a non-zero status code
+3. Show RED status in the Web UI system health
+4. Never attempt to run with incomplete configuration
+5. No masking, fallbacks, or workarounds that hide the real problem
+
+**Required for All Operations**:
+- API Keys: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GITHUB_TOKEN`
+- Repository: `GITHUB_REPOSITORY` (format: owner/repo)
+- Database: `DATABASE_URL` or complete Supabase configuration
+- External Tools: ffmpeg, gh CLI, python3 dependencies
+
+**Testing**: Use `scripts/doctor.py` to validate complete environment before any development work. If doctor fails, fix the environment - don't proceed with broken config.
+
 ## Python Environment
 **CRITICAL**: Always use `python3` command, never just `python`
 - All CLI commands: `python3 script.py`

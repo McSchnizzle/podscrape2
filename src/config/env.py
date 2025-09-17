@@ -90,3 +90,35 @@ def require_database_url() -> str:
             "DATABASE_URL is required. Set DATABASE_URL directly or provide SUPABASE_URL and SUPABASE_PASSWORD in .env."
         )
     return url
+
+
+def validate_critical_environment() -> None:
+    """Validate critical environment variables and fail fast if any are missing.
+
+    FAIL FAST PRINCIPLE: This function will raise MissingEnvError immediately
+    if any critical environment variables are missing. NO FALLBACKS.
+
+    Use this function at the start of any script that requires environment configuration.
+    """
+    load_dotenv()  # Ensure .env is loaded
+
+    # Critical environment variables - NO FALLBACKS, NO SILENT FAILURES
+    critical_vars = [
+        'OPENAI_API_KEY',
+        'ELEVENLABS_API_KEY',
+        'GITHUB_TOKEN',
+        'GITHUB_REPOSITORY'
+    ]
+
+    # Check all critical variables
+    require_env(critical_vars)
+
+    # Check database connectivity
+    require_database_url()
+
+    # Validate GitHub repository format
+    github_repo = os.getenv('GITHUB_REPOSITORY', '')
+    if '/' not in github_repo or github_repo.count('/') != 1:
+        raise MissingEnvError(
+            f"GITHUB_REPOSITORY must be in format 'owner/repo', got: '{github_repo}'"
+        )

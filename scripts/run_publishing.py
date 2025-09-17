@@ -131,6 +131,7 @@ class PublishingPipelineRunner:
                 'mp3_summary': digest_model.mp3_summary,
                 'mp3_duration_seconds': digest_model.mp3_duration_seconds,
                 'github_url': digest_model.github_url,
+                'created_at': digest_model.created_at,  # Add creation timestamp for unique pubDate
                 'rss_published_at': None  # This field doesn't exist in the new schema
             }
 
@@ -235,14 +236,18 @@ class PublishingPipelineRunner:
                 # GitHub release asset URL pattern
                 mp3_url = f"https://github.com/{repo}/releases/download/daily-{date_str}/{mp3_filename}"
                 
+                # Create unique GUID by including MP3 filename (which contains timestamp)
+                mp3_basename = Path(digest['mp3_path']).stem  # Gets filename without extension
+                guid = f"digest-{digest['digest_date']}-{digest['topic'].lower().replace(' ', '-')}-{mp3_basename}"
+
                 episode = PodcastEpisode(
                     title=digest['mp3_title'] or f"{digest['topic']} - {digest['digest_date']}",
                     description=digest['mp3_summary'] or f"Daily digest for {digest['topic']}",
                     audio_url=mp3_url,
-                    pub_date=generate_unique_pubdate(digest['digest_date'], digest['topic']),
+                    pub_date=generate_unique_pubdate(digest['digest_date'], digest['topic'], digest['created_at']),
                     duration_seconds=digest['mp3_duration_seconds'] or 0,
                     file_size=Path(digest['mp3_path']).stat().st_size if Path(digest['mp3_path']).exists() else 0,
-                    guid=f"digest-{digest['digest_date']}-{digest['topic'].lower().replace(' ', '-')}"
+                    guid=guid
                 )
                 episodes.append(episode)
             

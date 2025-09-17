@@ -16,13 +16,17 @@ os.environ['PYTHONPATH'] = str(project_root / 'src')
 
 
 def check_environment_variables() -> List[Tuple[str, bool, str]]:
-    """Check required environment variables are present."""
+    """Check required environment variables are present.
+
+    FAIL FAST PRINCIPLE: No fallbacks, no silent failures.
+    Missing environment variables are critical errors that must be fixed immediately.
+    """
     from dotenv import load_dotenv
     load_dotenv()  # Load .env file
 
     checks = []
 
-    # Required API keys
+    # Required API keys - NO FALLBACKS, NO SILENT FAILURES
     required_vars = [
         ('OPENAI_API_KEY', 'OpenAI API key for content scoring and script generation'),
         ('ELEVENLABS_API_KEY', 'ElevenLabs API key for TTS audio generation'),
@@ -32,10 +36,10 @@ def check_environment_variables() -> List[Tuple[str, bool, str]]:
 
     for var_name, description in required_vars:
         value = os.getenv(var_name)
-        if value and not value.startswith('test-') and value != 'your-key-here':
+        if value and not value.startswith('test-') and value != 'your-key-here' and len(value.strip()) > 0:
             checks.append((f"✅ {var_name}", True, description))
         else:
-            checks.append((f"❌ {var_name}", False, f"Missing or placeholder: {description}"))
+            checks.append((f"❌ {var_name} [CRITICAL]", False, f"MISSING REQUIRED ENV VAR: {description}"))
 
     return checks
 
@@ -175,11 +179,16 @@ def check_python_dependencies() -> List[Tuple[str, bool, str]]:
 
 
 def main():
-    """Run all validation checks and display results."""
+    """Run all validation checks and display results.
+
+    FAIL FAST PRINCIPLE: Exit immediately if critical environment issues are found.
+    """
     print("🏥 Podscrape2 Environment Doctor")
     print("=" * 50)
+    print("FAIL FAST MODE: Critical environment issues will cause immediate failure")
 
     all_checks = []
+    critical_failures = []
 
     # Run all checks
     print("\n📋 Environment Variables")
@@ -189,6 +198,8 @@ def main():
         print(f"  {check_name}")
         if not passed:
             print(f"    → {description}")
+            if "[CRITICAL]" in check_name:
+                critical_failures.append((check_name, description))
 
     print("\n🔗 Database Connectivity")
     db_check = check_database_connectivity()
@@ -197,6 +208,7 @@ def main():
     print(f"  {check_name}")
     if not passed:
         print(f"    → {description}")
+        critical_failures.append((check_name, description))
 
     print("\n📁 Data Directory Structure")
     dir_checks = check_data_directory_structure()
@@ -213,6 +225,8 @@ def main():
         print(f"  {check_name}")
         if not passed:
             print(f"    → {description}")
+            if "ffmpeg" in check_name and "❌" in check_name:
+                critical_failures.append((check_name, description))
 
     print("\n🐍 Python Dependencies")
     dep_checks = check_python_dependencies()
@@ -221,6 +235,8 @@ def main():
         print(f"  {check_name}")
         if not passed:
             print(f"    → {description}")
+            if "❌" in check_name and "optional" not in description:
+                critical_failures.append((check_name, description))
 
     # Summary
     passed_checks = sum(1 for _, passed, _ in all_checks if passed)
@@ -229,13 +245,28 @@ def main():
     print("\n" + "=" * 50)
     print(f"📊 Summary: {passed_checks}/{total_checks} checks passed")
 
+    # Handle critical failures with FAIL FAST principle
+    if critical_failures:
+        print("\n🚨 CRITICAL FAILURES DETECTED - SYSTEM CANNOT OPERATE")
+        print("=" * 60)
+        print("The following CRITICAL issues must be fixed before proceeding:")
+        print()
+        for i, (check_name, description) in enumerate(critical_failures, 1):
+            print(f"{i}. {check_name}")
+            print(f"   {description}")
+            print()
+        print("❌ ABORTING: Fix critical issues and run doctor.py again")
+        print("❌ NO FALLBACKS: System will not attempt to run with missing configuration")
+        sys.exit(2)  # Exit code 2 for critical failures
+
     if passed_checks == total_checks:
         print("🎉 All checks passed! Environment is ready.")
         sys.exit(0)
     else:
         failed_checks = total_checks - passed_checks
-        print(f"⚠️  {failed_checks} checks failed. Review issues above.")
-        sys.exit(1)
+        print(f"⚠️  {failed_checks} non-critical checks failed. Review issues above.")
+        print("💡 System may still operate but with reduced functionality.")
+        sys.exit(1)  # Exit code 1 for non-critical failures
 
 
 if __name__ == "__main__":

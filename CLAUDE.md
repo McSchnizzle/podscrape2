@@ -109,6 +109,28 @@ python3 transcribe_episode.py <episode_guid>
 
 ## Critical Development Guidelines
 
+### Environment Configuration - FAIL FAST PRINCIPLE
+**CRITICAL**: Environment configuration issues must FAIL IMMEDIATELY and LOUDLY. No fallbacks, no silent failures.
+
+**Core Principle**: If any required environment variable is missing or misconfigured, the system must:
+1. Stop immediately with a clear error message
+2. Exit with a non-zero status code
+3. Show RED status in the Web UI system health
+4. Never attempt to run with incomplete configuration
+
+**Required Environment Variables**:
+- `OPENAI_API_KEY` - OpenAI API access for scoring and script generation
+- `ELEVENLABS_API_KEY` - ElevenLabs TTS audio generation
+- `GITHUB_TOKEN` - GitHub repository access for publishing
+- `GITHUB_REPOSITORY` - Target repository (format: owner/repo)
+- `DATABASE_URL` or Supabase configuration - Database connectivity
+
+**Implementation**:
+- Use `scripts/doctor.py` to validate all required dependencies
+- Web UI system health section shows immediate RED for missing config
+- All scripts check environment at startup before proceeding
+- No masking or workarounds - configuration problems must be fixed
+
 ### Python Environment
 **ALWAYS use `python3` command, never `python`** - this is critical for macOS compatibility.
 
