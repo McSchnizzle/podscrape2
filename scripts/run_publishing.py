@@ -131,7 +131,7 @@ class PublishingPipelineRunner:
                 'mp3_summary': digest_model.mp3_summary,
                 'mp3_duration_seconds': digest_model.mp3_duration_seconds,
                 'github_url': digest_model.github_url,
-                'created_at': digest_model.created_at,  # Add creation timestamp for unique pubDate
+                'created_at': digest_model.generated_at,  # Add creation timestamp for unique pubDate
                 'rss_published_at': None  # This field doesn't exist in the new schema
             }
 
