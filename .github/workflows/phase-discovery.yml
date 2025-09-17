@@ -1,0 +1,124 @@
+name: Phase Discovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Maximum episodes to evaluate"
+        required: false
+        default: "2"
+      days_back:
+        description: "Days back for discovery scan"
+        required: false
+        default: "7"
+
+concurrency:
+  group: phase-discovery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discovery:
+    name: Run Discovery Phase (Dry Run)
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHON_VERSION: "3.11"
+      PIP_CACHE_KEY_PREFIX: ${{ runner.os }}-pip
+      VENV_PATH: .venv
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      LIMIT: ${{ inputs.limit || '2' }}
+      DAYS_BACK: ${{ inputs.days_back || '7' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure required secrets present
+        run: |
+          missing=()
+          for var in DATABASE_URL OPENAI_API_KEY ELEVENLABS_API_KEY GH_TOKEN GH_REPOSITORY; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip downloads
+        id: pip-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ env.PIP_CACHE_KEY_PREFIX }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ env.PIP_CACHE_KEY_PREFIX }}-${{ env.PYTHON_VERSION }}-
+            ${{ env.PIP_CACHE_KEY_PREFIX }}-
+
+      - name: Cache virtual environment
+        id: venv-cache
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            venv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          if [ -d "${VENV_PATH}" ]; then
+            echo "Using cached virtualenv";
+          else
+            python -m venv "${VENV_PATH}"
+          fi
+          source "${VENV_PATH}/bin/activate"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run discovery dry run
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          mkdir -p artifacts
+          python scripts/run_discovery.py \
+            --limit "$LIMIT" \
+            --days-back "$DAYS_BACK" \
+            --dry-run \
+            --verbose \
+            --output artifacts/discovery-output.json
+        env:
+          ORCHESTRATED_EXECUTION: "1"
+
+      - name: Collect discovery logs
+        if: success()
+        run: |
+          mkdir -p artifacts/logs
+          if compgen -G "logs/discovery_*.log" > /dev/null; then
+            cp logs/discovery_*.log artifacts/logs/
+          fi
+          if compgen -G "logs/orchestrator_*.log" > /dev/null; then
+            cp logs/orchestrator_*.log artifacts/logs/
+          fi
+
+      - name: Upload discovery artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-phase
+          path: artifacts
+          if-no-files-found: warn
+
+      - name: Summarize discovery output
+        if: success()
+        run: |
+          jq '.' artifacts/discovery-output.json || cat artifacts/discovery-output.json
