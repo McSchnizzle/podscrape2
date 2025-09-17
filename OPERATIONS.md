@@ -43,3 +43,15 @@ Keep these secrets updated whenever credentials rotate. Validate the full set wi
 - Notes: First run incurred full dependency installation (~4m28s). Subsequent runs should re-use caches.
 
 Add new entries below as additional Phase 4 subphases go live.
+
+### 2025-09-17 — Subphase 4.2 Audio Dry Run
+- Workflow: `Phase Audio` (`.github/workflows/phase-audio.yml`)
+- Run ID: `17811446743` (`gh run view 17811446743`)
+- Status: ✅ Success (limit=1, days_back=3, dry run with discovery seed)
+- Summary:
+  - Discovery seeding produced `discovery-output.json` with a single pending episode.
+  - Audio phase executed in dry-run mode (no downloads/transcription) and reported the episode in `audio-output.json`.
+  - Pip, virtualenv, and Whisper caches reused from previous run; ffmpeg installed via apt each execution.
+  - Artifact `audio-phase` contains discovery JSON, audio JSON, and logs (`audio_20250917_214614.log`).
+- Artifact download: `gh run download 17811446743 -n audio-phase -D ./tmp/audio-phase`
+- Notes: Whisper cache path currently empty on runners; warning during cache save is expected until models are downloaded in a non–dry-run future phase.

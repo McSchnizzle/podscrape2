@@ -35,8 +35,8 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Create `.github/workflows/phase-discovery.yml` with steps: checkout, setup Python, install requirements, run `python scripts/run_discovery.py --limit 2 --verbose --dry-run`.
    - Add aggressive caching (`actions/cache`) for `~/.cache/pip`, `.venv`, and feed data fixtures to keep reruns fast.
    - Upload log artifact (`discovery.log`) and JSON output for inspection.
-   - Gate on pull requests + manual dispatch; allow concurrency cancel.
-   - ✅ Completed 2025‑09‑17: workflow `phase-discovery.yml` run ID `17810944886` (dry-run limit=1, days_back=3).
+ - Gate on pull requests + manual dispatch; allow concurrency cancel.
+  - ✅ Completed 2025‑09‑17: workflow `phase-discovery.yml` run ID `17810944886` (dry-run limit=1, days_back=3).
 2. **Testing**
    - Add pytest marker (e.g., `tests/test_phase_scripts.py::TestPhaseScripts::test_discovery_script_help`) to CI so dry-run executes quickly.
    - Ensure log parsing works locally via `python scripts/run_discovery.py --limit 1 --dry-run`.
@@ -50,6 +50,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - `.github/workflows/phase-audio.yml`: reuse discovery artifact or sample payload; run `python scripts/run_audio.py --limit 1 --dry-run` (no Whisper heavy lifting yet).
    - Cache Whisper models, ffmpeg build downloads, and pip wheels between runs.
    - Cache Whisper model if needed; upload audio/transcript artifacts.
+   - ✅ Completed 2025‑09‑17: workflow `phase-audio.yml` run ID `17811446743` (dry-run limit=1, days_back=3).
 2. **Testing**
    - Expand pytest to cover audio runner entrypoint stub (mock network / ffmpeg availability check).
    - Manual dry-run on GitHub-hosted runner to verify ffmpeg install instructions.
