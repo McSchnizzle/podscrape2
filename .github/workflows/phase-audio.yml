@@ -1,0 +1,145 @@
+name: Phase Audio
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Maximum episodes to include"
+        required: false
+        default: "1"
+      days_back:
+        description: "Days back window for discovery seed"
+        required: false
+        default: "3"
+
+concurrency:
+  group: phase-audio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audio:
+    name: Run Audio Phase (Dry Run)
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHON_VERSION: "3.11"
+      VENV_PATH: .venv
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      LIMIT: ${{ inputs.limit || '1' }}
+      DAYS_BACK: ${{ inputs.days_back || '3' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure required secrets present
+        run: |
+          missing=()
+          for var in DATABASE_URL OPENAI_API_KEY ELEVENLABS_API_KEY GH_TOKEN GH_REPOSITORY; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            pip-${{ runner.os }}-
+
+      - name: Cache virtual environment
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            venv-${{ runner.os }}-
+
+      - name: Cache Whisper models
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/whisper
+            ~/.cache/torch
+          key: whisper-${{ runner.os }}-${{ env.PYTHON_VERSION }}
+          restore-keys: |
+            whisper-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          if [ ! -d "${VENV_PATH}" ]; then
+            python -m venv "${VENV_PATH}"
+          fi
+          source "${VENV_PATH}/bin/activate"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run discovery dry run (seed data)
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          mkdir -p artifacts
+          python scripts/run_discovery.py \
+            --limit "$LIMIT" \
+            --days-back "$DAYS_BACK" \
+            --dry-run \
+            --verbose \
+            --output artifacts/discovery-output.json
+        env:
+          ORCHESTRATED_EXECUTION: "1"
+
+      - name: Run audio dry run
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          mkdir -p artifacts
+          python scripts/run_audio.py \
+            --limit "$LIMIT" \
+            --dry-run \
+            --verbose \
+            --input artifacts/discovery-output.json \
+            --output artifacts/audio-output.json
+        env:
+          ORCHESTRATED_EXECUTION: "1"
+
+      - name: Collect audio logs
+        if: always()
+        run: |
+          mkdir -p artifacts/logs
+          if compgen -G "logs/audio_*.log" > /dev/null; then
+            cp logs/audio_*.log artifacts/logs/
+          fi
+          if compgen -G "logs/discovery_*.log" > /dev/null; then
+            cp logs/discovery_*.log artifacts/logs/
+          fi
+
+      - name: Upload audio artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-phase
+          path: artifacts
+          if-no-files-found: warn
+
+      - name: Summarize audio output
+        if: success()
+        run: |
+          jq '.' artifacts/audio-output.json || cat artifacts/audio-output.json
