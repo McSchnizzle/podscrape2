@@ -13,6 +13,10 @@ from pathlib import Path
 from datetime import datetime, date
 from typing import List, Dict
 
+import pytest
+
+pytest.importorskip("sqlalchemy", reason="SQLAlchemy is required for Phase 1 tests")
+
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 

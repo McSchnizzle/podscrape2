@@ -4,6 +4,9 @@ Tests real database operations using pytest fixtures.
 """
 
 import pytest
+
+pytest.importorskip("sqlalchemy", reason="SQLAlchemy is required for database integration tests")
+
 from datetime import datetime, date, timedelta, UTC
 from src.database.models import Episode, Feed, Digest
 
