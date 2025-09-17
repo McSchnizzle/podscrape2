@@ -94,6 +94,14 @@
             <p class="text-xs text-gray-500 mt-1">Model limit: <span class="model-limit">-</span> tokens</p>
           </div>
           <div>
+            <label class="block text-sm font-medium">Max Input Tokens</label>
+            <input name="ai_content_scoring_max_input_tokens" type="number" min="1000" max="272000"
+                   class="border rounded w-full p-2 token-input"
+                   data-limit-type="max_input"
+                   value="{{ current.ai_content_scoring.max_input_tokens }}">
+            <p class="text-xs text-gray-500 mt-1">Model limit: <span class="model-limit">-</span> tokens</p>
+          </div>
+          <div>
             <label class="block text-sm font-medium">Max Episodes per Batch</label>
             <input name="ai_content_scoring_max_episodes_per_batch" type="number" min="1" max="50"
                    class="border rounded w-full p-2"
@@ -177,6 +185,14 @@
                    class="border rounded w-full p-2 token-input"
                    data-limit-type="max_output"
                    value="{{ current.ai_metadata_generation.max_description_tokens }}">
+            <p class="text-xs text-gray-500 mt-1">Model limit: <span class="model-limit">-</span> tokens</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Max Input Tokens</label>
+            <input name="ai_metadata_generation_max_input_tokens" type="number" min="1000" max="128000"
+                   class="border rounded w-full p-2 token-input"
+                   data-limit-type="max_input"
+                   value="{{ current.ai_metadata_generation.max_input_tokens }}">
             <p class="text-xs text-gray-500 mt-1">Model limit: <span class="model-limit">-</span> tokens</p>
           </div>
         </div>

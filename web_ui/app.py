@@ -643,6 +643,7 @@ def create_app():
                 # Content Scoring
                 web_config.set_setting('ai_content_scoring', 'model', request.form.get('ai_content_scoring_model', current['ai_content_scoring'].get('model', 'gpt-5-mini')))
                 web_config.set_setting('ai_content_scoring', 'max_tokens', int(request.form.get('ai_content_scoring_max_tokens', current['ai_content_scoring'].get('max_tokens', 1000))))
+                web_config.set_setting('ai_content_scoring', 'max_input_tokens', int(request.form.get('ai_content_scoring_max_input_tokens', current['ai_content_scoring'].get('max_input_tokens', 120000))))
                 web_config.set_setting('ai_content_scoring', 'max_episodes_per_batch', int(request.form.get('ai_content_scoring_max_episodes_per_batch', current['ai_content_scoring'].get('max_episodes_per_batch', 10))))
 
                 # Digest Generation
@@ -655,6 +656,7 @@ def create_app():
                 web_config.set_setting('ai_metadata_generation', 'max_title_tokens', int(request.form.get('ai_metadata_generation_max_title_tokens', current['ai_metadata_generation'].get('max_title_tokens', 50))))
                 web_config.set_setting('ai_metadata_generation', 'max_summary_tokens', int(request.form.get('ai_metadata_generation_max_summary_tokens', current['ai_metadata_generation'].get('max_summary_tokens', 200))))
                 web_config.set_setting('ai_metadata_generation', 'max_description_tokens', int(request.form.get('ai_metadata_generation_max_description_tokens', current['ai_metadata_generation'].get('max_description_tokens', 500))))
+                web_config.set_setting('ai_metadata_generation', 'max_input_tokens', int(request.form.get('ai_metadata_generation_max_input_tokens', current['ai_metadata_generation'].get('max_input_tokens', 60000))))
 
                 # TTS Generation
                 web_config.set_setting('ai_tts_generation', 'model', request.form.get('ai_tts_generation_model', current['ai_tts_generation'].get('model', 'eleven_turbo_v2_5')))

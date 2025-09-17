@@ -70,6 +70,7 @@ DEFAULTS = {
     ("ai_content_scoring", "model"): {"type": "string", "default": "gpt-5-mini"},
     ("ai_content_scoring", "max_tokens"): {"type": "int", "default": 1000, "min": 100, "max": 128000},
     ("ai_content_scoring", "max_episodes_per_batch"): {"type": "int", "default": 10, "min": 1, "max": 50},
+    ("ai_content_scoring", "max_input_tokens"): {"type": "int", "default": 120000, "min": 1000, "max": 272000},
 
     # AI Configuration - Digest Generation Phase
     ("ai_digest_generation", "model"): {"type": "string", "default": "gpt-5"},
@@ -78,6 +79,7 @@ DEFAULTS = {
 
     # AI Configuration - Metadata Generation Phase
     ("ai_metadata_generation", "model"): {"type": "string", "default": "gpt-5-mini"},
+    ("ai_metadata_generation", "max_input_tokens"): {"type": "int", "default": 60000, "min": 1000, "max": 128000},
     ("ai_metadata_generation", "max_title_tokens"): {"type": "int", "default": 50, "min": 10, "max": 200},
     ("ai_metadata_generation", "max_summary_tokens"): {"type": "int", "default": 200, "min": 50, "max": 1000},
     ("ai_metadata_generation", "max_description_tokens"): {"type": "int", "default": 500, "min": 100, "max": 2000},
