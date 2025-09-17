@@ -2,23 +2,31 @@
 
 **Pending work to complete the move to online infrastructure**
 
-## Phase 1a — Database Migration (Remaining Tasks)
+## Phase 1a — Database Migration ✅ COMPLETED
 
-- [ ] **Utility Script Updates**: Update remaining scripts to use new repository pattern
-  - `rescore_episodes.py`: Update to use new repository pattern
-  - `reset_latest_episode.py`: Update to use new repository pattern
-  - Test files: Convert any remaining old database patterns
-  - Utility scripts: Convert any remaining direct SQL calls
-- [ ] **Testing**: Unit/integration tests pass against Postgres
+- [x] **Utility Script Updates**: Update remaining scripts to use new repository pattern
+  - [x] `rescore_episodes.py`: Uses new SQLAlchemy repository pattern via `get_episode_repo()`
+  - [x] `reset_latest_episode.py`: Uses new SQLAlchemy repository pattern via `get_episode_repo()`
+  - [x] All utility scripts converted to SQLAlchemy repository pattern
+- [x] **Testing**: Unit/integration tests pass against Postgres via test fixtures in `conftest.py`
 
-## Phase 2 — Storage and Artifact Strategy (Remaining Tasks)
+## Phase 2 — Storage and Artifact Strategy ⚠️ PENDING CI/CD
 
-- [ ] **Pipeline Artifacts**: Pipeline logs and generated content uploaded as GitHub Actions Artifacts (will be implemented in Phase 4 CI/CD)
+- [ ] **Pipeline Artifacts**: Pipeline logs and generated content uploaded as GitHub Actions Artifacts
+  - **Status**: No GitHub Actions workflow files found (`.github/workflows/` directory does not exist)
+  - **Dependency**: Requires Phase 4 CI/CD implementation first
 
-## Phase 3 — CLI Enhancements (Remaining Tasks)
+## Phase 3 — CLI Enhancements ✅ PARTIALLY COMPLETED
 
 - [ ] **Testing**: Add `pytest` integration tests for each phase using fixtures (no GPT/TTS calls)
-- [ ] **Web UI Integration**: Web UI integration refactoring to use phase scripts
+  - **Status**: Pytest framework established with comprehensive fixtures in `conftest.py`
+  - **Phase Tests**: Basic phase test files exist but marked as legacy/skipped
+  - **Missing**: Integration tests specifically for current `scripts/run_*.py` phase scripts
+- [x] **Web UI Integration**: Web UI integration refactoring to use phase scripts
+  - **Status**: ✅ Web UI properly integrates with orchestrator architecture
+  - **Full Pipeline**: Uses `run_full_pipeline_orchestrator.py` which calls all phase scripts including publishing
+  - **Publishing Only**: Provides separate publishing-only option via `scripts/run_publishing.py` for maintenance/repair scenarios
+  - **Architecture**: Orchestrator includes publishing as final phase (line 322), Web UI offers both full pipeline and standalone publishing
 
 ## Phase 3.5 — AI Token Configuration Management **[🆕 NEW REQUIREMENT]**
 
