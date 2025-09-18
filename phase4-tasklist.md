@@ -79,6 +79,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Reuse cached pip deps and share digest template cache (Markdown/JSON) between runs.
    - Upload generated script markdown.
    - ✅ Completed 2025‑09‑17: workflow `phase-digest.yml` run ID `17812724198` (dry-run limit=1, days_back=3).
+   - ✅ Re-validated 2025‑09‑18: workflow `phase-digest.yml` run ID `17841228652` (dry-run limit=auto; confirms scoring fallback fix).
 2. **Testing**
    - Extend pytest fixtures to verify digest generation dry-run path using local sample transcripts.
    - Confirm Alembic migrations run before pipeline step to keep schema aligned.
@@ -90,9 +91,11 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - `.github/workflows/phase-tts.yml`: run `python scripts/run_tts.py --limit 1 --dry-run` with ElevenLabs disabled (mock) to avoid spending credits; perimeter check for required key.
    - Cache ElevenLabs voice metadata and pip deps; reuse synthesized placeholder assets.
    - Upload synthesized audio placeholder or JSON summary.
+   - ✅ Completed 2025-09-18: workflow `phase-tts.yml` run ID `17842116998` (dry-run; seeds discovery→digest before TTS).
 2. **Testing**
    - Add unit test to confirm dry-run returns structured response without calling ElevenLabs (`tests/test_phase_scripts.py`).
    - Validate pipeline respects WebConfig TTS settings on CI.
+   - ✅ `tests/test_phase_scripts.py::test_tts_script_dry_run_empty_payload` exercises CLI dry-run path with empty payload.
 3. **Web UI**
    - Button triggers TTS workflow; card displays audio metadata or dry-run notice.
 

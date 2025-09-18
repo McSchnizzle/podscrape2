@@ -80,3 +80,23 @@ Add new entries below as additional Phase 4 subphases go live.
   - Caches reused from prior runs; Whisper cache still empty (warning remains expected).
 - Artifact download: `gh run download 17812724198 -n digest-phase -D ./tmp/digest-phase`
 - Notes: When enabling real digest generation, remove dry-run flag and ensure transcripts/scoring data exist for the target date.
+
+### 2025-09-18 — Subphase 4.4 Digest Dry Run Revalidation
+- Workflow: `Phase Digest` (`.github/workflows/phase-digest.yml`)
+- Run ID: `17841228652` (`gh run view 17841228652`)
+- Status: ✅ Success (dry run; validates scoring dry-run fallback)
+- Summary:
+  - Scoring step accepts discovery/audio payload without DB rows when `--dry-run` is set.
+  - Artifacts confirm both episodes processed with `status='dry_run'` and no failures.
+- Artifact download: `gh run download 17841228652 -n digest-phase -D ./tmp/digest-phase-latest`
+- Notes: Keeps digest workflow green after logic change; next subphase is TTS.
+
+### 2025-09-18 — Subphase 4.5 TTS Dry Run
+- Workflow: `Phase TTS` (`.github/workflows/phase-tts.yml`)
+- Run ID: `17842116998` (`gh run view 17842116998`)
+- Status: ✅ Success (dry run via mocked ElevenLabs path)
+- Summary:
+  - Reuses discovery→digest dry runs, then executes `run_tts.py --dry-run` to validate CLI path.
+  - Artifacts: `tts-phase` bundle with TTS logs and `tts-output.json` (no digests processed).
+- Artifact download: `gh run download 17842116998 -n tts-phase -D ./tmp/tts-phase`
+- Notes: Next step is wiring CI Controls button and optional mock output preview.

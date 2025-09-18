@@ -83,6 +83,17 @@ Status: Completed
  - Added “Max episodes per run” (pipeline) setting; runner uses it for discovery.
  - Immediate archive of digested transcripts: after digest creation, mark episodes 'digested' and move transcripts to `digested/` folder; DB path updated. One‑click maintenance: “Archive Digested Transcripts”.
 
+
+## Phase 4: Incremental CI/CD Rollout
+- 4.0 Bootstrap ✅ (`ci-bootstrap.yml` validated; secrets documented in OPERATIONS.md)
+- 4.1 Discovery ✅ (`phase-discovery.yml` dry-run wired to CI controls)
+- 4.2 Audio ✅ (`phase-audio.yml` dry-run)
+- 4.3 Scoring ✅ (`phase-scoring.yml` dry-run)
+- 4.4 Digest ✅ (`phase-digest.yml` dry-run revalidated on 2025-09-18 with scoring fallback)
+- 4.5 TTS ✅ (`phase-tts.yml` dry-run, run 17842116998; CI Controls button still pending)
+- 4.6 Publishing ⏳
+- 4.7 Full Orchestrator ⏳
+
 ## Phase D: Publishing & Retention (UI + Backing)
 - Publishing UI: list digests with MP3 paths, publish/unpublish to GitHub
 - Asset status: mark and upload missing assets to existing releases (uses current GitHubPublisher improvements)
