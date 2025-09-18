@@ -45,6 +45,14 @@ except ImportError:
 import feedparser
 import requests
 
+
+
+def resolve_dry_run_flag(cli_flag: bool) -> bool:
+    env_value = os.getenv("DRY_RUN")
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+    return cli_flag
+
 # Import centralized logging
 try:
     from src.utils.logging_config import setup_phase_logging
@@ -303,9 +311,11 @@ def main():
 
     args = parser.parse_args()
 
+    dry_run = resolve_dry_run_flag(args.dry_run)
+
     try:
         runner = DiscoveryRunner(
-            dry_run=args.dry_run,
+            dry_run=dry_run,
             limit=args.limit,
             days_back=args.days_back,
             episode_guid=args.episode_guid,

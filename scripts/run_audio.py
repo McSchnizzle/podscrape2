@@ -13,6 +13,14 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 
+
+
+def resolve_dry_run_flag(cli_flag: bool) -> bool:
+    env_value = os.getenv("DRY_RUN")
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+    return cli_flag
+
 # Add src to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -171,6 +179,7 @@ class AudioProcessor_Runner:
 
         processed_episodes = []
         failed_episodes = []
+        skipped_episodes = []
 
         for i, episode_data in enumerate(episodes, 1):
             try:
@@ -189,7 +198,9 @@ class AudioProcessor_Runner:
 
                 # Process the episode
                 result = self._process_episode_audio(episode_data)
-                if result['success']:
+                if result.get('skipped'):
+                    skipped_episodes.append(result)
+                elif result['success']:
                     processed_episodes.append(result)
                 else:
                     failed_episodes.append({
@@ -218,7 +229,8 @@ class AudioProcessor_Runner:
             'episodes_processed': len(processed_episodes),
             'episodes_failed': len(failed_episodes),
             'episodes': processed_episodes,
-            'failed': failed_episodes
+            'failed': failed_episodes,
+            'skipped': skipped_episodes
         }
 
     def _process_episode_audio(self, episode_data):
@@ -255,6 +267,18 @@ class AudioProcessor_Runner:
                 episode_id = self.episode_repo.create(db_episode)
                 db_episode.id = episode_id
                 self.logger.info(f"✓ Database record created (ID: {episode_id})")
+
+        # Skip episodes previously marked as not relevant
+        if getattr(db_episode, 'status', None) == 'not_relevant':
+            self.logger.info("🚫 Skipping episode marked not_relevant (GUID: %s)", episode_guid)
+            return {
+                'success': True,
+                'guid': episode_guid,
+                'title': db_episode.title,
+                'status': db_episode.status,
+                'skipped': True,
+                'message': 'Episode previously marked not relevant; skipping audio processing'
+            }
 
         try:
             # Step 1: Download audio
@@ -415,9 +439,11 @@ def main():
 
     args = parser.parse_args()
 
+    dry_run = resolve_dry_run_flag(args.dry_run)
+
     try:
         with AudioProcessor_Runner(
-            dry_run=args.dry_run,
+            dry_run=dry_run,
             limit=args.limit,
             verbose=args.verbose
         ) as runner:

@@ -38,7 +38,8 @@ class TestPhaseScripts(unittest.TestCase):
             'ELEVENLABS_API_KEY': 'test-key',
             'GITHUB_TOKEN': 'test-token',
             'GITHUB_REPOSITORY': 'test/repo',
-            'DATABASE_URL': 'sqlite:///test.db'
+            'DATABASE_URL': 'sqlite:///test.db',
+            'DRY_RUN': 'true'
         })
 
     def tearDown(self):

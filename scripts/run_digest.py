@@ -13,6 +13,14 @@ from datetime import datetime, date
 from pathlib import Path
 import argparse
 
+
+
+def resolve_dry_run_flag(cli_flag: bool) -> bool:
+    env_value = os.getenv("DRY_RUN")
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+    return cli_flag
+
 # Bootstrap phase initialization
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -176,9 +184,11 @@ def main():
 
     args = parser.parse_args()
 
+    dry_run = resolve_dry_run_flag(args.dry_run)
+
     try:
         runner = DigestRunner(
-            dry_run=args.dry_run,
+            dry_run=dry_run,
             limit=args.limit,
             verbose=args.verbose
         )

@@ -21,6 +21,13 @@ sys.path.insert(0, str(project_root / 'src'))
 from src.utils.phase_bootstrap import bootstrap_phase
 bootstrap_phase()
 
+
+
+def resolve_dry_run_flag(cli_flag: bool) -> bool:
+    env_value = os.getenv("DRY_RUN")
+    if env_value is not None:
+        return env_value.strip().lower() in {"1", "true", "yes", "on"}
+    return cli_flag
 from src.database.models import get_digest_repo
 from src.audio.complete_audio_processor import CompleteAudioProcessor
 
@@ -304,9 +311,11 @@ def main():
 
     args = parser.parse_args()
 
+    dry_run = resolve_dry_run_flag(args.dry_run)
+
     try:
         runner = TTSRunner(
-            dry_run=args.dry_run,
+            dry_run=dry_run,
             limit=args.limit,
             verbose=args.verbose
         )

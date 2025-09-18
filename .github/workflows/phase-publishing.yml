@@ -1,4 +1,4 @@
-name: Phase TTS
+name: Phase Publishing
 
 on:
   workflow_dispatch:
@@ -13,12 +13,12 @@ on:
         default: ""
 
 concurrency:
-  group: phase-tts-${{ github.ref }}
+  group: phase-publishing-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  tts:
-    name: Run TTS Phase (Dry Run)
+  publishing:
+    name: Run Publishing Phase (Dry Run)
     runs-on: ubuntu-latest
 
     env:
@@ -95,11 +95,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run discovery dry run (seed data)
+      - name: Run discovery (seed data)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-
           DISCOVERY_CMD="python scripts/run_discovery.py --verbose --output artifacts/discovery-output.json"
           if [ -n "$LIMIT" ]; then
             DISCOVERY_CMD="$DISCOVERY_CMD --limit \"$LIMIT\""
@@ -107,7 +106,6 @@ jobs:
           if [ -n "$DAYS_BACK" ]; then
             DISCOVERY_CMD="$DISCOVERY_CMD --days-back \"$DAYS_BACK\""
           fi
-
           echo "Running: $DISCOVERY_CMD"
           eval "$DISCOVERY_CMD"
         env:
@@ -117,12 +115,10 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-
           AUDIO_CMD="python scripts/run_audio.py --verbose --output artifacts/audio-output.json"
           if [ -n "$LIMIT" ]; then
             AUDIO_CMD="$AUDIO_CMD --limit \"$LIMIT\""
           fi
-
           echo "Running: $AUDIO_CMD"
           eval "$AUDIO_CMD < artifacts/discovery-output.json"
         env:
@@ -132,12 +128,10 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-
           SCORING_CMD="python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json"
           if [ -n "$LIMIT" ]; then
             SCORING_CMD="$SCORING_CMD --limit \"$LIMIT\""
           fi
-
           echo "Running: $SCORING_CMD"
           eval "$SCORING_CMD < artifacts/audio-output.json"
         env:
@@ -164,29 +158,40 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Collect TTS logs
+      - name: Run publishing dry run
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          mkdir -p artifacts
+          python scripts/run_publishing.py \
+            --verbose \
+            --days-back "30" \
+            > artifacts/publishing-output.json
+        env:
+          ORCHESTRATED_EXECUTION: "1"
+
+      - name: Collect publishing artifacts
         if: always()
         run: |
           mkdir -p artifacts/logs
-          for pattern in "logs/tts_*.log" "logs/digest_*.log" "logs/scoring_*.log" "logs/audio_*.log" "logs/discovery_*.log"; do
+          for pattern in "logs/publishing_*.log" "logs/tts_*.log" "logs/digest_*.log" "logs/scoring_*.log" "logs/audio_*.log" "logs/discovery_*.log"; do
             if compgen -G "$pattern" > /dev/null; then
               cp $pattern artifacts/logs/
             fi
           done
 
-      - name: Upload TTS artifacts
+      - name: Upload publishing artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tts-phase
+          name: publishing-phase
           path: artifacts
           if-no-files-found: warn
 
-      - name: Summarize TTS output
+      - name: Summarize publishing output
         if: success()
         run: |
-          if [ -f artifacts/tts-output.json ]; then
-            jq '.' artifacts/tts-output.json || cat artifacts/tts-output.json
+          if [ -f artifacts/publishing-output.json ]; then
+            tail -n 50 artifacts/publishing-output.json
           else
-            echo "tts-output.json not produced."
+            echo "publishing-output.json not produced."
           fi
