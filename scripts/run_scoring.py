@@ -97,17 +97,22 @@ class ScoringRunner:
                             result[key] = value
                     return result
 
+                # Forward all other methods to base_config
+                def __getattr__(self, name):
+                    return getattr(self.base_config, name)
+
             base_config = WebConfigManager()
             overrides = {}
 
-            # Map CLI settings to config paths
+            # Map CLI settings to config paths (only for settings that ContentScorer actually uses)
             for key, value in self.web_settings.items():
                 if key == 'ai_model':
                     overrides['ai_content_scoring.model'] = value
-                elif key in ['max_tokens', 'max_input_tokens', 'max_episodes_per_batch']:
+                elif key in ['max_tokens', 'max_episodes_per_batch']:
                     overrides[f'ai_content_scoring.{key}'] = value
                 elif key == 'score_threshold':
                     overrides['content_filtering.score_threshold'] = value
+                # Note: max_input_tokens not used by ContentScorer, skip it
 
             override_config = OverrideWebConfig(base_config, overrides)
             return ContentScorer(web_config=override_config)

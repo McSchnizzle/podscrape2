@@ -116,13 +116,10 @@ class PipelineOrchestrator:
             if self.limit:
                 cmd.extend(['--limit', str(self.limit)])
 
-        # Add Web UI settings as CLI flags for AI-related scripts
+        # Add Web UI settings as CLI flags for scripts that support them
         if script_name == 'scripts/run_scoring.py':
             self._add_scoring_web_settings(cmd)
-        elif script_name == 'scripts/run_digest.py':
-            self._add_digest_web_settings(cmd)
-        elif script_name == 'scripts/run_tts.py':
-            self._add_tts_web_settings(cmd)
+        # Note: digest and TTS scripts read Web UI settings directly, no CLI args needed
 
         # Add additional kwargs as flags
         for key, value in kwargs.items():
@@ -265,37 +262,6 @@ class PipelineOrchestrator:
         cmd.extend(['--max-episodes-per-batch', str(max_episodes_per_batch)])
         cmd.extend(['--score-threshold', str(score_threshold)])
 
-    def _add_digest_web_settings(self, cmd: list):
-        """Add Web UI settings for digest generation phase"""
-        if not self.web_config:
-            return
-
-        # AI Digest Generation settings
-        model = self._get_web_setting('ai_digest_generation', 'model', 'gpt-5')
-        max_output_tokens = self._get_web_setting('ai_digest_generation', 'max_output_tokens', 25000)
-        max_input_tokens = self._get_web_setting('ai_digest_generation', 'max_input_tokens', 150000)
-
-        # Content filtering settings
-        max_episodes_per_digest = self._get_web_setting('content_filtering', 'max_episodes_per_digest', 5)
-
-        # Add as CLI flags
-        cmd.extend(['--ai-model', str(model)])
-        cmd.extend(['--max-output-tokens', str(max_output_tokens)])
-        cmd.extend(['--max-input-tokens', str(max_input_tokens)])
-        cmd.extend(['--max-episodes-per-digest', str(max_episodes_per_digest)])
-
-    def _add_tts_web_settings(self, cmd: list):
-        """Add Web UI settings for TTS generation phase"""
-        if not self.web_config:
-            return
-
-        # AI TTS Generation settings
-        model = self._get_web_setting('ai_tts_generation', 'model', 'eleven_turbo_v2_5')
-        max_characters = self._get_web_setting('ai_tts_generation', 'max_characters', 35000)
-
-        # Add as CLI flags
-        cmd.extend(['--tts-model', str(model)])
-        cmd.extend(['--max-characters', str(max_characters)])
 
     def run_pipeline(self):
         """Execute the complete pipeline by orchestrating phase scripts"""
