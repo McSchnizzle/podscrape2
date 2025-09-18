@@ -19,6 +19,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config.web_config import WebConfigManager
 from src.database.models import get_episode_repo, get_digest_repo
+from scripts.run_publishing import PublishingPipelineRunner
 
 
 class TestPhaseScripts(unittest.TestCase):
@@ -153,6 +154,17 @@ class TestPhaseScripts(unittest.TestCase):
         data = json.loads(json_line)
         self.assertTrue(data.get("success"), f"Unexpected response: {data}")
         self.assertEqual(data.get("audio_generated"), 0)
+
+    @patch('scripts.run_publishing.get_digest_repo')
+    def test_publishing_runner_dry_run(self, mock_get_repo):
+        """Publishing pipeline returns success in dry run mode with no digests"""
+        mock_repo = MagicMock()
+        mock_repo.get_recent_digests.return_value = []
+        mock_get_repo.return_value = mock_repo
+
+        runner = PublishingPipelineRunner(dry_run=True)
+        self.assertTrue(runner.run_complete_pipeline())
+        mock_repo.get_recent_digests.assert_called_once()
 
     def test_publishing_script_help(self):
         """Test run_publishing.py shows help and handles arguments"""
