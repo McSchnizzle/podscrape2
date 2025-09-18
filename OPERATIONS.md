@@ -100,3 +100,13 @@ Add new entries below as additional Phase 4 subphases go live.
   - Artifacts: `tts-phase` bundle with TTS logs and `tts-output.json` (no digests processed).
 - Artifact download: `gh run download 17842116998 -n tts-phase -D ./tmp/tts-phase`
 - Notes: Next step is wiring CI Controls button and optional mock output preview.
+
+### 2025-09-18 — Subphase 4.6 Publishing Dry Run
+- Workflow: `Phase Publishing` (`.github/workflows/phase-publishing.yml`)
+- Run ID: `17843283291` (`gh run view 17843283291`)
+- Status: ✅ Success (dry run using `DRY_RUN` env toggle)
+- Summary:
+  - Chains discovery→audio→scoring→digest→tts dry runs before invoking publishing.
+  - Publishing logs confirm GitHub/Vercel operations short-circuit under dry run while reporting planned actions.
+- Artifact download: `gh run download 17843283291 -n publishing-phase -D ./tmp/publishing-phase`
+- Notes: Web UI control hook-up remains; DRY_RUN env now governs all phase scripts.

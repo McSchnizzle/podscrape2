@@ -101,11 +101,12 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
 
 ## Subphase 4.6 — Publishing Workflow
 1. **GitHub Actions**
-   - `.github/workflows/phase-publishing.yml`: run `python scripts/run_publishing.py --dry-run --verbose`; mock GitHub release calls via `GITHUB_TOKEN` fine-grained PAT + `--dry-run` coverage; push RSS diff to artifact only.
+   - `.github/workflows/phase-publishing.yml`: run `python scripts/run_publishing.py --verbose` with `DRY_RUN` env guard; mock GitHub release calls via fine-grained PAT and skip destructive steps.
    - Cache pip deps and GitHub release metadata (e.g., `~/.cache/gh`) to avoid redundant API calls.
    - Ensure retention manager cleanup tasks run safely (skip destructive actions in dry-run).
+   - ✅ Completed 2025-09-18: workflow `phase-publishing.yml` run ID `17843283291` (dry-run end-to-end).
 2. **Testing**
-   - Integration test verifying publishing runner respects dry-run and logs expected actions.
+   - ✅ `tests/test_phase_scripts.py::test_publishing_runner_dry_run` ensures the runner exits successfully in dry-run mode with mocked repositories.
    - Manual verification that GitHub API fallback for CLI-less environments succeeds.
 3. **Web UI**
    - Button for publishing workflow; show outcome summary (release/tag names, RSS file path, deployment status).

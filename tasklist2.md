@@ -91,7 +91,7 @@ Status: Completed
 - 4.3 Scoring ✅ (`phase-scoring.yml` dry-run)
 - 4.4 Digest ✅ (`phase-digest.yml` dry-run revalidated on 2025-09-18 with scoring fallback)
 - 4.5 TTS ✅ (`phase-tts.yml` dry-run, run 17842116998; CI Controls button still pending)
-- 4.6 Publishing ⏳
+- 4.6 Publishing ✅ (`phase-publishing.yml` dry-run, run 17843283291; CI Controls wiring pending)
 - 4.7 Full Orchestrator ⏳
 
 ## Phase D: Publishing & Retention (UI + Backing)
