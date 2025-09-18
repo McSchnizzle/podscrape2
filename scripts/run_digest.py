@@ -85,9 +85,10 @@ class DigestRunner:
         if target_date is None:
             target_date = date.today()
 
-        # Note: episodes_data parameter is intentionally ignored when using create_daily_digests
-        # This allows the digest phase to work with all qualifying episodes from database,
-        # supporting scenarios where no new episodes were scored but backlog exists
+        # Validate input format (though we don't use episodes_data anymore with create_daily_digests)
+        if episodes_data is not None:
+            self.logger.warning("episodes_data parameter is ignored when using create_daily_digests - it discovers topics automatically")
+
         self.logger.info("Generating daily digests for all active topics (automatic topic discovery)")
 
         # Handle dry run mode
@@ -198,16 +199,21 @@ def main():
                 episodes_data = args.input
             else:
                 raise ValueError(f"Invalid input format: {args.input}")
-        elif not sys.stdin.isatty():
-            # Read from stdin if available
-            try:
-                stdin_content = sys.stdin.read().strip()
-                if stdin_content:
-                    episodes_data = json.loads(stdin_content)
-                # else: episodes_data remains None, which is fine for create_daily_digests
-            except (json.JSONDecodeError, EOFError):
-                # No valid JSON input from stdin, proceed with None
-                pass
+        else:
+            # Fix: Only read from stdin if it's actually a terminal (interactive mode)
+            # When run as subprocess from Web UI, stdin might not be properly set up
+            if not sys.stdin.isatty() and hasattr(sys.stdin, 'readable') and sys.stdin.readable():
+                # Read from stdin if available, but with timeout to prevent hanging
+                try:
+                    import select
+                    # Check if data is available on stdin without blocking
+                    if select.select([sys.stdin], [], [], 0.1)[0]:  # 100ms timeout
+                        stdin_content = sys.stdin.read().strip()
+                        if stdin_content:
+                            episodes_data = json.loads(stdin_content)
+                except (json.JSONDecodeError, EOFError, ImportError, OSError):
+                    # No valid JSON input from stdin, proceed with None
+                    pass
 
         result = runner.generate_digests(episodes_data, target_date)
 
