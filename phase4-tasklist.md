@@ -14,6 +14,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Document required secrets in `OPERATIONS.md`: `DATABASE_URL`, `SUPABASE_*`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GH_TOKEN`/`GITHUB_TOKEN`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `WEBUI_DISPATCH_PAT` (fine-grained with `workflow` scope).
    - Create or update repository/environment secrets in GitHub and note owners responsible for refreshing them.
    - For local verification, add `scripts/doctor.py` section covering GitHub Actions-specific variables.
+   - ✅ Completed 2025-09-17: documented in `OPERATIONS.md` (Secret Inventory) and surfaced via `scripts/doctor.py` CI checks.
 
 2. **Bootstrap Workflow**
    - Add `.github/workflows/ci-bootstrap.yml` with manual dispatch only.
@@ -23,11 +24,13 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
      - performs a lightweight ElevenLabs auth check (e.g., list voices with `dry_run` flag),
      - calls `gh api` or GitHub REST `GET /repos/{repo}` using PAT to ensure workflow-scope token works.
    - Upload a small JSON report artifact summarizing the connectivity test results.
+   - ✅ Completed 2025-09-17: `.github/workflows/ci-bootstrap.yml` committed; artifact `ci-bootstrap-report.json` published (run `17810460258`).
 
 3. **Review & Sign-off**
    - Run workflow via `workflow_dispatch`; confirm logs mask secrets and all checks succeed.
    - If any check fails, update secrets or adjust network allow-list before proceeding to Subphase 4.1.
    - Record run link and resolution notes in `Phase4 rollout log` (new section in `OPERATIONS.md`).
+   - ✅ Completed 2025-09-17: validation run recorded in `OPERATIONS.md` Phase 4 rollout log with artifact download instructions.
 
 
 ## Subphase 4.1 — Discovery Workflow

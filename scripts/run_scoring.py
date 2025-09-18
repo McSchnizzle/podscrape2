@@ -189,24 +189,33 @@ class ScoringRunner:
         for i, episode_data in enumerate(episodes, 1):
             try:
                 episode_guid = episode_data['guid']
+                episode_title = episode_data.get('title') or episode_guid
 
                 # Get episode from database
                 db_episode = self.episode_repo.get_by_episode_guid(episode_guid)
                 if not db_episode:
-                    self.logger.error(f"Episode {episode_guid} not found in database")
-                    failed_episodes.append({
-                        'guid': episode_guid,
-                        'error': 'Episode not found in database'
-                    })
-                    continue
+                    if self.dry_run:
+                        self.logger.warning(
+                            f"Episode {episode_guid} not found in database during dry run; using input payload only"
+                        )
+                    else:
+                        self.logger.error(f"Episode {episode_guid} not found in database")
+                        failed_episodes.append({
+                            'guid': episode_guid,
+                            'title': episode_title,
+                            'error': 'Episode not found in database'
+                        })
+                        continue
+                else:
+                    episode_title = db_episode.title
 
-                self.logger.info(f"\n[{i}/{len(episodes)}] Scoring: {db_episode.title}")
+                self.logger.info(f"\n[{i}/{len(episodes)}] Scoring: {episode_title}")
 
                 if self.dry_run:
                     self.logger.info("🔍 DRY RUN: Would score episode")
                     scored_episodes.append({
                         'guid': episode_guid,
-                        'title': db_episode.title,
+                        'title': episode_title,
                         'status': 'dry_run',
                         'scores': {}
                     })

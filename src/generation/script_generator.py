@@ -56,10 +56,31 @@ class ScriptGenerator:
         self.topics = self.config.get_topics()
         self.score_threshold = self.config.get_score_threshold()
         self.max_words = self.config.get_max_words_per_script()
-        
+
+        # Load AI configuration for digest generation
+        if self.web_config:
+            self.ai_model = self.web_config.get_setting('ai_digest_generation', 'model', 'gpt-5')
+            self.max_output_tokens = self.web_config.get_setting('ai_digest_generation', 'max_output_tokens', 25000)
+            self.max_input_tokens = self.web_config.get_setting('ai_digest_generation', 'max_input_tokens', 150000)
+
+            # Validate token limits against model capabilities
+            self.max_output_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_output_tokens, 'max_output')
+            self.max_input_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_input_tokens, 'max_input')
+        else:
+            self.ai_model = 'gpt-5'
+            self.max_output_tokens = 25000
+            self.max_input_tokens = 150000
+
+        logger.info(
+            'ScriptGenerator initialized with model: %s, max_output_tokens: %s, max_input_tokens: %s',
+            self.ai_model,
+            self.max_output_tokens,
+            self.max_input_tokens,
+        )
+
         # Load topic instructions
         self.topic_instructions = self._load_topic_instructions()
-        
+
         # Create scripts directory
         self.scripts_dir = Path('data/scripts')
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
@@ -107,7 +128,31 @@ class ScriptGenerator:
         
         logger.info(f"Loaded instructions for {len(instructions)} topics")
         return instructions
-    
+
+    def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int, limit_type: str) -> int:
+        """Validate and adjust token limit based on model capabilities"""
+        if not self.web_config:
+            return requested_tokens
+
+        max_limit = self.web_config.get_model_limit('openai', model, limit_type)
+        if max_limit > 0 and requested_tokens > max_limit:
+            logger.warning(
+                f"Requested {requested_tokens} {limit_type} tokens exceeds {model} limit of {max_limit}, adjusting to {max_limit}"
+            )
+            return max_limit
+
+        return requested_tokens
+
+    def _calculate_transcript_limit(self, num_episodes: int) -> int:
+        """Calculate transcript character limit based on configured input token cap"""
+        if not getattr(self, 'max_input_tokens', None):
+            return 8000
+
+        available_input_tokens = int(self.max_input_tokens * 0.8)
+        available_chars = available_input_tokens * 4
+        chars_per_episode = available_chars // max(num_episodes, 1)
+        return min(max(chars_per_episode, 2000), 20000)
+
     def get_qualifying_episodes(self, topic: str, start_date: date = None, 
                               end_date: date = None, max_episodes: int = None) -> List[Episode]:
         """
@@ -168,7 +213,9 @@ class ScriptGenerator:
             logger.warning(f"No transcripts available for {len(episodes)} episodes")
             return self._generate_no_content_script(topic, digest_date)
         
-        # Generate script using GPT-5
+        transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
+        # Generate script using configured AI model
         system_prompt = f"""You are a professional podcast script writer creating a daily digest for the topic "{topic}".
 
 INSTRUCTIONS:
@@ -194,7 +241,7 @@ Episodes: {len(transcripts)}"""
             user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
 
 Transcript:
-{transcript_data['transcript'][:8000]}  # Limit transcript length for token management
+{transcript_data['transcript'][:transcript_limit]}  # Limit transcript length for token management
 
 ---
 
@@ -204,13 +251,13 @@ Transcript:
         
         try:
             response = self.client.responses.create(
-                model="gpt-5",  # Using GPT-5 with Responses API as specified
+                model=self.ai_model,  # Use configured AI model
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 reasoning={"effort": "medium"},  # Medium effort for quality script generation
-                max_output_tokens=8000  # GPT-5 supports much larger output tokens
+                max_output_tokens=self.max_output_tokens
             )
             
             script_content = response.output_text  # GPT-5 Responses API format
@@ -225,8 +272,8 @@ Transcript:
             return script_content, word_count
             
         except Exception as e:
-            logger.error(f"GPT-5 Responses API error for topic {topic}: {e}")
-            raise ScriptGenerationError(f"Failed to generate script with GPT-5: {e}")
+            logger.error(f"{self.ai_model} Responses API error for topic {topic}: {e}")
+            raise ScriptGenerationError(f"Failed to generate script with {self.ai_model}: {e}")
     
     def _generate_no_content_script(self, topic: str, digest_date: date) -> Tuple[str, int]:
         """Generate script for days with no qualifying content"""
@@ -429,7 +476,7 @@ Thank you for your understanding, and we'll see you tomorrow!
                 transcripts.append({
                     'title': episode.title,
                     'published_date': episode.published_date.strftime('%Y-%m-%d'),
-                    'transcript': transcript[:10000]  # Truncate to 10K chars for API limits
+                    'transcript': transcript
                 })
         
         if not transcripts:
@@ -448,7 +495,9 @@ Thank you for your patience, and we'll see you tomorrow with fresh insights!
 *This digest was automatically generated from episodes that didn't meet specific topic thresholds.*"""
             return script, len(script.split())
         
-        # Generate script using GPT-5
+        transcript_limit = min(10000, self._calculate_transcript_limit(len(transcripts)))
+
+        # Generate script using configured AI model
         system_prompt = """You are a professional podcast script writer creating a general daily digest.
 
 Create a compelling summary that:
@@ -467,7 +516,7 @@ Focus on extracting the most interesting and valuable insights across all episod
         for i, transcript in enumerate(transcripts, 1):
             user_prompt += f"""
 Episode {i}: {transcript['title']} (Published: {transcript['published_date']})
-Transcript: {transcript['transcript']}
+Transcript: {transcript['transcript'][:transcript_limit]}
 
 """
 
@@ -475,12 +524,12 @@ Transcript: {transcript['transcript']}
 
         try:
             response = self.client.responses.create(
-                model="gpt-5",
-                messages=[
+                model=self.ai_model,
+                input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=2000
+                max_output_tokens=min(self.max_output_tokens, 2000)
             )
             
             script = response.output_text
@@ -493,7 +542,7 @@ Transcript: {transcript['transcript']}
             return script, word_count
             
         except Exception as e:
-            logger.error(f"GPT-5 error for general summary: {e}")
+            logger.error(f"{self.ai_model} error for general summary: {e}")
             # Fallback to basic summary
             basic_script = f"""# General Summary - {digest_date.strftime('%B %d, %Y')}
 

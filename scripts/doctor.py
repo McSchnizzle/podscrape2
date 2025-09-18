@@ -44,6 +44,71 @@ def check_environment_variables() -> List[Tuple[str, bool, str]]:
     return checks
 
 
+
+def check_ci_workflow_secrets() -> List[Tuple[str, bool, str]]:
+    """Report presence of secrets required by CI bootstrap and Phase 4 workflows."""
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    checks: List[Tuple[str, bool, str]] = []
+
+    database_url = os.getenv("DATABASE_URL")
+    supabase_db_url = os.getenv("SUPABASE_DB_URL")
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_pw = os.getenv("SUPABASE_PASSWORD")
+
+    if database_url:
+        checks.append(("✅ DATABASE_URL (CI)", True, "Postgres connection provided via DATABASE_URL"))
+    elif supabase_db_url:
+        checks.append(("✅ SUPABASE_DB_URL (CI)", True, "Supabase direct Postgres URL supplied via SUPABASE_DB_URL"))
+    elif supabase_url and supabase_pw:
+        checks.append(("✅ SUPABASE_URL + SUPABASE_PASSWORD (CI)", True, "Supabase URL/password pair present for CI bootstrap"))
+    else:
+        detail = (
+            "Provide DATABASE_URL, SUPABASE_DB_URL, or SUPABASE_URL + SUPABASE_PASSWORD so CI bootstrap "
+            "can reach the database"
+        )
+        checks.append(("⚠️  DATABASE_URL/SUPABASE_* (CI)", False, detail))
+
+    github_token_var = next((name for name in ("GH_TOKEN", "GITHUB_TOKEN") if os.getenv(name)), None)
+    if github_token_var:
+        checks.append((f"✅ {github_token_var} (CI)", True, "GitHub token with workflow scope available"))
+    else:
+        checks.append((
+            "⚠️  GH_TOKEN/GITHUB_TOKEN (CI)",
+            False,
+            "Provide a GitHub token with workflow scope for CI bootstrap checks",
+        ))
+
+    repo_value = os.getenv("GH_REPOSITORY") or os.getenv("GITHUB_REPOSITORY")
+    if repo_value:
+        checks.append(("✅ GH_REPOSITORY/GITHUB_REPOSITORY (CI)", True, "Repository target configured for API calls"))
+    else:
+        checks.append((
+            "⚠️  GH_REPOSITORY/GITHUB_REPOSITORY (CI)",
+            False,
+            "Set GH_REPOSITORY or rely on default GITHUB_REPOSITORY in CI",
+        ))
+
+    for var, description in (
+        ("WEBUI_DISPATCH_PAT", "Fine-grained PAT for triggering workflows from the Web UI"),
+        ("VERCEL_TOKEN", "Vercel access token for deployments"),
+        ("VERCEL_ORG_ID", "Vercel organisation ID"),
+        ("VERCEL_PROJECT_ID", "Vercel project ID"),
+    ):
+        value = os.getenv(var)
+        if value:
+            checks.append((f"✅ {var} (CI)", True, description))
+        else:
+            checks.append((
+                f"⚠️  {var} (CI)",
+                False,
+                f"{description} - configure in GitHub secrets when enabling CI dispatch",
+            ))
+
+    return checks
+
 def check_database_connectivity() -> Tuple[str, bool, str]:
     """Test DATABASE_URL connectivity to Supabase."""
     try:
@@ -266,6 +331,7 @@ def main():
 
     all_checks = []
     critical_failures = []
+    running_in_ci = (os.getenv("CI", "").lower() == "true") or (os.getenv("GITHUB_ACTIONS") == "true")
 
     # Run all checks
     print("\n📋 Environment Variables")
@@ -276,6 +342,16 @@ def main():
         if not passed:
             print(f"    → {description}")
             if "[CRITICAL]" in check_name:
+                critical_failures.append((check_name, description))
+
+    print("\n🚀 CI/CD Secrets for GitHub Actions")
+    ci_checks = check_ci_workflow_secrets()
+    all_checks.extend(ci_checks)
+    for check_name, passed, description in ci_checks:
+        print(f"  {check_name}")
+        if not passed:
+            print(f"    → {description}")
+            if running_in_ci:
                 critical_failures.append((check_name, description))
 
     print("\n🔗 Database Connectivity")

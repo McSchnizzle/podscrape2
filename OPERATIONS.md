@@ -16,6 +16,7 @@ The following GitHub repository secrets are required for the CI bootstrap and su
 - `WEBUI_DISPATCH_PAT`
 
 Keep these secrets updated whenever credentials rotate. Validate the full set with the `CI Bootstrap` workflow after any change.
+Run `python scripts/doctor.py` locally and confirm the CI/CD secrets block passes before dispatching workflows.
 
 ## Phase 4 Rollout Log
 
