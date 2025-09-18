@@ -7,6 +7,7 @@ Tests command-line arguments, database interactions, and basic functionality.
 import os
 import sys
 import subprocess
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -124,6 +125,33 @@ class TestPhaseScripts(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, f"TTS script help failed: {result.stderr}")
         self.assertIn("usage", result.stdout.lower() or result.stderr.lower())
+
+    def test_tts_script_dry_run_empty_payload(self):
+        """Run TTS script in dry-run mode with no digests and expect success"""
+        script_path = self.scripts_dir / "run_tts.py"
+        self.assertTrue(script_path.exists(), f"TTS script not found: {script_path}")
+
+        payload = json.dumps({"success": True, "digests": []})
+        result = subprocess.run(
+            [sys.executable, str(script_path), "--dry-run"],
+            input=payload,
+            capture_output=True,
+            text=True,
+            cwd=str(self.project_root)
+        )
+
+        self.assertEqual(result.returncode, 0, f"TTS dry run failed: {result.stderr}")
+        output = (result.stdout or result.stderr).strip()
+        lines = [line for line in output.splitlines() if line.strip()]
+        json_line = None
+        for line in reversed(lines):
+            if line.strip().startswith('{'):
+                json_line = line.strip()
+                break
+        self.assertIsNotNone(json_line, f"No JSON payload found in output: {output}")
+        data = json.loads(json_line)
+        self.assertTrue(data.get("success"), f"Unexpected response: {data}")
+        self.assertEqual(data.get("audio_generated"), 0)
 
     def test_publishing_script_help(self):
         """Test run_publishing.py shows help and handles arguments"""
@@ -285,12 +313,16 @@ class TestPhaseScripts(unittest.TestCase):
             content_scoring = config_manager.get_category('ai_content_scoring')
             self.assertIn('model', content_scoring)
             self.assertIn('max_tokens', content_scoring)
+            self.assertIn('prompt_max_chars', content_scoring)
 
             # Test digest generation defaults
             digest_generation = config_manager.get_category('ai_digest_generation')
             self.assertIn('model', digest_generation)
             self.assertIn('max_output_tokens', digest_generation)
             self.assertIn('max_input_tokens', digest_generation)
+            self.assertIn('transcript_buffer_percent', digest_generation)
+            self.assertIn('transcript_min_chars', digest_generation)
+            self.assertIn('transcript_max_chars', digest_generation)
 
             # Test metadata generation defaults
             metadata_generation = config_manager.get_category('ai_metadata_generation')
@@ -306,6 +338,11 @@ class TestPhaseScripts(unittest.TestCase):
             stt_transcription = config_manager.get_category('ai_stt_transcription')
             self.assertIn('model', stt_transcription)
             self.assertIn('max_file_size_mb', stt_transcription)
+
+            transcript_processing = config_manager.get_category('transcript_processing')
+            self.assertIn('ad_trim_enabled', transcript_processing)
+            self.assertIn('ad_trim_start_percent', transcript_processing)
+            self.assertIn('ad_trim_end_percent', transcript_processing)
 
         except Exception as e:
             self.fail(f"AI configuration defaults test failed: {e}")
