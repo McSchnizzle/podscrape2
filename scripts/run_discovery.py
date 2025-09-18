@@ -73,7 +73,7 @@ class DiscoveryRunner:
             if limit is None:
                 limit = int(web_config.get_setting('pipeline', 'max_episodes_per_run', 3))
             if days_back == 7:  # Default value, check web config
-                days_back = int(web_config.get_setting('pipeline', 'days_back_default', 7))
+                days_back = int(web_config.get_setting('pipeline', 'discovery_lookback_days', 7))
 
         except Exception as e:
             self.logger.warning(f"Could not load web config, using defaults: {e}")
@@ -233,7 +233,7 @@ class DiscoveryRunner:
 
                     # Check if already processed
                     existing = self.episode_repo.get_by_episode_guid(episode_guid)
-                    if existing and existing.status in ['transcribed', 'scored', 'digested']:
+                    if existing and existing.status in ['transcribed', 'scored', 'digested', 'not_relevant']:
                         self.logger.info(f"SKIP: {title[:60]}... (already processed)")
                         continue
                     elif existing and existing.status in ['pending', 'failed', 'downloading']:

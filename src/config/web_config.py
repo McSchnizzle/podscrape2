@@ -58,6 +58,7 @@ DEFAULTS = {
     ("audio_processing", "transcribe_all_chunks"): {"type": "bool", "default": True},
     ("audio_processing", "max_chunks_per_episode"): {"type": "int", "default": 3, "min": 1, "max": 50},
     ("pipeline", "max_episodes_per_run"): {"type": "int", "default": 3, "min": 1, "max": 20},
+    ("pipeline", "discovery_lookback_days"): {"type": "int", "default": 3, "min": 1, "max": 30},
     # Retention policies (days)
     ("retention", "local_mp3_days"): {"type": "int", "default": 7, "min": 0, "max": 365},
     ("retention", "audio_cache_days"): {"type": "int", "default": 3, "min": 0, "max": 365},
@@ -71,11 +72,15 @@ DEFAULTS = {
     ("ai_content_scoring", "max_tokens"): {"type": "int", "default": 1000, "min": 100, "max": 128000},
     ("ai_content_scoring", "max_episodes_per_batch"): {"type": "int", "default": 10, "min": 1, "max": 50},
     ("ai_content_scoring", "max_input_tokens"): {"type": "int", "default": 120000, "min": 1000, "max": 272000},
+    ("ai_content_scoring", "prompt_max_chars"): {"type": "int", "default": 4000, "min": 0, "max": 200000},
 
     # AI Configuration - Digest Generation Phase
     ("ai_digest_generation", "model"): {"type": "string", "default": "gpt-5"},
     ("ai_digest_generation", "max_output_tokens"): {"type": "int", "default": 25000, "min": 1000, "max": 128000},
     ("ai_digest_generation", "max_input_tokens"): {"type": "int", "default": 150000, "min": 10000, "max": 272000},
+    ("ai_digest_generation", "transcript_buffer_percent"): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
+    ("ai_digest_generation", "transcript_min_chars"): {"type": "int", "default": 2000, "min": 0, "max": 500000},
+    ("ai_digest_generation", "transcript_max_chars"): {"type": "int", "default": 20000, "min": 0, "max": 1000000},
 
     # AI Configuration - Metadata Generation Phase
     ("ai_metadata_generation", "model"): {"type": "string", "default": "gpt-5-mini"},
@@ -91,6 +96,11 @@ DEFAULTS = {
     # AI Configuration - Speech-to-Text Phase
     ("ai_stt_transcription", "model"): {"type": "string", "default": "whisper-1"},
     ("ai_stt_transcription", "max_file_size_mb"): {"type": "int", "default": 20, "min": 1, "max": 25},
+
+    # Transcript Processing Controls (scoring + digest ingestion)
+    ("transcript_processing", "ad_trim_enabled"): {"type": "bool", "default": True},
+    ("transcript_processing", "ad_trim_start_percent"): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
+    ("transcript_processing", "ad_trim_end_percent"): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
 }
 
 

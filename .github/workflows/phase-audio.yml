@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: "Maximum episodes to include"
+        description: "Maximum episodes to include (overrides web config)"
         required: false
-        default: "1"
+        default: ""
       days_back:
-        description: "Days back window for discovery seed"
+        description: "Days back window for discovery seed (overrides web config)"
         required: false
-        default: "3"
+        default: ""
 
 concurrency:
   group: phase-audio-${{ github.ref }}
@@ -29,8 +29,8 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
-      LIMIT: ${{ inputs.limit || '1' }}
-      DAYS_BACK: ${{ inputs.days_back || '3' }}
+      LIMIT: ${{ inputs.limit }}
+      DAYS_BACK: ${{ inputs.days_back }}
 
     steps:
       - name: Checkout repository
@@ -98,12 +98,20 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          python scripts/run_discovery.py \
-            --limit "$LIMIT" \
-            --days-back "$DAYS_BACK" \
-            --dry-run \
-            --verbose \
-            --output artifacts/discovery-output.json
+
+          # Build discovery command with web config parameters
+          DISCOVERY_CMD="python scripts/run_discovery.py --dry-run --verbose --output artifacts/discovery-output.json"
+
+          # Add optional override parameters if provided
+          if [ -n "$LIMIT" ]; then
+            DISCOVERY_CMD="$DISCOVERY_CMD --limit \"$LIMIT\""
+          fi
+          if [ -n "$DAYS_BACK" ]; then
+            DISCOVERY_CMD="$DISCOVERY_CMD --days-back \"$DAYS_BACK\""
+          fi
+
+          echo "Running: $DISCOVERY_CMD"
+          eval "$DISCOVERY_CMD"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
@@ -111,12 +119,17 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          python scripts/run_audio.py \
-            --limit "$LIMIT" \
-            --dry-run \
-            --verbose \
-            --output artifacts/audio-output.json \
-            < artifacts/discovery-output.json
+
+          # Build audio command with web config parameters
+          AUDIO_CMD="python scripts/run_audio.py --dry-run --verbose --output artifacts/audio-output.json"
+
+          # Add optional override parameters if provided
+          if [ -n "$LIMIT" ]; then
+            AUDIO_CMD="$AUDIO_CMD --limit \"$LIMIT\""
+          fi
+
+          echo "Running: $AUDIO_CMD"
+          eval "$AUDIO_CMD < artifacts/discovery-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
 

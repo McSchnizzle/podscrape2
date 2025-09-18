@@ -120,6 +120,9 @@ Deliverables:
 - GitHub auth: prefer GH CLI if available; fallback to token (document clearly)
 - End-to-end tests for automation & publishing
 - Documentation refresh: install, run, UI guide, ops playbook
+- Add optional digest script chunking for TTS (split long scripts, submit sequentially, reassemble final MP3)
+- Introduce "script warming" pass that enriches digest text before TTS to improve voice output quality
+- **Future**: Implement retention/cleanup as standalone phase that runs after publishing phase
 
 Open Items migrated from completed-phases1-7.md
 - Phase 7 (Publishing):

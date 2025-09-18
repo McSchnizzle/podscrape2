@@ -198,65 +198,147 @@ def create_app():
             with open(log_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
+            lines = content.splitlines()
+
             # Threshold from ConfigManager/Web UI
             try:
                 threshold = float(web_config.get_setting('content_filtering', 'score_threshold', 0.65))
             except Exception:
                 threshold = 0.65
 
-            # Parse episode information from log
             import re
 
-            # Find episode processing sections
-            episode_sections = re.findall(r'PROCESSING EPISODE \d+/\d+ — SCORING.*?(?=PROCESSING EPISODE|\Z)', content, re.DOTALL)
+            episodes_new = []
+            current = None
+            in_scores = False
 
-            # Parse each episode
-            for section in episode_sections:
-                # Extract episode title and feed
-                title_match = re.search(r'Scoring: (.+)', section)
-                feed_match = re.search(r'Feed: (.+)', section)
+            for line in lines:
+                stripped = line.strip()
 
-                if title_match:
-                    episode_title = title_match.group(1).strip()
-                    feed_title = feed_match.group(1).strip() if feed_match else 'Unknown Feed'
+                # Capture explicit failure messages (e.g., TTS failures)
+                if 'TTS audio generation failed' in stripped and 'INFO -' in line:
+                    summary['errors'].append(line.split('INFO -', 1)[-1].strip())
 
-                    # Parse topic scores
-                    scores = {}
-                    qualifying = []
+                if '[1/' in line or re.search(r'\[\d+/\d+\]\s+Scoring:', line):
+                    if 'Scoring:' in line:
+                        if current:
+                            episodes_new.append(current)
+                        title = line.split('Scoring:', 1)[-1].strip()
+                        current = {
+                            'title': title,
+                            'feed': None,
+                            'scores': {},
+                            'qualifying': [],
+                        }
+                        in_scores = False
+                        continue
 
-                    # Find the TOPIC SCORES section for this episode
-                    scores_section = re.search(r'📊 TOPIC SCORES:(.*?)📈 QUALIFICATION SUMMARY:', section, re.DOTALL)
-                    if scores_section:
-                        score_lines = scores_section.group(1).strip().split('\n')
-                        for line in score_lines:
-                            # Skip empty lines and log prefixes
-                            if not line.strip() or 'INFO -' not in line:
-                                continue
+                if current and 'Successfully scored episode' in line:
+                    guid_match = re.search(r'Successfully scored episode ([^ ]+)', line)
+                    if guid_match:
+                        guid = guid_match.group(1).strip()
+                        current['guid'] = guid
+                        try:
+                            db_ep = episode_repo.get_by_episode_guid(guid)
+                            if db_ep and getattr(db_ep, 'feed_id', None):
+                                feed = feed_repo.get_by_id(db_ep.feed_id)
+                                if feed:
+                                    current['feed'] = getattr(feed, 'title', None)
+                        except Exception:
+                            pass
+                    continue
 
-                            # Extract the part after the log prefix
-                            # Lines look like: "2025-09-15 01:37:13,289 - __main__ - INFO -    ✅ QUALIFIES AI and Technology         0.95"
-                            log_content = line.split('INFO -', 1)[-1].strip()
+                if current and '📊 Topic Scores:' in line:
+                    in_scores = True
+                    continue
 
-                            # Match lines like "✅ QUALIFIES AI and Technology         0.95"
-                            # or "Social Movements and Community Organizing 0.05"
-                            if '✅ QUALIFIES' in log_content:
-                                score_match = re.search(r'✅ QUALIFIES\s+(.+?)\s+([\d.]+)', log_content)
-                            else:
-                                score_match = re.search(r'^(.+?)\s+([\d.]+)$', log_content.strip())
+                if in_scores:
+                    if '📈' in line or not stripped:
+                        in_scores = False
+                        continue
+                    if 'INFO -' not in line:
+                        continue
+                    log_content = line.split('INFO -', 1)[-1].strip()
+                    if not log_content:
+                        continue
 
-                            if score_match:
-                                topic = score_match.group(1).strip()
-                                score = float(score_match.group(2))
-                                scores[topic] = score
-                                if score >= threshold:
-                                    qualifying.append(topic)
+                    qualifies = 'QUALIFIES' in log_content or log_content.startswith('✅')
+                    score_match = None
+                    if '✅ QUALIFIES' in log_content:
+                        temp = log_content.replace('✅ QUALIFIES', '', 1).strip()
+                        score_match = re.search(r'(.+?)\s+([0-9.]+)$', temp)
+                    else:
+                        score_match = re.search(r'(.+?)\s+([0-9.]+)$', log_content)
 
-                    summary['episodes'].append({
-                        'title': episode_title,
-                        'feed': feed_title,
-                        'scores': scores,
-                        'qualifying': qualifying,
-                    })
+                    if score_match:
+                        topic = score_match.group(1).strip()
+                        try:
+                            score = float(score_match.group(2))
+                        except ValueError:
+                            continue
+                        current['scores'][topic] = score
+                        if qualifies or score >= threshold:
+                            if topic not in current['qualifying']:
+                                current['qualifying'].append(topic)
+                    continue
+
+            if current:
+                episodes_new.append(current)
+
+            # Fallback to older log format if nothing was captured
+            if not episodes_new:
+                # Find episode processing sections (legacy logs)
+                episode_sections = re.findall(r'PROCESSING EPISODE \d+/\d+ — SCORING.*?(?=PROCESSING EPISODE|\Z)', content, re.DOTALL)
+
+                for section in episode_sections:
+                    title_match = re.search(r'Scoring: (.+)', section)
+                    feed_match = re.search(r'Feed: (.+)', section)
+
+                    if title_match:
+                        episode_title = title_match.group(1).strip()
+                        feed_title = feed_match.group(1).strip() if feed_match else 'Unknown Feed'
+
+                        scores = {}
+                        qualifying = []
+
+                        scores_section = re.search(r'📊 TOPIC SCORES:(.*?)📈 QUALIFICATION SUMMARY:', section, re.DOTALL)
+                        if scores_section:
+                            score_lines = scores_section.group(1).strip().split('\n')
+                            for s_line in score_lines:
+                                if not s_line.strip() or 'INFO -' not in s_line:
+                                    continue
+                                log_content = s_line.split('INFO -', 1)[-1].strip()
+                                if '✅ QUALIFIES' in log_content:
+                                    score_match = re.search(r'✅ QUALIFIES\s+(.+?)\s+([\d.]+)', log_content)
+                                else:
+                                    score_match = re.search(r'^(.+?)\s+([\d.]+)$', log_content.strip())
+                                if score_match:
+                                    topic = score_match.group(1).strip()
+                                    score = float(score_match.group(2))
+                                    scores[topic] = score
+                                    if score >= threshold:
+                                        qualifying.append(topic)
+
+                        episodes_new.append({
+                            'title': episode_title,
+                            'feed': feed_title,
+                            'scores': scores,
+                            'qualifying': qualifying,
+                        })
+
+            # Finalise, enriching with feed titles if missing
+            for ep in episodes_new:
+                if ep.get('feed') is None and ep.get('guid'):
+                    try:
+                        db_ep = episode_repo.get_by_episode_guid(ep['guid'])
+                        if db_ep and getattr(db_ep, 'feed_id', None):
+                            feed = feed_repo.get_by_id(db_ep.feed_id)
+                            if feed:
+                                ep['feed'] = getattr(feed, 'title', None)
+                    except Exception:
+                        pass
+
+                summary['episodes'].append(ep)
 
         except Exception as e:
             summary['errors'].append(f'Failed to parse episodes from log: {e}')
@@ -312,12 +394,18 @@ def create_app():
                             'word_count': digest.script_word_count,
                             'episode_count': digest.episode_count,
                         }
-                        d['mp3_duration'] = digest.mp3_duration_seconds
-                        try:
-                            secs = int(d['mp3_duration'] or 0)
-                            d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
-                        except Exception:
+                        mp3_duration = digest.mp3_duration_seconds
+                        d['mp3_duration'] = mp3_duration
+                        if mp3_duration and mp3_duration > 0:
+                            try:
+                                secs = int(mp3_duration)
+                                d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
+                            except Exception:
+                                d['mp3_hms'] = None
+                            d['mp3_available'] = True
+                        else:
                             d['mp3_hms'] = None
+                            d['mp3_available'] = False
 
                         # Get episode titles from episode IDs
                         titles = []
@@ -333,12 +421,18 @@ def create_app():
                     for d in summary['digests']:
                         digest = digests_info.get(d['topic'])
                         if digest:
-                            d['mp3_duration'] = digest.mp3_duration_seconds
-                            try:
-                                secs = int(d['mp3_duration'] or 0)
-                                d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
-                            except Exception:
+                            mp3_duration = digest.mp3_duration_seconds
+                            d['mp3_duration'] = mp3_duration
+                            if mp3_duration and mp3_duration > 0:
+                                try:
+                                    secs = int(mp3_duration)
+                                    d['mp3_hms'] = f"{secs//60}:{secs%60:02d}"
+                                except Exception:
+                                    d['mp3_hms'] = None
+                                d['mp3_available'] = True
+                            else:
                                 d['mp3_hms'] = None
+                                d['mp3_available'] = False
 
                             # Don't override episode titles from log - database may have stale data
                             # The episode titles should come from the actual episodes processed in this run
@@ -592,6 +686,7 @@ def create_app():
             'ai_metadata_generation': web_config.get_category('ai_metadata_generation'),
             'ai_tts_generation': web_config.get_category('ai_tts_generation'),
             'ai_stt_transcription': web_config.get_category('ai_stt_transcription'),
+            'transcript_processing': web_config.get_category('transcript_processing'),
         }
         ai_models = web_config.get_ai_models()
         if request.method == 'POST':
@@ -645,11 +740,23 @@ def create_app():
                 web_config.set_setting('ai_content_scoring', 'max_tokens', int(request.form.get('ai_content_scoring_max_tokens', current['ai_content_scoring'].get('max_tokens', 1000))))
                 web_config.set_setting('ai_content_scoring', 'max_input_tokens', int(request.form.get('ai_content_scoring_max_input_tokens', current['ai_content_scoring'].get('max_input_tokens', 120000))))
                 web_config.set_setting('ai_content_scoring', 'max_episodes_per_batch', int(request.form.get('ai_content_scoring_max_episodes_per_batch', current['ai_content_scoring'].get('max_episodes_per_batch', 10))))
+                prompt_chars_default = current['ai_content_scoring'].get('prompt_max_chars', DEFAULTS.get(('ai_content_scoring', 'prompt_max_chars'), {}).get('default', 4000))
+                prompt_chars = int(request.form.get('ai_content_scoring_prompt_max_chars', prompt_chars_default))
+                web_config.set_setting('ai_content_scoring', 'prompt_max_chars', prompt_chars)
 
                 # Digest Generation
                 web_config.set_setting('ai_digest_generation', 'model', request.form.get('ai_digest_generation_model', current['ai_digest_generation'].get('model', 'gpt-5')))
                 web_config.set_setting('ai_digest_generation', 'max_output_tokens', int(request.form.get('ai_digest_generation_max_output_tokens', current['ai_digest_generation'].get('max_output_tokens', 25000))))
                 web_config.set_setting('ai_digest_generation', 'max_input_tokens', int(request.form.get('ai_digest_generation_max_input_tokens', current['ai_digest_generation'].get('max_input_tokens', 150000))))
+                buffer_default = current['ai_digest_generation'].get('transcript_buffer_percent', DEFAULTS.get(('ai_digest_generation', 'transcript_buffer_percent'), {}).get('default', 20.0))
+                buffer_percent = float(request.form.get('ai_digest_generation_transcript_buffer_percent', buffer_default))
+                web_config.set_setting('ai_digest_generation', 'transcript_buffer_percent', buffer_percent)
+                min_chars_default = current['ai_digest_generation'].get('transcript_min_chars', DEFAULTS.get(('ai_digest_generation', 'transcript_min_chars'), {}).get('default', 2000))
+                min_chars = int(request.form.get('ai_digest_generation_transcript_min_chars', min_chars_default))
+                web_config.set_setting('ai_digest_generation', 'transcript_min_chars', min_chars)
+                max_chars_default = current['ai_digest_generation'].get('transcript_max_chars', DEFAULTS.get(('ai_digest_generation', 'transcript_max_chars'), {}).get('default', 20000))
+                max_chars = int(request.form.get('ai_digest_generation_transcript_max_chars', max_chars_default))
+                web_config.set_setting('ai_digest_generation', 'transcript_max_chars', max_chars)
 
                 # Metadata Generation
                 web_config.set_setting('ai_metadata_generation', 'model', request.form.get('ai_metadata_generation_model', current['ai_metadata_generation'].get('model', 'gpt-5-mini')))
@@ -665,6 +772,16 @@ def create_app():
                 # STT Transcription
                 web_config.set_setting('ai_stt_transcription', 'model', request.form.get('ai_stt_transcription_model', current['ai_stt_transcription'].get('model', 'whisper-1')))
                 web_config.set_setting('ai_stt_transcription', 'max_file_size_mb', int(request.form.get('ai_stt_transcription_max_file_size_mb', current['ai_stt_transcription'].get('max_file_size_mb', 20))))
+
+                # Transcript Processing Controls
+                trim_enabled = request.form.get('transcript_processing_ad_trim_enabled') == 'on'
+                web_config.set_setting('transcript_processing', 'ad_trim_enabled', trim_enabled)
+                trim_start_default = current['transcript_processing'].get('ad_trim_start_percent', DEFAULTS.get(('transcript_processing', 'ad_trim_start_percent'), {}).get('default', 5.0))
+                trim_start = float(request.form.get('transcript_processing_ad_trim_start_percent', trim_start_default))
+                web_config.set_setting('transcript_processing', 'ad_trim_start_percent', trim_start)
+                trim_end_default = current['transcript_processing'].get('ad_trim_end_percent', DEFAULTS.get(('transcript_processing', 'ad_trim_end_percent'), {}).get('default', 5.0))
+                trim_end = float(request.form.get('transcript_processing_ad_trim_end_percent', trim_end_default))
+                web_config.set_setting('transcript_processing', 'ad_trim_end_percent', trim_end)
             except Exception as e:
                 errors.append(f'ai_configuration: {e}')
 
@@ -1741,7 +1858,7 @@ def create_app():
                 parsed = feedparser.parse(content)
             except Exception as ex:
                 feed_repo.increment_failures(feed_id)
-                feed_repo.update_last_checked(feed_id)
+                feed_repo.update_last_checked(feed_id, datetime.now())
                 flash(f'Check failed: cannot fetch feed: {ex}', 'error')
                 return redirect(url_for('feeds'))
 
@@ -1765,7 +1882,7 @@ def create_app():
 
             if not enclosure_urls:
                 feed_repo.increment_failures(feed_id)
-                feed_repo.update_last_checked(feed_id)
+                feed_repo.update_last_checked(feed_id, datetime.now())
                 flash('Check failed: feed has no audio enclosures in recent items', 'error')
                 return redirect(url_for('feeds'))
 
@@ -1802,14 +1919,14 @@ def create_app():
 
             if not reachable:
                 feed_repo.increment_failures(feed_id)
-                feed_repo.update_last_checked(feed_id)
+                feed_repo.update_last_checked(feed_id, datetime.now())
                 msg = f'no audio enclosure reachable; last error: {last_err}' if last_err else 'no audio enclosure reachable'
                 flash(f'Check failed: {msg}', 'error')
                 return redirect(url_for('feeds'))
 
             # Success path
             feed_repo.reset_failures(feed_id)
-            feed_repo.update_last_checked(feed_id)
+            feed_repo.update_last_checked(feed_id, datetime.now())
             try_title = getattr(parsed.feed, 'title', None) if hasattr(parsed, 'feed') else None
             if try_title and try_title.strip() and try_title.strip() != feed.title:
                 feed_repo.update_title(feed_id, try_title.strip())
