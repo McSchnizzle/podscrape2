@@ -14,6 +14,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 import argparse
+from typing import Any
 
 # Add src to path for environment setup
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
@@ -44,11 +45,14 @@ class PipelineOrchestrator:
         self.logger = self.pipeline_logger.get_logger()
         self.log_file = str(self.pipeline_logger.get_log_file())
 
-        # Store configuration
+        # Load Web UI settings and merge with CLI arguments
+        self.web_config = self._load_web_config()
+
+        # Store configuration (with Web UI defaults if CLI not provided)
         self.phase_stop = phase_stop
         self.dry_run = dry_run
-        self.limit = limit
-        self.days_back = days_back
+        self.limit = limit if limit is not None else self._get_web_setting('pipeline', 'max_episodes_per_run', 3)
+        self.days_back = days_back if days_back != 7 else self._get_web_setting('pipeline', 'days_back_default', 7)
         self.episode_guid = episode_guid
         self.verbose = verbose
 
@@ -111,6 +115,14 @@ class PipelineOrchestrator:
                 cmd.extend(['--episode-guid', self.episode_guid])
             if self.limit:
                 cmd.extend(['--limit', str(self.limit)])
+
+        # Add Web UI settings as CLI flags for AI-related scripts
+        if script_name == 'scripts/run_scoring.py':
+            self._add_scoring_web_settings(cmd)
+        elif script_name == 'scripts/run_digest.py':
+            self._add_digest_web_settings(cmd)
+        elif script_name == 'scripts/run_tts.py':
+            self._add_tts_web_settings(cmd)
 
         # Add additional kwargs as flags
         for key, value in kwargs.items():
@@ -213,6 +225,77 @@ class PipelineOrchestrator:
         except Exception as e:
             self.logger.error(f"❌ Phase failed with exception: {e}")
             return {'success': False, 'error': str(e)}
+
+    def _load_web_config(self):
+        """Load WebConfigManager safely"""
+        try:
+            from src.config.web_config import WebConfigManager
+            return WebConfigManager()
+        except Exception as e:
+            self.logger.warning(f"Could not load Web UI settings: {e}")
+            return None
+
+    def _get_web_setting(self, category: str, key: str, default: Any) -> Any:
+        """Get Web UI setting with fallback to default"""
+        if self.web_config:
+            try:
+                return self.web_config.get_setting(category, key, default)
+            except Exception:
+                pass
+        return default
+
+    def _add_scoring_web_settings(self, cmd: list):
+        """Add Web UI settings for content scoring phase"""
+        if not self.web_config:
+            return
+
+        # AI Content Scoring settings
+        model = self._get_web_setting('ai_content_scoring', 'model', 'gpt-5-mini')
+        max_tokens = self._get_web_setting('ai_content_scoring', 'max_tokens', 1000)
+        max_input_tokens = self._get_web_setting('ai_content_scoring', 'max_input_tokens', 120000)
+        max_episodes_per_batch = self._get_web_setting('ai_content_scoring', 'max_episodes_per_batch', 10)
+
+        # Content filtering settings
+        score_threshold = self._get_web_setting('content_filtering', 'score_threshold', 0.65)
+
+        # Add as CLI flags
+        cmd.extend(['--ai-model', str(model)])
+        cmd.extend(['--max-tokens', str(max_tokens)])
+        cmd.extend(['--max-input-tokens', str(max_input_tokens)])
+        cmd.extend(['--max-episodes-per-batch', str(max_episodes_per_batch)])
+        cmd.extend(['--score-threshold', str(score_threshold)])
+
+    def _add_digest_web_settings(self, cmd: list):
+        """Add Web UI settings for digest generation phase"""
+        if not self.web_config:
+            return
+
+        # AI Digest Generation settings
+        model = self._get_web_setting('ai_digest_generation', 'model', 'gpt-5')
+        max_output_tokens = self._get_web_setting('ai_digest_generation', 'max_output_tokens', 25000)
+        max_input_tokens = self._get_web_setting('ai_digest_generation', 'max_input_tokens', 150000)
+
+        # Content filtering settings
+        max_episodes_per_digest = self._get_web_setting('content_filtering', 'max_episodes_per_digest', 5)
+
+        # Add as CLI flags
+        cmd.extend(['--ai-model', str(model)])
+        cmd.extend(['--max-output-tokens', str(max_output_tokens)])
+        cmd.extend(['--max-input-tokens', str(max_input_tokens)])
+        cmd.extend(['--max-episodes-per-digest', str(max_episodes_per_digest)])
+
+    def _add_tts_web_settings(self, cmd: list):
+        """Add Web UI settings for TTS generation phase"""
+        if not self.web_config:
+            return
+
+        # AI TTS Generation settings
+        model = self._get_web_setting('ai_tts_generation', 'model', 'eleven_turbo_v2_5')
+        max_characters = self._get_web_setting('ai_tts_generation', 'max_characters', 35000)
+
+        # Add as CLI flags
+        cmd.extend(['--tts-model', str(model)])
+        cmd.extend(['--max-characters', str(max_characters)])
 
     def run_pipeline(self):
         """Execute the complete pipeline by orchestrating phase scripts"""

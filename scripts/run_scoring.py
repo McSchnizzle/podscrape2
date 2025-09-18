@@ -32,7 +32,9 @@ except ImportError:
 class ScoringRunner:
     """Content scoring phase"""
 
-    def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
+    def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False,
+                 ai_model: str = None, max_tokens: int = None, max_input_tokens: int = None,
+                 max_episodes_per_batch: int = None, score_threshold: float = None):
         # Set up phase-specific logging
         self.pipeline_logger = setup_phase_logging("scoring", verbose=verbose, console_output=True)
         self.logger = self.pipeline_logger.get_logger()
@@ -41,14 +43,76 @@ class ScoringRunner:
         self.limit = limit
         self.verbose = verbose
 
+        # Store Web UI settings (will be passed to ContentScorer)
+        self.web_settings = {}
+        if ai_model is not None:
+            self.web_settings['ai_model'] = ai_model
+        if max_tokens is not None:
+            self.web_settings['max_tokens'] = max_tokens
+        if max_input_tokens is not None:
+            self.web_settings['max_input_tokens'] = max_input_tokens
+        if max_episodes_per_batch is not None:
+            self.web_settings['max_episodes_per_batch'] = max_episodes_per_batch
+        if score_threshold is not None:
+            self.web_settings['score_threshold'] = score_threshold
+
         # Initialize repositories and components
         self.episode_repo = get_episode_repo()
-        self.content_scorer = ContentScorer()
+
+        # Pass Web UI settings to ContentScorer via constructor override
+        self.content_scorer = self._create_content_scorer()
 
         # Verify API keys
         self._verify_dependencies()
 
         self.logger.info("Content scoring initialized")
+        if self.web_settings:
+            self.logger.info(f"Using Web UI settings: {self.web_settings}")
+
+    def _create_content_scorer(self):
+        """Create ContentScorer with Web UI settings override"""
+        if self.web_settings:
+            # Create a wrapper class that overrides specific settings without modifying the database
+            from src.config.web_config import WebConfigManager
+
+            class OverrideWebConfig:
+                def __init__(self, base_config, overrides):
+                    self.base_config = base_config
+                    self.overrides = overrides
+
+                def get_setting(self, category, key, default=None):
+                    # Check if we have an override for this setting
+                    override_key = f"{category}.{key}"
+                    if override_key in self.overrides:
+                        return self.overrides[override_key]
+                    # Fall back to base config
+                    return self.base_config.get_setting(category, key, default)
+
+                def get_category(self, category):
+                    result = self.base_config.get_category(category)
+                    # Apply any overrides for this category
+                    for override_key, value in self.overrides.items():
+                        if override_key.startswith(f"{category}."):
+                            key = override_key.replace(f"{category}.", "")
+                            result[key] = value
+                    return result
+
+            base_config = WebConfigManager()
+            overrides = {}
+
+            # Map CLI settings to config paths
+            for key, value in self.web_settings.items():
+                if key == 'ai_model':
+                    overrides['ai_content_scoring.model'] = value
+                elif key in ['max_tokens', 'max_input_tokens', 'max_episodes_per_batch']:
+                    overrides[f'ai_content_scoring.{key}'] = value
+                elif key == 'score_threshold':
+                    overrides['content_filtering.score_threshold'] = value
+
+            override_config = OverrideWebConfig(base_config, overrides)
+            return ContentScorer(web_config=override_config)
+        else:
+            return ContentScorer()
 
     def _verify_dependencies(self):
         """Verify required dependencies"""
@@ -268,13 +332,25 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output', help='Output JSON file (default: stdout)')
 
+    # Web UI settings from orchestrator
+    parser.add_argument('--ai-model', help='AI model for content scoring (from Web UI)')
+    parser.add_argument('--max-tokens', type=int, help='Max output tokens (from Web UI)')
+    parser.add_argument('--max-input-tokens', type=int, help='Max input tokens (from Web UI)')
+    parser.add_argument('--max-episodes-per-batch', type=int, help='Max episodes per batch (from Web UI)')
+    parser.add_argument('--score-threshold', type=float, help='Score threshold for qualification (from Web UI)')
+
     args = parser.parse_args()
 
     try:
         runner = ScoringRunner(
             dry_run=args.dry_run,
             limit=args.limit,
-            verbose=args.verbose
+            verbose=args.verbose,
+            ai_model=args.ai_model,
+            max_tokens=args.max_tokens,
+            max_input_tokens=args.max_input_tokens,
+            max_episodes_per_batch=args.max_episodes_per_batch,
+            score_threshold=args.score_threshold
         )
 
         # Handle input
