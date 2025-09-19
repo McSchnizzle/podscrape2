@@ -44,6 +44,10 @@
 - [ ] **Metadata Generation Configuration**:
   - `metadata.max_description_tokens` (RSS episode descriptions)
   - `metadata.max_topic_analysis_tokens` (topic relevance analysis)
+- [ ] **Pipeline Processing Configuration**:
+  - `pipeline.discovery_lookback_days` (current: default varies by script, typically 3-7 days)
+  - `pipeline.max_episodes_per_run` (overall processing limits per pipeline execution)
+  - `pipeline.episode_age_limit_days` (maximum age of episodes to consider for processing)
 
 **Implementation Tasks**:
 - [ ] Audit all AI API calls across the codebase to identify max_tokens parameters
@@ -52,12 +56,21 @@
 - [ ] Update all AI service classes to read token limits from WebConfig
 - [ ] Add validation and reasonable defaults for all token settings
 - [ ] Document token usage implications (cost, quality, performance trade-offs)
+- [ ] **Pipeline Configuration Tasks**:
+  - [ ] Add `pipeline_configuration` section to `web_settings` database table
+  - [ ] Update discovery scripts to read `discovery_lookback_days` from WebConfig instead of hardcoded defaults
+  - [ ] Add Web UI controls for pipeline processing limits and lookback settings
+  - [ ] Ensure all phase scripts (discovery, audio, scoring, digest, tts, publishing) respect configurable limits
 
 **Acceptance Criteria**:
 - All AI interactions have configurable token limits via Web UI
 - Settings persist in database and affect pipeline execution
 - Clear documentation of token usage implications
 - Validation prevents unreasonably high/low token limits
+- **Pipeline processing settings configurable via Web UI**:
+  - Discovery lookback days can be adjusted without code changes
+  - Episode processing limits prevent runaway resource usage
+  - All phase scripts respect Web UI configuration settings
 
 ## Phase 4 — CI/CD **[✅ READY - Phase 2.5 STT Migration Complete]**
 
