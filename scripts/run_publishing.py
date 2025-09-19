@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Publishing Pipeline Integration - Complete End-to-End Publishing
-Connects the main RSS→Audio pipeline with the Phase 7 publishing components:
-1. Takes generated MP3s from data/completed-tts/
-2. Uploads to GitHub releases
-3. Generates RSS feed XML
-4. Deploys to Vercel at podcast.paulrbrown.org
+Publishing Pipeline Integration - RSS Generation and Deployment
+Handles RSS generation and deployment for MP3s already uploaded by TTS phase:
+1. Verifies digests have been uploaded to GitHub releases (by TTS phase)
+2. Generates RSS feed XML from database records with GitHub URLs
+3. Deploys RSS feed to Vercel at podcast.paulrbrown.org
+4. Manages retention and cleanup
 """
 
 import os
@@ -47,7 +47,10 @@ except ImportError:
 
 class PublishingPipelineRunner:
     """
-    Complete publishing pipeline integration
+    RSS generation and deployment pipeline
+
+    Handles the final publishing step for MP3s that have already been uploaded
+    to GitHub releases by the TTS phase. Focuses on RSS generation and Vercel deployment.
     """
     
     def __init__(self, log_file: str = None, dry_run: bool = False, verbose: bool = False):
@@ -71,6 +74,7 @@ class PublishingPipelineRunner:
         self.vercel_deployer = None
         gh_actions_val = os.getenv("GH_ACTIONS", os.getenv("GITHUB_ACTIONS", ""))
         self._is_github_actions = gh_actions_val.lower() == "true"
+        self.logger.info(f"GitHub Actions detection: GH_ACTIONS={os.getenv('GH_ACTIONS')}, GITHUB_ACTIONS={os.getenv('GITHUB_ACTIONS')}, _is_github_actions={self._is_github_actions}")
         if not dry_run:
             self.github_publisher = create_github_publisher()
             
@@ -173,52 +177,24 @@ class PublishingPipelineRunner:
         return digests
     
     def publish_digest(self, digest: Dict[str, Any]) -> bool:
-        """Publish a single digest to GitHub and update database"""
+        """Verify digest is ready for RSS generation (already uploaded by TTS phase)"""
         try:
-            self.logger.info(f"Publishing digest: {digest['topic']} ({digest['digest_date']})")
-            
+            self.logger.info(f"Verifying digest: {digest['topic']} ({digest['digest_date']})")
+
             if self.dry_run:
-                self.logger.info("  DRY RUN: Would publish to GitHub")
+                self.logger.info("  DRY RUN: Would verify digest for RSS")
                 return True
-            
-            # Upload to GitHub (ensure resolved path)
-            mp3_path = digest['mp3_path']
-            try:
-                size = Path(mp3_path).stat().st_size
-                self.logger.info(f"  Local MP3 ready: {Path(mp3_path).name} ({size} bytes)")
-            except Exception as e:
-                self.logger.error(f"  Local MP3 not accessible: {mp3_path} ({e})")
+
+            # Check if digest already has GitHub URL (uploaded by TTS phase)
+            if not digest.get('github_url'):
+                self.logger.warning(f"  ⚠️  Digest not yet uploaded to GitHub - skipping RSS generation")
                 return False
-            mp3_files = [mp3_path]
-            digest_date = date.fromisoformat(digest['digest_date'])
-            
-            # Always call create_daily_release; it uploads missing assets when a release exists
-            release = self.github_publisher.create_daily_release(digest_date, mp3_files)
-            
-            if release:
-                # Log assets on the release to aid debugging
-                try:
-                    asset_names = [a.get('name') for a in (release.assets or [])]
-                    self.logger.info(f"  Release assets now: {asset_names}")
-                except Exception:
-                    pass
-                # Update database with GitHub URL
-                update_data = {
-                    'github_url': release.html_url,
-                    'github_release_id': str(release.id),
-                    'published_at': datetime.now()
-                }
-                self.digest_repo.update_digest(digest['id'], update_data)
-                
-                self.logger.info(f"  ✅ Published to GitHub: {release.html_url}")
-                digest['github_url'] = release.html_url  # Update for RSS generation
-                return True
-            else:
-                self.logger.error(f"  ❌ Failed to publish to GitHub")
-                return False
-                
+
+            self.logger.info(f"  ✅ Digest ready for RSS: {digest['github_url']}")
+            return True
+
         except Exception as e:
-            self.logger.error(f"  ❌ Failed to publish digest: {e}")
+            self.logger.error(f"  ❌ Failed to verify digest: {e}")
             return False
     
     def generate_rss_feed(self, digests: List[Dict[str, Any]]) -> Optional[str]:
@@ -324,7 +300,78 @@ class PublishingPipelineRunner:
         except Exception as e:
             self.logger.error(f"❌ Failed to deploy to Vercel: {e}")
             return False
-    
+
+    def commit_rss_to_main(self, rss_content: str) -> bool:
+        """Commit RSS feed to main branch to trigger Vercel deployment"""
+        try:
+            self.logger.info("📝 Committing RSS feed to main branch...")
+
+            if self.dry_run:
+                self.logger.info("DRY RUN: Would commit RSS feed")
+                return True
+
+            # Save RSS content to public/daily-digest.xml and data/rss/daily-digest.xml
+            rss_paths = [
+                Path("public/daily-digest.xml"),
+                Path("data/rss/daily-digest.xml")
+            ]
+
+            for rss_path in rss_paths:
+                rss_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(rss_path, 'w', encoding='utf-8') as f:
+                    f.write(rss_content)
+                self.logger.info(f"   📄 Saved RSS to {rss_path}")
+
+            # Git operations
+            import subprocess
+
+            # Add the RSS files
+            result = subprocess.run(['git', 'add', 'public/daily-digest.xml', 'data/rss/daily-digest.xml'],
+                                  capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                self.logger.error(f"Git add failed: {result.stderr}")
+                return False
+
+            # Commit with timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            commit_message = f"Update RSS feed - {timestamp}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+
+            result = subprocess.run(['git', 'commit', '-m', commit_message],
+                                  capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                if "nothing to commit" in result.stdout:
+                    self.logger.info("   ℹ️  No changes to commit (RSS feed unchanged)")
+                    return True
+                else:
+                    self.logger.error(f"Git commit failed: {result.stderr}")
+                    return False
+
+            # Push to main using GITHUB_TOKEN
+            github_token = os.getenv('GITHUB_TOKEN')
+            github_repo = os.getenv('GITHUB_REPOSITORY')
+
+            if github_token and github_repo:
+                # Use HTTPS with token authentication
+                remote_url = f"https://x-access-token:{github_token}@github.com/{github_repo}.git"
+                result = subprocess.run(['git', 'push', remote_url, 'main'],
+                                      capture_output=True, text=True, timeout=60)
+            else:
+                # Fallback to default remote
+                result = subprocess.run(['git', 'push', 'origin', 'main'],
+                                      capture_output=True, text=True, timeout=60)
+
+            if result.returncode != 0:
+                self.logger.error(f"Git push failed: {result.stderr}")
+                return False
+
+            self.logger.info("   ✅ RSS feed committed and pushed to main")
+            self.logger.info("   🚀 Vercel will automatically deploy the updated RSS feed")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to commit RSS to main: {e}")
+            return False
+
     def run_complete_pipeline(self, days_back: int = 30) -> bool:
         """Run the complete publishing pipeline"""
 
@@ -340,15 +387,15 @@ class PublishingPipelineRunner:
                 self.logger.info("No digests found to publish")
                 return True
             
-            # 2. Ensure releases and assets for all digests (idempotent)
-            ensured = 0
-            failures = 0
+            # 2. Verify digests are ready for RSS (already uploaded by TTS phase)
+            verified = 0
+            not_ready = 0
             for digest in digests:
                 if self.publish_digest(digest):
-                    ensured += 1
+                    verified += 1
                 else:
-                    failures += 1
-            self.logger.info(f"Ensured GitHub releases for {ensured} digests (failures: {failures})")
+                    not_ready += 1
+            self.logger.info(f"Verified {verified} digests ready for RSS (not ready: {not_ready})")
             
             # 3. Generate RSS feed (include all digests, published and newly published)
             rss_content = self.generate_rss_feed(digests)
@@ -356,12 +403,18 @@ class PublishingPipelineRunner:
                 self.logger.error("Failed to generate RSS feed")
                 return False
             
-            # 4. Deploy to Vercel (skip when running inside GitHub Actions runner)
+            # 4. Commit RSS feed to main branch (triggers automatic Vercel deployment)
+            self.logger.info(f"Publishing decision point: dry_run={self.dry_run}, _is_github_actions={self._is_github_actions}")
             if self.dry_run:
-                self.logger.info("DRY RUN: Would deploy to Vercel")
+                self.logger.info("DRY RUN: Would commit RSS feed to main branch")
             elif self._is_github_actions:
-                self.logger.info("Skipping Vercel deploy inside GitHub Actions environment")
+                self.logger.info("Running in GitHub Actions - calling commit_rss_to_main")
+                if not self.commit_rss_to_main(rss_content):
+                    self.logger.error("Failed to commit RSS feed to main branch")
+                    return False
             else:
+                # Running locally - can either commit directly or deploy to Vercel
+                self.logger.info("Running locally - calling deploy_to_vercel")
                 if not self.deploy_to_vercel(rss_content):
                     self.logger.error("Failed to deploy to Vercel")
                     return False

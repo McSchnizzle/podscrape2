@@ -18,7 +18,7 @@ on:
       dry_run:
         description: "Enable dry run mode (true/false)"
         required: false
-        default: "true"
+        default: "false"
 
 concurrency:
   group: phase-publishing-${{ github.ref }}
@@ -28,6 +28,10 @@ jobs:
   publishing:
     name: Run Publishing Phase
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write    # For git push operations
+      packages: write    # For GitHub releases
 
     env:
       PYTHON_VERSION: "3.11"
@@ -46,6 +50,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Configure git for commits
+        run: |
+          git config --global user.name "Paul Brown"
+          git config --global user.email "brownpr0@gmail.com"
 
       - name: Ensure required secrets present
         run: |
@@ -216,17 +225,7 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          DRY_RUN_FLAG=""
-          DRY_VALUE="${DRY_RUN,,}"
-          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
-            DRY_RUN_FLAG="--dry-run"
-          fi
-          PUBLISHING_CMD="python scripts/run_publishing.py --verbose --days-back \"30\""
-          if [ -n "$DRY_RUN_FLAG" ]; then
-            PUBLISHING_CMD="$PUBLISHING_CMD $DRY_RUN_FLAG"
-          fi
-          echo "Running: $PUBLISHING_CMD"
-          eval "$PUBLISHING_CMD > artifacts/publishing-output.json"
+          python scripts/run_publishing.py --verbose --days-back "30" > artifacts/publishing-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
