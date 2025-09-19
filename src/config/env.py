@@ -1,12 +1,22 @@
 import os
 from typing import Iterable, List, Optional
 from urllib.parse import urlparse
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+    _DOTENV_AVAILABLE = True
+except ImportError:
+    _DOTENV_AVAILABLE = False
+
+    def load_dotenv() -> None:
+        """No-op when dotenv is not available (e.g., in CI environments)."""
+        pass
 
 
 def load_env() -> None:
     """Load environment variables from .env if present."""
-    load_dotenv()
+    if _DOTENV_AVAILABLE:
+        load_dotenv()
 
 
 class MissingEnvError(RuntimeError):
@@ -114,7 +124,7 @@ def require_database_url() -> str:
 
     FAIL FAST: Provides detailed error messages about which configuration option to use.
     """
-    load_dotenv()  # Ensure .env is loaded
+    load_env()  # Ensure .env is loaded (if dotenv available)
 
     # Try direct DATABASE_URL first
     url = os.getenv("DATABASE_URL")
@@ -183,7 +193,7 @@ def validate_critical_environment() -> None:
 
     Use this function at the start of any script that requires environment configuration.
     """
-    load_dotenv()  # Ensure .env is loaded
+    load_env()  # Ensure .env is loaded (if dotenv available)
 
     # Critical environment variables - NO FALLBACKS, NO SILENT FAILURES
     critical_vars = [

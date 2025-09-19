@@ -108,7 +108,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run discovery dry run (seed data)
+      - name: Run discovery phase (seed data)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -126,7 +126,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run audio dry run (seed transcripts table)
+      - name: Run audio phase (seed transcripts table)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -141,7 +141,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run scoring dry run (seed scoring table)
+      - name: Run scoring phase (seed scoring table)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -156,7 +156,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run digest dry run
+      - name: Run digest phase
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -178,7 +178,7 @@ jobs:
           find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
           echo "before_file=$(realpath "$BASELINE")" >> "$GITHUB_OUTPUT"
 
-      - name: Run TTS dry run
+      - name: Run TTS phase
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -231,6 +231,7 @@ jobs:
           fi
           RELEASE_DATE="${DATE_PART:0:4}-${DATE_PART:4:2}-${DATE_PART:6:2}"
 
+          source "${VENV_PATH}/bin/activate"
           python scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"
           python scripts/run_publishing.py --verbose
           cp data/rss/daily-digest.xml data/rss/test-feed.xml
