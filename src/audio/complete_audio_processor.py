@@ -148,6 +148,25 @@ class CompleteAudioProcessor:
             try:
                 self.audio_manager.organize_audio_files()
                 logger.info("Audio files organized")
+
+                try:
+                    if audio_metadata:
+                        current_path = None
+                        if isinstance(audio_metadata, dict):
+                            current_path = audio_metadata.get('file_path')
+                        else:
+                            current_path = getattr(audio_metadata, 'file_path', None)
+
+                        if current_path:
+                            new_path = self.audio_manager.current_dir / Path(current_path).name
+                            if new_path.exists():
+                                self.digest_repo.update_audio(digest.id, {'mp3_path': str(new_path)})
+                                if isinstance(audio_metadata, dict):
+                                    audio_metadata['file_path'] = str(new_path)
+                                else:
+                                    audio_metadata.file_path = str(new_path)
+                except Exception as update_exc:
+                    logger.warning(f"Failed to update mp3_path after organizing files: {update_exc}")
             except Exception as e:
                 # Non-critical error
                 logger.warning(f"Audio file organization failed: {e}")
