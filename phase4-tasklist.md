@@ -92,6 +92,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Cache ElevenLabs voice metadata and pip deps; reuse synthesized placeholder assets.
    - Upload synthesized audio placeholder or JSON summary.
    - ✅ Completed 2025-09-18: workflow `phase-tts.yml` run ID `17842116998` (dry-run; seeds discovery→digest before TTS).
+   - ✅ **Architecture Change 2025-09-19**: Fixed hardcoded `DRY_RUN: "true"` to use `${{ inputs.dry_run }}` input parameter; added GitHub publisher integration for immediate MP3 uploads after creation.
 2. **Testing**
    - Add unit test to confirm dry-run returns structured response without calling ElevenLabs (`tests/test_phase_scripts.py`).
    - Validate pipeline respects WebConfig TTS settings on CI.
@@ -105,6 +106,7 @@ Purpose: hydrate GitHub with required secrets, confirm permissions, and validate
    - Cache pip deps and GitHub release metadata (e.g., `~/.cache/gh`) to avoid redundant API calls.
    - Ensure retention manager cleanup tasks run safely (skip destructive actions in dry-run).
    - ✅ Completed 2025-09-18: workflow `phase-publishing.yml` run ID `17843283291` (dry-run end-to-end).
+   - ✅ **Architecture Change 2025-09-19**: Simplified publishing phase to verify existing GitHub uploads (created by TTS phase) and commit RSS to main branch for automatic Vercel deployment.
 2. **Testing**
    - ✅ `tests/test_phase_scripts.py::test_publishing_runner_dry_run` ensures the runner exits successfully in dry-run mode with mocked repositories.
    - Manual verification that GitHub API fallback for CLI-less environments succeeds.

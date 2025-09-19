@@ -61,18 +61,25 @@
 
 ## Phase 4 — CI/CD **[✅ READY - Phase 2.5 STT Migration Complete]**
 
+- [x] **Incremental CI/CD Rollout**: Phase-by-phase workflow deployment completed via `phase4-tasklist.md`
+  - [x] Bootstrap workflow validates GitHub secrets and service connectivity
+  - [x] Discovery, Audio, Scoring, Digest workflows operational with dry-run validation
+  - [x] **TTS Workflow Architecture Change (2025-09-19)**: Fixed hardcoded DRY_RUN and added immediate GitHub Release uploads
+  - [x] **Publishing Workflow Simplification (2025-09-19)**: Refactored to verify existing uploads and commit RSS to main branch for automatic Vercel deployment
 - [ ] `ci.yml` (PRs):
   - Lint (Black/Flake8), type check (MyPy), unit/integration tests.
   - Optionally run Playwright UI tests against the Flask server with seeded DB.
-- [ ] `publish.yml` (schedule):
-  - Trigger daily on cron (UTC); concurrency: cancel in‑progress on new schedule.
-  - Steps: checkout; setup Python; set `DATABASE_URL` secret; run Alembic migrations; run `run_full_pipeline.py --log ...` or staged commands; upload logs and `pg_dump` as Artifacts with `retention-days: 7`; commit/push `public/` changes; create/update a daily GitHub Release with MP3 assets; delete Releases older than 7 days; post job summary with links to Release assets and RSS.
+- [x] **Phase-Based Workflows**: Individual workflows for each pipeline phase with proper artifact handling
+  - **TTS Phase**: Creates MP3 files and uploads directly to GitHub Releases, updates database with URLs
+  - **Publishing Phase**: Verifies existing GitHub uploads, generates RSS, commits to main branch for Vercel auto-deployment
+  - **Workflow Isolation**: Each workflow runs in fresh environment, eliminating file transfer dependencies
 - [ ] Configure Secrets in GitHub: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GH_TOKEN` (fine‑grained), any storage keys.
 - [ ] Add failure notifications (GitHub notifications, optional Slack/Email).
 
 Acceptance criteria
 - Manual "Dispatch" works; scheduled run produces RSS and artifacts.
 - Logs and DB available as downloadable artifacts; RSS diff is in commit/PR.
+- **Architecture Validation**: TTS phase uploads MP3s immediately, Publishing phase focuses on RSS generation and deployment.
 
 ## Phase 5 — Web UI Hosting + DNS
 

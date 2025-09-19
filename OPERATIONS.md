@@ -110,3 +110,15 @@ Add new entries below as additional Phase 4 subphases go live.
   - Publishing logs confirm GitHub/Vercel operations short-circuit under dry run while reporting planned actions.
 - Artifact download: `gh run download 17843283291 -n publishing-phase -D ./tmp/publishing-phase`
 - Notes: Web UI control hook-up remains; DRY_RUN env now governs all phase scripts.
+
+### 2025-09-19 — Phase Architecture Reorganization
+- **Issue Identified**: TTS phase was hardcoded to `DRY_RUN: "true"`, preventing actual MP3 file creation
+- **Root Cause Analysis**: Files were being created locally but lost when GitHub Actions workflow environments ended
+- **Architectural Decision**: Move MP3 upload responsibility from Publishing to TTS phase for better separation
+- **Implementation Changes**:
+  - Fixed TTS workflow to use `${{ inputs.dry_run }}` instead of hardcoded "true"
+  - Added GitHub publisher integration to TTS phase for immediate MP3 upload after creation
+  - Modified Publishing phase to focus on RSS generation and Vercel deployment via git commits
+  - Updated database persistence to store GitHub Release URLs after upload
+- **Benefits**: Eliminates file transfer between workflows, improves error recovery, enables parallel TTS execution
+- **Deployment Strategy**: Publishing now commits RSS to main branch, triggering automatic Vercel deployment
