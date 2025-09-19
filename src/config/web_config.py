@@ -17,6 +17,7 @@ AI_MODELS = {
     'openai': {
         'gpt-5': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5'},
         'gpt-5-mini': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5 Mini'},
+        'gpt-5-nano': {'max_output': 64000, 'max_input': 128000, 'display_name': 'GPT-5 Nano'},
         'gpt-4-turbo-preview': {'max_output': 4096, 'max_input': 128000, 'display_name': 'GPT-4 Turbo'},
         'gpt-4o': {'max_output': 16384, 'max_input': 128000, 'display_name': 'GPT-4o'},
         'gpt-4o-mini': {'max_output': 16384, 'max_input': 128000, 'display_name': 'GPT-4o Mini'},

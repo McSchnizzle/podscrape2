@@ -11,6 +11,10 @@ on:
         description: "Discovery lookback window"
         required: false
         default: ""
+      dry_run:
+        description: "Enable dry run mode (true/false)"
+        required: false
+        default: "false"
 
 concurrency:
   group: phase-tts-${{ github.ref }}
@@ -18,8 +22,12 @@ concurrency:
 
 jobs:
   tts:
-    name: Run TTS Phase (Dry Run)
+    name: Run TTS Phase
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write    # For git push operations
+      packages: write    # For GitHub releases
 
     env:
       PYTHON_VERSION: "3.11"
@@ -29,13 +37,18 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
-      DRY_RUN: "true"
+      DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Configure git for commits
+        run: |
+          git config --global user.name "Paul Brown"
+          git config --global user.email "brownpr0@gmail.com"
 
       - name: Ensure required secrets present
         run: |
@@ -164,7 +177,32 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Collect TTS logs
+      - name: Commit MP3 files to repository
+        if: success() && inputs.dry_run != 'true'
+        run: |
+          # Check if any MP3 files were generated
+          if [ -d "data/completed-tts" ] && [ "$(ls -A data/completed-tts/*.mp3 2>/dev/null)" ]; then
+            # Move files to current directory
+            mkdir -p data/completed-tts/current
+            mv data/completed-tts/*.mp3 data/completed-tts/current/ 2>/dev/null || true
+
+            # Add and commit the MP3 files
+            git add data/completed-tts/current/*.mp3
+            git commit -m "Add generated TTS MP3 files - $(date +'%Y-%m-%d %H:%M:%S')
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>" || echo "No changes to commit"
+
+            # Push using GITHUB_TOKEN
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
+          else
+            echo "No MP3 files generated to commit"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect TTS logs and MP3 files
         if: always()
         run: |
           mkdir -p artifacts/logs
@@ -173,6 +211,11 @@ jobs:
               cp $pattern artifacts/logs/
             fi
           done
+          # Copy generated MP3 files to artifacts
+          mkdir -p artifacts/mp3-files
+          if [ -d "data/completed-tts/current" ] && [ "$(ls -A data/completed-tts/current 2>/dev/null)" ]; then
+            cp data/completed-tts/current/*.mp3 artifacts/mp3-files/ 2>/dev/null || true
+          fi
 
       - name: Upload TTS artifacts
         if: always()
