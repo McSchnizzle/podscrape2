@@ -36,6 +36,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
       DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
