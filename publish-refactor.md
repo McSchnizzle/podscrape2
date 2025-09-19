@@ -121,6 +121,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>" || echo "No changes to commit"
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### 5. Verify Persistence in GitHub Actions (Simulator Workflow)
+**File**: `.github/workflows/tts-simulator-commit.yml`
+**Status**: ✅ COMPLETED
+**Action**: Added a dedicated simulator workflow that generates placeholder MP3s, publishes them to a GitHub release, commits the files to `data/completed-tts/current/`, and updates the RSS feeds so end-to-end behaviour can be validated without calling external TTS APIs.
+
 ## Phase 4: Consider Other Workflows (TODO)
 
 ### Workflows That May Need Write Permissions:
