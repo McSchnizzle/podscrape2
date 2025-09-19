@@ -166,6 +166,16 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
+      - name: Capture existing MP3 inventory
+        id: capture_mp3_baseline
+        run: |
+          set -euo pipefail
+          mkdir -p data/completed-tts/current
+          mkdir -p artifacts/tts-persist
+          BASELINE=artifacts/tts-persist/before.txt
+          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
+          echo "before_file=$(realpath "$BASELINE")" >> "$GITHUB_OUTPUT"
+
       - name: Run TTS dry run
         run: |
           source "${VENV_PATH}/bin/activate"
@@ -177,30 +187,64 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Commit MP3 files to repository
+      - name: Persist and publish TTS outputs
         if: success() && inputs.dry_run != 'true'
-        run: |
-          # Check if any MP3 files were generated
-          if [ -d "data/completed-tts" ] && [ "$(ls -A data/completed-tts/*.mp3 2>/dev/null)" ]; then
-            # Move files to current directory
-            mkdir -p data/completed-tts/current
-            mv data/completed-tts/*.mp3 data/completed-tts/current/ 2>/dev/null || true
-
-            # Add and commit the MP3 files
-            git add data/completed-tts/current/*.mp3
-            git commit -m "Add generated TTS MP3 files - $(date +'%Y-%m-%d %H:%M:%S')
-
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>" || echo "No changes to commit"
-
-            # Push using GITHUB_TOKEN
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
-          else
-            echo "No MP3 files generated to commit"
-          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPOSITORY: ${{ github.repository }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          BASELINE_FILE: ${{ steps.capture_mp3_baseline.outputs.before_file }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/tts-persist
+          mkdir -p data/completed-tts/current
+
+          if compgen -G "data/completed-tts/*.mp3" > /dev/null; then
+            mv data/completed-tts/*.mp3 data/completed-tts/current/ 2>/dev/null || true
+          fi
+
+          BASELINE=${BASELINE_FILE:-}
+          if [ -z "$BASELINE" ] || [ ! -f "$BASELINE" ]; then
+            BASELINE=$(mktemp)
+            touch "$BASELINE"
+          fi
+
+          AFTER=$(mktemp)
+          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$AFTER"
+
+          NEW_LIST=artifacts/tts-persist/new_files.txt
+          comm -13 "$BASELINE" "$AFTER" > "$NEW_LIST"
+
+          if [ ! -s "$NEW_LIST" ]; then
+            echo "No new MP3 files detected; skipping persistence."
+            exit 0
+          fi
+
+          mapfile -t FILES < "$NEW_LIST"
+          PRIMARY_FILE=${FILES[0]}
+          BASENAME=$(basename "$PRIMARY_FILE")
+          DATE_PART=$(echo "$BASENAME" | sed -E 's/.*_(\d{8})_\d{6}\.mp3/\1/')
+          if [ -z "$DATE_PART" ]; then
+            DATE_PART=$(date -u +%Y%m%d)
+          fi
+          RELEASE_DATE="${DATE_PART:0:4}-${DATE_PART:4:2}-${DATE_PART:6:2}"
+
+          python3 scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"
+          python3 scripts/run_publishing.py --verbose
+          cp data/rss/daily-digest.xml data/rss/test-feed.xml
+          cp public/daily-digest.xml public/test-feed.xml
+
+          git add data/completed-tts/current/*.mp3 \
+            data/rss/daily-digest.xml data/rss/test-feed.xml \
+            public/daily-digest.xml public/test-feed.xml
+          if git diff --cached --quiet; then
+            echo "No repository changes to commit after publishing."
+            exit 0
+          fi
+
+          COMMIT_MSG="Add TTS audio files - $(date -u +'%Y-%m-%d %H:%M:%S')"
+          git commit -m "$COMMIT_MSG"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_REPOSITORY}.git" "$TARGET_BRANCH"
 
       - name: Collect TTS logs and MP3 files
         if: always()
