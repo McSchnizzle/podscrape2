@@ -231,8 +231,8 @@ jobs:
           fi
           RELEASE_DATE="${DATE_PART:0:4}-${DATE_PART:4:2}-${DATE_PART:6:2}"
 
-          python3 scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"
-          python3 scripts/run_publishing.py --verbose
+          python scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"
+          python scripts/run_publishing.py --verbose
           cp data/rss/daily-digest.xml data/rss/test-feed.xml
           cp public/daily-digest.xml public/test-feed.xml
 
