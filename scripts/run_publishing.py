@@ -69,7 +69,8 @@ class PublishingPipelineRunner:
         
         # Initialize publishing components
         self.vercel_deployer = None
-        self._is_github_actions = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
+        gh_actions_val = os.getenv("GH_ACTIONS", os.getenv("GITHUB_ACTIONS", ""))
+        self._is_github_actions = gh_actions_val.lower() == "true"
         if not dry_run:
             self.github_publisher = create_github_publisher()
             

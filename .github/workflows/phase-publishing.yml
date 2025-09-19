@@ -40,6 +40,7 @@ jobs:
       DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
+      GH_ACTIONS: "true"
 
     steps:
       - name: Checkout repository
@@ -211,7 +212,7 @@ jobs:
           ORCHESTRATED_EXECUTION: "1"
 
       - name: Install Vercel CLI (live)
-        if: ${{ env.DRY_RUN == 'false' && env.GITHUB_ACTIONS != 'true' }}
+        if: ${{ env.DRY_RUN == 'false' && env.GH_ACTIONS != 'true' }}
         run: npm install -g vercel
 
       - name: Run publishing phase
