@@ -1,0 +1,177 @@
+name: TTS Simulator Commit
+
+on:
+  workflow_dispatch:
+    inputs:
+      topics:
+        description: "Topic names (comma or newline separated)"
+        required: false
+      timestamp:
+        description: "Optional timestamp override (UTC, YYYYmmdd_HHMMSS)"
+        required: false
+      target_branch:
+        description: "Branch to push simulated assets"
+        required: false
+        default: simulated-tts
+  pull_request:
+    paths:
+      - .github/workflows/tts-simulator-commit.yml
+      - scripts/simulate_tts_output.py
+      - scripts/update_rss_with_mp3.py
+      - data/rss/daily-digest.xml
+      - public/daily-digest.xml
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure git for commits
+        run: |
+          git config --global user.name "Paul Brown"
+          git config --global user.email "brownpr0@gmail.com"
+
+      - name: Ensure Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-dotenv requests PyGithub
+
+      - name: Generate placeholder MP3 files
+        id: generate
+        env:
+          INPUT_TOPICS: ${{ inputs.topics }}
+          INPUT_TIMESTAMP: ${{ inputs.timestamp }}
+        run: |
+          set -euo pipefail
+
+          TIMESTAMP=${INPUT_TIMESTAMP:-$(date -u +"%Y%m%d_%H%M%S")}
+          DATE_PART=${TIMESTAMP%%_*}
+          RELEASE_DATE=$(printf "%s-%s-%s" "${DATE_PART:0:4}" "${DATE_PART:4:2}" "${DATE_PART:6:2}")
+          PUBDATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          TOPIC_DATA=${INPUT_TOPICS:-Simulated Digest}
+          TOPIC_DATA=$(echo "$TOPIC_DATA" | tr ',' '\n')
+          mapfile -t TOPICS <<< "$TOPIC_DATA"
+          if [ ${#TOPICS[@]} -eq 0 ]; then
+            TOPICS+=("Simulated Digest")
+          fi
+
+          baseline=$(mktemp)
+          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$baseline" || true
+
+          python3 scripts/simulate_tts_output.py --timestamp "$TIMESTAMP" --topics "${TOPICS[@]}"
+
+          generated=$(mktemp)
+          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$generated"
+          NEW_LIST=artifacts/simulated-tts/new_files.txt
+          mkdir -p artifacts/simulated-tts
+          comm -13 "$baseline" "$generated" > "$NEW_LIST"
+          if [ ! -s "$NEW_LIST" ]; then
+            echo "No new MP3 files detected" >&2
+            exit 1
+          fi
+
+          PRIMARY_FILE=$(head -n1 "$NEW_LIST")
+          PRIMARY_BASENAME=$(basename "$PRIMARY_FILE")
+          PRIMARY_SIZE=$(stat -c %s "$PRIMARY_FILE")
+
+          TITLE_TOPIC=${TOPICS[0]}
+          EPISODE_TITLE="$TITLE_TOPIC — Simulated Digest ${RELEASE_DATE}"
+          EPISODE_DESC="Simulated audio placeholder for ${TITLE_TOPIC} generated on ${RELEASE_DATE}."
+          GUID="digest-${RELEASE_DATE}-sim-${PRIMARY_BASENAME%%.mp3}"
+
+          echo "primary_file=$PRIMARY_FILE" >> "$GITHUB_OUTPUT"
+          echo "primary_basename=$PRIMARY_BASENAME" >> "$GITHUB_OUTPUT"
+          echo "primary_size=$PRIMARY_SIZE" >> "$GITHUB_OUTPUT"
+          echo "release_date=$RELEASE_DATE" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$TIMESTAMP" >> "$GITHUB_OUTPUT"
+          echo "pubdate_iso=$PUBDATE" >> "$GITHUB_OUTPUT"
+          echo "episode_title=${EPISODE_TITLE}" >> "$GITHUB_OUTPUT"
+          echo "episode_description=${EPISODE_DESC}" >> "$GITHUB_OUTPUT"
+          echo "guid=$GUID" >> "$GITHUB_OUTPUT"
+          ABS_NEW_LIST=$(realpath "$NEW_LIST")
+          echo "new_files_file=$ABS_NEW_LIST" >> "$GITHUB_OUTPUT"
+
+      - name: Publish simulated release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < "${{ steps.generate.outputs.new_files_file }}"
+          python3 scripts/publish_release_assets.py --publish-date "${{ steps.generate.outputs.release_date }}" "${FILES[@]}"
+
+      - name: Fetch release metadata
+        id: release_meta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="daily-${{ steps.generate.outputs.release_date }}"
+          gh api repos/${{ github.repository }}/releases/tags/$TAG > artifacts/simulated-tts/release.json
+          asset_name="${{ steps.generate.outputs.primary_basename }}"
+          asset_json=$(jq --arg NAME "$asset_name" -c '.assets[] | select(.name == $NAME)' artifacts/simulated-tts/release.json)
+          if [ -z "$asset_json" ]; then
+            echo "Failed to locate asset $asset_name in release $TAG" >&2
+            exit 1
+          fi
+          asset_url=$(echo "$asset_json" | jq -r '.browser_download_url')
+          asset_size=$(echo "$asset_json" | jq -r '.size')
+          echo "asset_url=$asset_url" >> "$GITHUB_OUTPUT"
+          echo "asset_size=$asset_size" >> "$GITHUB_OUTPUT"
+
+      - name: Update RSS feeds with simulated episode
+        run: |
+          set -euo pipefail
+          python3 scripts/update_rss_with_mp3.py \
+            --title "${{ steps.generate.outputs.episode_title }}" \
+            --description "${{ steps.generate.outputs.episode_description }}" \
+            --audio-url "${{ steps.release_meta.outputs.asset_url }}" \
+            --file-size "${{ steps.release_meta.outputs.asset_size }}" \
+            --duration-seconds 1 \
+            --guid "${{ steps.generate.outputs.guid }}" \
+            --pubdate "${{ steps.generate.outputs.pubdate_iso }}"
+          cp data/rss/daily-digest.xml data/rss/test-feed.xml
+          cp public/daily-digest.xml public/test-feed.xml
+
+      - name: Commit simulated assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          BRANCH=${TARGET_BRANCH:-simulated-tts}
+          git checkout -B "$BRANCH"
+          git add data/completed-tts/current/*.mp3 \
+            data/rss/daily-digest.xml data/rss/test-feed.xml \
+            public/daily-digest.xml public/test-feed.xml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          COMMIT_MSG="Simulated TTS audio placeholder - ${{ steps.generate.outputs.timestamp }}"
+          git commit -m "$COMMIT_MSG"
+          if [ "$BRANCH" = "main" ]; then
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" "$BRANCH"
+          else
+            git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" "$BRANCH"
+          fi
+
+      - name: Upload simulation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulated-tts-commit-${{ github.run_id }}
+          path: artifacts/simulated-tts/
+          if-no-files-found: warn
