@@ -211,10 +211,6 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Install Vercel CLI (live)
-        if: ${{ env.DRY_RUN == 'false' && env.GH_ACTIONS != 'true' }}
-        run: npm install -g vercel
-
       - name: Run publishing phase
         run: |
           source "${VENV_PATH}/bin/activate"
