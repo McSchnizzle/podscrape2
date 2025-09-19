@@ -346,13 +346,18 @@ class PublishingPipelineRunner:
                 self.logger.error("Failed to generate RSS feed")
                 return False
             
-            # 4. Deploy to Vercel
-            if not self.deploy_to_vercel(rss_content):
-                self.logger.error("Failed to deploy to Vercel")
-                return False
-            
-            # 5. Cleanup old files (optional) - only when not running under orchestrator
-            if not self.dry_run and not os.getenv('ORCHESTRATED_EXECUTION'):
+            # 4. Deploy to Vercel (skip when running inside GitHub Actions runner)
+            if self.dry_run:
+                self.logger.info("DRY RUN: Would deploy to Vercel")
+            elif os.getenv("GITHUB_ACTIONS", "").lower() == "true":
+                self.logger.info("Skipping Vercel deploy inside GitHub Actions environment")
+            else:
+                if not self.deploy_to_vercel(rss_content):
+                    self.logger.error("Failed to deploy to Vercel")
+                    return False
+
+            # 5. Cleanup old files (optional) - only when not running under orchestrator or CI
+            if not self.dry_run and os.getenv("GITHUB_ACTIONS", "").lower() != "true" and not os.getenv('ORCHESTRATED_EXECUTION'):
                 try:
                     self.retention_manager.cleanup_all()
                     self.logger.info("✅ Cleanup completed")
@@ -367,7 +372,7 @@ class PublishingPipelineRunner:
             self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
             
             return True
-            
+
         except Exception as e:
             self.logger.error(f"❌ Publishing pipeline failed: {e}")
             return False

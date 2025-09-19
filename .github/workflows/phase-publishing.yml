@@ -11,6 +11,10 @@ on:
         description: "Discovery lookback window"
         required: false
         default: ""
+      seed_phases:
+        description: "Run discovery/audio/scoring/digest/TTS before publishing"
+        required: false
+        default: "true"
       dry_run:
         description: "Enable dry run mode (true/false)"
         required: false
@@ -33,7 +37,7 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
-      DRY_RUN: ${{ github.event.inputs.dry_run != '' && github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
+      DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
 
@@ -100,6 +104,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run discovery (seed data)
+        if: ${{ inputs.seed_phases != 'false' }}
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -124,6 +129,7 @@ jobs:
           ORCHESTRATED_EXECUTION: "1"
 
       - name: Run audio phase (seed transcripts table)
+        if: ${{ inputs.seed_phases != 'false' }}
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -145,6 +151,7 @@ jobs:
           ORCHESTRATED_EXECUTION: "1"
 
       - name: Run scoring phase (seed scoring table)
+        if: ${{ inputs.seed_phases != 'false' }}
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -166,6 +173,7 @@ jobs:
           ORCHESTRATED_EXECUTION: "1"
 
       - name: Run digest phase
+        if: ${{ inputs.seed_phases != 'false' }}
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -184,6 +192,7 @@ jobs:
           ORCHESTRATED_EXECUTION: "1"
 
       - name: Run TTS phase
+        if: ${{ inputs.seed_phases != 'false' }}
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -200,6 +209,10 @@ jobs:
           eval "$TTS_CMD < artifacts/digest-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
+
+      - name: Install Vercel CLI (live)
+        if: ${{ env.DRY_RUN == 'false' && env.GITHUB_ACTIONS != 'true' }}
+        run: npm install -g vercel
 
       - name: Run publishing phase
         run: |
