@@ -1,0 +1,73 @@
+"""Utility to simulate TTS output by writing placeholder MP3 files.
+
+This avoids external ElevenLabs API calls while letting CI exercises
+verify file persistence and artifact uploads.
+"""
+
+import argparse
+import base64
+import datetime as dt
+import logging
+from pathlib import Path
+
+# Tiny 1-second sine wave MP3 generated offline to avoid runtime encoding.
+# Encoded as base64 so we can write it without bundling binary in git history.
+_SAMPLE_MP3_BASE64 = """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
+"""
+
+logger = logging.getLogger("simulate_tts")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+
+
+def _sanitize_stem(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value)
+
+
+def _write_mp3(output_dir: Path, stem: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    target = output_dir / f"{stem}.mp3"
+    mp3_bytes = base64.b64decode(_SAMPLE_MP3_BASE64)
+    target.write_bytes(mp3_bytes)
+    logger.info("Wrote placeholder MP3: %s (%d bytes)", target, len(mp3_bytes))
+    return target
+
+
+def simulate(topics: list[str], output_dir: Path, timestamp: str | None) -> list[Path]:
+    created = []
+    ts = timestamp or dt.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    for idx, topic in enumerate(topics, start=1):
+        stem = f"{_sanitize_stem(topic)}_{ts}_{idx:02d}"
+        created.append(_write_mp3(output_dir, stem))
+    return created
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Simulate TTS MP3 generation")
+    parser.add_argument(
+        "--topics",
+        nargs="*",
+        default=["Simulated Digest"],
+        help="Topic names to encode into the MP3 filenames",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="data/completed-tts/current",
+        type=Path,
+        help="Directory where placeholder MP3s will be written",
+    )
+    parser.add_argument(
+        "--timestamp",
+        default=None,
+        help="Optional timestamp to embed in filenames (UTC YYYYmmdd_HHMMSS)",
+    )
+
+    args = parser.parse_args()
+    paths = simulate(args.topics, args.output_dir, args.timestamp)
+
+    logger.info("Generated %d placeholder MP3 file(s)", len(paths))
+    for path in paths:
+        logger.info(" -> %s", path)
+
+
+if __name__ == "__main__":
+    main()
