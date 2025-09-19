@@ -11,6 +11,10 @@ on:
         description: "Discovery lookback window"
         required: false
         default: ""
+      dry_run:
+        description: "Enable dry run mode (true/false)"
+        required: false
+        default: "true"
 
 concurrency:
   group: phase-publishing-${{ github.ref }}
@@ -18,7 +22,7 @@ concurrency:
 
 jobs:
   publishing:
-    name: Run Publishing Phase (Dry Run)
+    name: Run Publishing Phase
     runs-on: ubuntu-latest
 
     env:
@@ -29,7 +33,7 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
-      DRY_RUN: "true"
+      DRY_RUN: ${{ github.event.inputs.dry_run != '' && github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
 
@@ -99,6 +103,11 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
           DISCOVERY_CMD="python scripts/run_discovery.py --verbose --output artifacts/discovery-output.json"
           if [ -n "$LIMIT" ]; then
             DISCOVERY_CMD="$DISCOVERY_CMD --limit \"$LIMIT\""
@@ -106,66 +115,107 @@ jobs:
           if [ -n "$DAYS_BACK" ]; then
             DISCOVERY_CMD="$DISCOVERY_CMD --days-back \"$DAYS_BACK\""
           fi
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            DISCOVERY_CMD="$DISCOVERY_CMD $DRY_RUN_FLAG"
+          fi
           echo "Running: $DISCOVERY_CMD"
           eval "$DISCOVERY_CMD"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run audio dry run (seed transcripts table)
+      - name: Run audio phase (seed transcripts table)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
           AUDIO_CMD="python scripts/run_audio.py --verbose --output artifacts/audio-output.json"
           if [ -n "$LIMIT" ]; then
             AUDIO_CMD="$AUDIO_CMD --limit \"$LIMIT\""
+          fi
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            AUDIO_CMD="$AUDIO_CMD $DRY_RUN_FLAG"
           fi
           echo "Running: $AUDIO_CMD"
           eval "$AUDIO_CMD < artifacts/discovery-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run scoring dry run (seed scoring table)
+      - name: Run scoring phase (seed scoring table)
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
           SCORING_CMD="python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json"
           if [ -n "$LIMIT" ]; then
             SCORING_CMD="$SCORING_CMD --limit \"$LIMIT\""
+          fi
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            SCORING_CMD="$SCORING_CMD $DRY_RUN_FLAG"
           fi
           echo "Running: $SCORING_CMD"
           eval "$SCORING_CMD < artifacts/audio-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run digest dry run
+      - name: Run digest phase
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          python scripts/run_digest.py \
-            --verbose \
-            --output artifacts/digest-output.json
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          DIGEST_CMD="python scripts/run_digest.py --verbose --output artifacts/digest-output.json"
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            DIGEST_CMD="$DIGEST_CMD $DRY_RUN_FLAG"
+          fi
+          echo "Running: $DIGEST_CMD"
+          eval "$DIGEST_CMD"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run TTS dry run
+      - name: Run TTS phase
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          python scripts/run_tts.py \
-            --verbose \
-            --output artifacts/tts-output.json \
-            < artifacts/digest-output.json
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          TTS_CMD="python scripts/run_tts.py --verbose --output artifacts/tts-output.json"
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            TTS_CMD="$TTS_CMD $DRY_RUN_FLAG"
+          fi
+          echo "Running: $TTS_CMD"
+          eval "$TTS_CMD < artifacts/digest-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run publishing dry run
+      - name: Run publishing phase
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
-          python scripts/run_publishing.py \
-            --verbose \
-            --days-back "30" \
-            > artifacts/publishing-output.json
+          DRY_RUN_FLAG=""
+          DRY_VALUE="${DRY_RUN,,}"
+          if [[ "$DRY_VALUE" == "true" || "$DRY_VALUE" == "1" || "$DRY_VALUE" == "yes" || "$DRY_VALUE" == "on" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          PUBLISHING_CMD="python scripts/run_publishing.py --verbose --days-back \"30\""
+          if [ -n "$DRY_RUN_FLAG" ]; then
+            PUBLISHING_CMD="$PUBLISHING_CMD $DRY_RUN_FLAG"
+          fi
+          echo "Running: $PUBLISHING_CMD"
+          eval "$PUBLISHING_CMD > artifacts/publishing-output.json"
         env:
           ORCHESTRATED_EXECUTION: "1"
 
