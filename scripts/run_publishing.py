@@ -68,6 +68,8 @@ class PublishingPipelineRunner:
         self.digest_repo = get_digest_repo()
         
         # Initialize publishing components
+        self.vercel_deployer = None
+        self._is_github_actions = os.getenv("GITHUB_ACTIONS", "").lower() == "true"
         if not dry_run:
             self.github_publisher = create_github_publisher()
             
@@ -85,7 +87,10 @@ class PublishingPipelineRunner:
             self.rss_generator = create_rss_generator(podcast_metadata)
             
             self.retention_manager = create_retention_manager()
-            self.vercel_deployer = create_vercel_deployer()
+            if not self._is_github_actions:
+                self.vercel_deployer = create_vercel_deployer()
+            else:
+                self.logger.info("Skipping Vercel deployer initialization in GitHub Actions environment")
         
         self.logger.info("Publishing pipeline initialized successfully")
     
@@ -291,6 +296,10 @@ class PublishingPipelineRunner:
                 self.logger.info("DRY RUN: Would deploy to Vercel")
                 return True
             
+            if self.vercel_deployer is None:
+                self.logger.info("Skipping Vercel deploy (deployer not initialized)")
+                return True
+
             # Deploy using Vercel CLI
             result = self.vercel_deployer.deploy_rss_feed(rss_content, production=True)
             
@@ -349,7 +358,7 @@ class PublishingPipelineRunner:
             # 4. Deploy to Vercel (skip when running inside GitHub Actions runner)
             if self.dry_run:
                 self.logger.info("DRY RUN: Would deploy to Vercel")
-            elif os.getenv("GITHUB_ACTIONS", "").lower() == "true":
+            elif self._is_github_actions:
                 self.logger.info("Skipping Vercel deploy inside GitHub Actions environment")
             else:
                 if not self.deploy_to_vercel(rss_content):
@@ -357,7 +366,7 @@ class PublishingPipelineRunner:
                     return False
 
             # 5. Cleanup old files (optional) - only when not running under orchestrator or CI
-            if not self.dry_run and os.getenv("GITHUB_ACTIONS", "").lower() != "true" and not os.getenv('ORCHESTRATED_EXECUTION'):
+            if not self.dry_run and not self._is_github_actions and not os.getenv('ORCHESTRATED_EXECUTION'):
                 try:
                     self.retention_manager.cleanup_all()
                     self.logger.info("✅ Cleanup completed")
