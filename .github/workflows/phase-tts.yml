@@ -170,6 +170,7 @@ jobs:
         id: capture_mp3_baseline
         run: |
           set -euo pipefail
+          TARGET_BRANCH=${TARGET_BRANCH:-main}
           mkdir -p data/completed-tts/current
           mkdir -p artifacts/tts-persist
           BASELINE=artifacts/tts-persist/before.txt
