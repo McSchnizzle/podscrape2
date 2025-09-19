@@ -5,7 +5,7 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Fri, 19 Sep 2025 12:15:34 +0000</lastBuildDate>
+    <lastBuildDate>Fri, 19 Sep 2025 15:05:04 +0000</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <itunes:title>Daily AI &amp; Tech Digest</itunes:title>
     <itunes:description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</itunes:description>
@@ -20,7 +20,19 @@
       <itunes:email>brownpr0@gmail.com</itunes:email>
     </itunes:owner>
     <copyright>© 2025 Paul Brown</copyright>
+  
     <item>
+      <title>Simulated Digest — Simulated Digest 2025-09-19</title>
+      <description>Simulated audio placeholder for Simulated Digest generated on 2025-09-19.</description>
+      <pubDate>Fri, 19 Sep 2025 15:05:04 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-19-sim-Simulated_Digest_20250919_150504_01</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/Simulated_Digest_20250919_150504_01.mp3" length="4830" type="audio/mpeg"/>
+      <itunes:title>Simulated Digest — Simulated Digest 2025-09-19</itunes:title>
+      <itunes:description>Simulated audio placeholder for Simulated Digest generated on 2025-09-19.</itunes:description>
+      <itunes:duration>00:01</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+  <item>
       <title>AI Daily Digest — Sep 17, 2025: GPT‑5 Codex &amp; Viral AI Trends</title>
       <description>Quick briefing on GPT‑5 Codex’s agentic coding, Google Gemini’s viral surge and 11 Labs’ human‑in‑the‑loop production — plus practical takeaways for developers and leaders.</description>
       <pubDate>Wed, 17 Sep 2025 10:42:00 +0000</pubDate>
