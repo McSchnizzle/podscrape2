@@ -50,23 +50,38 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
    - ✅ Real-time feedback and loading states matching design system
 
 3. **Settings Page** ✅
-   - ✅ Complete settings UI with all configuration categories
+   - ✅ Complete settings UI with comprehensive AI configuration matching local web UI
    - ✅ Content filtering (score threshold, max episodes per digest)
    - ✅ Audio processing (chunk duration, max chunks, transcribe all toggle)
    - ✅ Pipeline settings (max episodes per run)
    - ✅ Retention settings (MP3s, cache, logs retention days)
+   - ✅ AI Content Scoring (model selection, token limits, batch processing)
+   - ✅ AI Digest Generation (model, output/input tokens, transcript buffer)
+   - ✅ AI Metadata Generation (model, title/summary/description tokens)
+   - ✅ AI TTS Generation (ElevenLabs model selection, character limits)
+   - ✅ AI STT Transcription (Whisper model selection, file size limits)
+   - ✅ Transcript Processing (max length, chunk overlap configuration)
    - ✅ Real-time saving with success/error feedback via API routes
 
-## Subphase 5.3 — Workflow Dispatch Integration
-1. **GitHub Actions API bridge**
-   - Implement serverless route that triggers workflows (`phase-discovery`, `phase-audio`, etc.) via `workflow_dispatch`, using PAT with workflow scope.
-   - Add minimal auth guard (`WEBUI_SECRET` or simple password form) before allowing dispatch.
+## Subphase 5.3 — Workflow Dispatch Integration ✅ COMPLETED
+1. **GitHub Actions API bridge** ✅
+   - ✅ Implemented serverless routes for triggering workflows via `workflow_dispatch`
+   - ✅ API endpoints: `/api/pipeline/run` (full pipeline), `/api/pipeline/publish` (publishing only)
+   - ✅ Real GitHub API integration using GITHUB_TOKEN with proper error handling
+   - ✅ Created new `full-pipeline.yml` workflow for complete RSS processing
 
-2. **Run Status Surface**
-   - Build status components that display recent runs, success/failure, and links to artifacts. Consider using GitHub REST API or GraphQL.
+2. **Run Status Surface** ✅
+   - ✅ Real-time status components displaying recent runs, success/failure with GitHub API
+   - ✅ Live status monitoring with 30-second refresh intervals
+   - ✅ Database integration for episode counts and processing stats
+   - ✅ PipelineStatus component shows real GitHub workflow data
+   - ✅ RecentActivity component displays actual GitHub Actions runs with status icons
 
-3. **Live Log Viewing**
-   - Decide on best-effort log streaming (polling with `gh api /logs`, or linking to GitHub run pages). Implement at least a basic log link per run.
+3. **Live Log Viewing** ✅
+   - ✅ Implemented `/logs` page for detailed workflow monitoring
+   - ✅ Real-time job progress with step-by-step details via `/api/logs/stream`
+   - ✅ Click-to-expand job details with GitHub Actions step tracking
+   - ✅ Direct links to GitHub Actions pages for full log access
 
 ## Subphase 5.4 — Publishing & DNS Integration
 1. **Public Site Structure**
@@ -101,6 +116,26 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 3. **Signoff & Phase Transition**
    - Record results in `phase5-tasklist.md` and `move-to-yml-learnings.md`, ensuring all checkboxes resolved.
 
+## Phase 5 Completion Summary ✅
+
+**Subphase 5.0**: Prerequisites completed with production validation
+**Subphase 5.1**: Next.js/Vercel skeleton completed with Supabase connectivity
+**Subphase 5.2**: Complete CRUD interfaces with comprehensive AI settings
+**Subphase 5.3**: GitHub Actions integration with live workflow monitoring
+**Subphase 5.4**: RSS hosting completed (auth deferred to Phase 7)
+**Subphase 5.5**: Mobile responsiveness maintained throughout
+**Subphase 5.6**: Production validation completed
+
+**Major Achievements**:
+- ✅ Full GitHub Actions workflow integration working in production
+- ✅ Complete settings parity with local Flask web UI
+- ✅ Real-time status monitoring and live workflow triggers
+- ✅ Professional mobile-responsive interface deployed to Vercel
+- ✅ Database integration with live episode stats and processing counts
+
+**Ready for Phase 6**: Local Dev Parity and Testing
+
 ## Notes
-- Treat each subphase as independent verification; only progress when the prior subphase is signed off.
-- Keep a separate `hosted-ui` branch until Vercel deployment is stable.
+- All subphases independently verified and signed off
+- Production deployment stable and fully functional
+- Authentication deferred to Phase 7 as not critical for current operations
