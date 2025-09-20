@@ -265,9 +265,9 @@ Transcript:
             if hasattr(response, 'usage'):
                 usage = response.usage
                 logger.info(f"OpenAI API usage - Model: {self.ai_model}, "
-                           f"Input tokens: {usage.get('input_tokens', 'unknown')}, "
-                           f"Output tokens: {usage.get('output_tokens', 'unknown')}, "
-                           f"Total tokens: {usage.get('total_tokens', 'unknown')}")
+                           f"Input tokens: {getattr(usage, 'input_tokens', 'unknown')}, "
+                           f"Output tokens: {getattr(usage, 'output_tokens', 'unknown')}, "
+                           f"Total tokens: {getattr(usage, 'total_tokens', 'unknown')}")
             else:
                 logger.info(f"OpenAI API call completed - Model: {self.ai_model}, "
                            f"Max output tokens: {self.max_output_tokens}")
@@ -547,9 +547,9 @@ Transcript: {transcript['transcript']}
             if hasattr(response, 'usage'):
                 usage = response.usage
                 logger.info(f"OpenAI API usage - Model: {self.ai_model}, "
-                           f"Input tokens: {usage.get('input_tokens', 'unknown')}, "
-                           f"Output tokens: {usage.get('output_tokens', 'unknown')}, "
-                           f"Total tokens: {usage.get('total_tokens', 'unknown')}")
+                           f"Input tokens: {getattr(usage, 'input_tokens', 'unknown')}, "
+                           f"Output tokens: {getattr(usage, 'output_tokens', 'unknown')}, "
+                           f"Total tokens: {getattr(usage, 'total_tokens', 'unknown')}")
             else:
                 logger.info(f"OpenAI API call completed - Model: {self.ai_model}, "
                            f"Max output tokens: {min(self.max_output_tokens, 2000)}")
