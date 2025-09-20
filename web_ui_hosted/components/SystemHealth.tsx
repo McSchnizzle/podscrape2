@@ -1,4 +1,4 @@
-import { DatabaseClient } from '@/lib/supabase'
+import { DatabaseClient } from '@/utils/supabase'
 
 async function getSystemHealth() {
   const db = new DatabaseClient()
