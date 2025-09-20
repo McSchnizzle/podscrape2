@@ -5,7 +5,7 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Sat, 20 Sep 2025 14:14:13 +0000</lastBuildDate>
+    <lastBuildDate>Sat, 20 Sep 2025 18:34:01 +0000</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <itunes:title>Daily AI &amp; Tech Digest</itunes:title>
     <itunes:description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</itunes:description>
@@ -21,17 +21,6 @@
     </itunes:owner>
     <copyright>© 2025 Paul Brown</copyright>
     <item>
-      <title>AI Beats Top Coders — AI Daily Digest Sep 20, 2025</title>
-      <description> crisp briefing on safety breakthroughs, Anthropic Claude post-mortem, US‑China chip split, inference silicon bets, and Zoom/Meta AI interfaces.</description>
-      <pubDate>Sat, 20 Sep 2025 10:18:00 +0000</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_141307</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_141307.mp3" length="13020309" type="audio/mpeg"/>
-      <itunes:title>AI Beats Top Coders — AI Daily Digest Sep 20, 2025</itunes:title>
-      <itunes:description> crisp briefing on safety breakthroughs, Anthropic Claude post-mortem, US‑China chip split, inference silicon bets, and Zoom/Meta AI interfaces.</itunes:description>
-      <itunes:duration>16:52</itunes:duration>
-      <itunes:episodeType>full</itunes:episodeType>
-    </item>
-    <item>
       <title>AI &amp; Tech Daily Digest — Sep 20, 2025</title>
       <description>Bite-sized briefing: regulatory push, broadcast consolidation, and the AI data-rundown shaping news, platforms, and policy. Fast, sharp take for busy pros.</description>
       <pubDate>Sat, 20 Sep 2025 10:43:00 +0000</pubDate>
@@ -40,6 +29,17 @@
       <itunes:title>AI &amp; Tech Daily Digest — Sep 20, 2025</itunes:title>
       <itunes:description>Bite-sized briefing: regulatory push, broadcast consolidation, and the AI data-rundown shaping news, platforms, and policy. Fast, sharp take for busy pros.</itunes:description>
       <itunes:duration>12:55</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+    <item>
+      <title>AI Beats Top Coders — AI Daily Digest Sep 20, 2025</title>
+      <description> crisp briefing on safety breakthroughs, Anthropic Claude post-mortem, US‑China chip split, inference silicon bets, and Zoom/Meta AI interfaces.</description>
+      <pubDate>Sat, 20 Sep 2025 10:18:00 +0000</pubDate>
+      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_141307</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_141307.mp3" length="13020309" type="audio/mpeg"/>
+      <itunes:title>AI Beats Top Coders — AI Daily Digest Sep 20, 2025</itunes:title>
+      <itunes:description> crisp briefing on safety breakthroughs, Anthropic Claude post-mortem, US‑China chip split, inference silicon bets, and Zoom/Meta AI interfaces.</itunes:description>
+      <itunes:duration>16:52</itunes:duration>
       <itunes:episodeType>full</itunes:episodeType>
     </item>
     <item>
