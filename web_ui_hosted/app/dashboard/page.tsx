@@ -15,7 +15,7 @@ export default function DashboardPage() {
       const response = await fetch('/api/pipeline/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ daysBack: "7" })
+        body: JSON.stringify({ daysBack: "7", phaseLimit: "publishing" })
       })
 
       if (response.ok) {

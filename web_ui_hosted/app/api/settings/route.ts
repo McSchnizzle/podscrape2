@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const db = new DatabaseClient()
 
-    // Get all web settings from database using the existing method
+    // Get all web settings from database
     const data = await db.getSettings()
 
     // Group settings by category
@@ -18,11 +18,18 @@ export async function GET() {
         }
 
         // Parse value based on data type (if available)
-        let parsedValue = row.value
-        // For now, just store as strings since we don't have data_type in the interface
-        // TODO: Add data_type to WebSetting interface and migration
+        let parsedValue: any = row.setting_value
+        if (row.value_type) {
+          if (row.value_type === 'bool' || row.value_type === 'boolean') {
+            parsedValue = row.setting_value === 'true' || row.setting_value === 'True'
+          } else if (row.value_type === 'int' || row.value_type === 'integer') {
+            parsedValue = parseInt(row.setting_value, 10)
+          } else if (row.value_type === 'float' || row.value_type === 'number') {
+            parsedValue = parseFloat(row.setting_value)
+          }
+        }
 
-        settings[row.category][row.key] = parsedValue
+        settings[row.category][row.setting_key] = parsedValue
       }
     }
 

@@ -93,17 +93,27 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 3. **Minimal Auth/Session Hardening**
    - Add basic auth (password or GitHub OAuth) to admin routes; protect secrets. Document in `OPERATIONS.md`.
 
-## Subphase 5.5 — Mobile Responsiveness & Final Polish
-1. **Mobile Responsiveness**
-   - Ensure all pages work properly on mobile devices (phone/tablet)
-   - Responsive tables, modals, and navigation
-   - Touch-friendly buttons and form controls
-   - Proper viewport scaling and text sizing
+## Subphase 5.5 — Complete Feature Parity Implementation ⚠️ IN PROGRESS
+1. **Critical Functionality Fixes** ⚠️
+   - ✅ Fix dashboard pipeline triggering (was stopping at discovery phase)
+   - ❌ **Settings page database loading**: Values don't load from database on page load (only saves work)
+   - ❌ **Feeds page missing data**: Latest episode information not displayed for feeds
 
-2. **Feature Parity Validation**
-   - All Flask UI features implemented in hosted version
-   - Table vs card layout decisions documented
-   - Missing pages implemented (Topics, Episodes, Script Lab, Publishing)
+2. **Missing Pages Implementation** ❌
+   **Local web UI has 8 pages total. Hosted UI missing 5 pages:**
+   - ✅ Dashboard (implemented)
+   - ✅ Feeds (implemented but incomplete - missing latest episode data)
+   - ❌ **Topics page**: Topic management with voice ID configuration
+   - ❌ **Script Lab page**: Script generation testing and preview
+   - ❌ **Episodes page**: Episode log with status management and manual status changes
+   - ❌ **Publishing page**: Digest publishing history and RSS management
+   - ❌ **Maintenance page**: System maintenance and cleanup operations
+   - ✅ Settings (implemented but incomplete - values don't load from database)
+
+3. **Mobile Responsiveness**
+   - ✅ Responsive design maintained for existing pages
+   - ❌ Ensure new pages work properly on mobile devices (phone/tablet)
+   - ❌ Touch-friendly buttons and form controls for new pages
 
 ## Subphase 5.6 — Final Validation & Handover
 1. **Regression Tests**
@@ -116,26 +126,33 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 3. **Signoff & Phase Transition**
    - Record results in `phase5-tasklist.md` and `move-to-yml-learnings.md`, ensuring all checkboxes resolved.
 
-## Phase 5 Completion Summary ✅
+## Phase 5 Status Summary ⚠️ INCOMPLETE
 
-**Subphase 5.0**: Prerequisites completed with production validation
-**Subphase 5.1**: Next.js/Vercel skeleton completed with Supabase connectivity
-**Subphase 5.2**: Complete CRUD interfaces with comprehensive AI settings
-**Subphase 5.3**: GitHub Actions integration with live workflow monitoring
-**Subphase 5.4**: RSS hosting completed (auth deferred to Phase 7)
-**Subphase 5.5**: Mobile responsiveness maintained throughout
-**Subphase 5.6**: Production validation completed
+**Subphase 5.0**: ✅ Prerequisites completed with production validation
+**Subphase 5.1**: ✅ Next.js/Vercel skeleton completed with Supabase connectivity
+**Subphase 5.2**: ⚠️ Partial CRUD interfaces (feeds incomplete, 5 pages missing)
+**Subphase 5.3**: ✅ GitHub Actions integration with live workflow monitoring
+**Subphase 5.4**: ✅ RSS hosting completed (auth deferred to Phase 7)
+**Subphase 5.5**: ⚠️ IN PROGRESS - Missing 5 critical pages and functionality fixes
+**Subphase 5.6**: ❌ BLOCKED - Cannot validate until 5.5 complete
 
-**Major Achievements**:
-- ✅ Full GitHub Actions workflow integration working in production
-- ✅ Complete settings parity with local Flask web UI
+**Current Issues Blocking Completion**:
+- ❌ **Settings page**: Values don't load from database (only saves work)
+- ❌ **Feeds page**: Missing latest episode information display
+- ❌ **Missing 5 pages**: Topics, Script Lab, Episodes, Publishing, Maintenance pages not implemented
+- ❌ **Feature parity**: Hosted UI has only 3/8 pages from local Flask UI
+
+**Achievements So Far**:
+- ✅ GitHub Actions workflow integration working in production
 - ✅ Real-time status monitoring and live workflow triggers
 - ✅ Professional mobile-responsive interface deployed to Vercel
 - ✅ Database integration with live episode stats and processing counts
 
-**Ready for Phase 6**: Local Dev Parity and Testing
+**NOT Ready for Phase 6**: Phase 5 feature parity must be completed first
 
 ## Notes
-- All subphases independently verified and signed off
-- Production deployment stable and fully functional
+- Subphases 5.0-5.4 completed and verified
+- Subphase 5.5 is IN PROGRESS with significant missing functionality identified
+- Production deployment stable but incomplete feature set
 - Authentication deferred to Phase 7 as not critical for current operations
+- **Critical**: Must complete all 8 pages from local Flask UI before claiming Phase 5 completion

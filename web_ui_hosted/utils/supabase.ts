@@ -56,8 +56,9 @@ export interface Digest {
 export interface WebSetting {
   id: number
   category: string
-  key: string
-  value: string
+  setting_key: string
+  setting_value: string
+  value_type?: string
   created_at: string
   updated_at: string
 }
@@ -144,13 +145,14 @@ export class DatabaseClient {
     return data as WebSetting[]
   }
 
+
   async updateSetting(category: string, key: string, value: string) {
     const { data, error } = await supabase
       .from('web_settings')
       .upsert({
         category,
-        key,
-        value,
+        setting_key: key,
+        setting_value: value,
         updated_at: new Date().toISOString()
       })
       .select()
