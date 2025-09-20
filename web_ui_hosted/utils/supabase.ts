@@ -39,6 +39,8 @@ export interface Episode {
   status: 'discovered' | 'transcribed' | 'scored' | 'digested' | 'published' | 'not_relevant' | 'failed'
   feed_id: number
   published_date?: string
+  scored_at?: string
+  scores?: Record<string, number>
   created_at: string
   updated_at: string
 }
@@ -49,6 +51,8 @@ export interface Digest {
   status: 'generated' | 'audio_generated' | 'published' | 'failed'
   script_content?: string
   mp3_path?: string
+  episode_ids?: number[]
+  digest_date?: string
   created_at: string
   updated_at: string
 }
@@ -138,16 +142,6 @@ export class DatabaseClient {
     return data
   }
 
-  async getRecentDigests(limit: number = 5) {
-    const { data, error } = await supabase
-      .from('digests')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit)
-
-    if (error) throw error
-    return data as Digest[]
-  }
 
   async getSettings() {
     const { data, error } = await supabase
@@ -199,6 +193,26 @@ export class DatabaseClient {
 
     if (updateError) throw updateError
     return updateData?.[0] as WebSetting
+  }
+
+  async getSetting(settingKey: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('web_settings')
+      .select('setting_value')
+      .eq('setting_key', settingKey)
+      .single()
+
+    if (error || !data) return null
+    return data.setting_value
+  }
+
+  async setSetting(settingKey: string, value: string): Promise<void> {
+    // For setSetting, we'll treat category as 'general' if not specified in key
+    const [category, key] = settingKey.includes('.')
+      ? settingKey.split('.', 2)
+      : ['general', settingKey]
+
+    await this.updateSetting(category, key, value)
   }
 
   // Feed CRUD operations
@@ -302,6 +316,99 @@ export class DatabaseClient {
         totalEpisodes: 0,
         lastSuccessfulRun: null
       }
+    }
+  }
+
+  // Episode operations
+  async getEpisodes(filters: {
+    q?: string
+    status?: string
+    sortBy?: string
+    sortDir?: string
+    limit?: number
+  } = {}) {
+    try {
+      const {
+        q = '',
+        status = '',
+        sortBy = 'scored_at',
+        sortDir = 'desc',
+        limit = 100
+      } = filters
+
+      let query = supabase
+        .from('episodes')
+        .select(`
+          *,
+          feeds:feed_id (
+            title
+          )
+        `)
+        .order(sortBy, { ascending: sortDir === 'asc' })
+        .limit(limit)
+
+      // Apply status filter
+      if (status) {
+        query = query.eq('status', status)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      let episodes = data || []
+
+      // Apply text search on the frontend for simplicity
+      if (q) {
+        const searchTerm = q.toLowerCase()
+        episodes = episodes.filter(ep =>
+          ep.title?.toLowerCase().includes(searchTerm) ||
+          ep.feeds?.title?.toLowerCase().includes(searchTerm)
+        )
+      }
+
+      return episodes
+    } catch (error) {
+      console.error('Failed to get episodes:', error)
+      return []
+    }
+  }
+
+  async getRecentDigests(days: number = 14) {
+    try {
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - days)
+
+      const { data, error } = await supabase
+        .from('digests')
+        .select('*')
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get recent digests:', error)
+      return []
+    }
+  }
+
+  async updateEpisodeStatus(id: number, status: string) {
+    try {
+      const { data, error } = await supabase
+        .from('episodes')
+        .update({
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+
+      if (error) throw error
+      return data?.[0] as Episode
+    } catch (error) {
+      console.error('Failed to update episode status:', error)
+      throw error
     }
   }
 }

@@ -12,13 +12,14 @@ export async function GET() {
       )
     }
 
-    // Get workflow runs
+    // Get workflow runs with cache-busting
     const response = await fetch(
-      `https://api.github.com/repos/${githubRepo}/actions/runs?per_page=20`,
+      `https://api.github.com/repos/${githubRepo}/actions/runs?per_page=20&_=${Date.now()}`,
       {
         headers: {
           'Authorization': `Bearer ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json',
+          'Cache-Control': 'no-cache',
         }
       }
     )

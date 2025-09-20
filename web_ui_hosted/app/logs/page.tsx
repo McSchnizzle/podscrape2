@@ -40,6 +40,11 @@ export default function LogsPage() {
 
   useEffect(() => {
     fetchWorkflows()
+
+    // Auto-refresh every 10 seconds to show new runs
+    const interval = setInterval(fetchWorkflows, 10000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const fetchWorkflows = async () => {
@@ -123,7 +128,16 @@ export default function LogsPage() {
 
       {/* Workflow Runs List */}
       <div className="card">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Workflow Runs</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Recent Workflow Runs</h3>
+          <button
+            onClick={fetchWorkflows}
+            disabled={loading}
+            className="px-3 py-2 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
 
         <div className="space-y-3">
           {workflows.length > 0 ? (
