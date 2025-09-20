@@ -336,15 +336,11 @@ export class DatabaseClient {
         limit = 100
       } = filters
 
+      // First try simple query without join to debug
       let query = supabase
         .from('episodes')
-        .select(`
-          *,
-          feeds!feed_id (
-            title
-          )
-        `)
-        .order(sortBy, { ascending: sortDir === 'asc' })
+        .select('*')
+        .order('published_date', { ascending: false })
         .limit(limit)
 
       // Apply status filter
@@ -362,8 +358,7 @@ export class DatabaseClient {
       if (q) {
         const searchTerm = q.toLowerCase()
         episodes = episodes.filter(ep =>
-          ep.title?.toLowerCase().includes(searchTerm) ||
-          ep.feeds?.title?.toLowerCase().includes(searchTerm)
+          ep.title?.toLowerCase().includes(searchTerm)
         )
       }
 
