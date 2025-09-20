@@ -10,8 +10,10 @@ interface Settings {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({})
+  const [originalSettings, setOriginalSettings] = useState<Settings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export default function SettingsPage() {
 
       if (response.ok) {
         setSettings(data.settings || {})
+        setOriginalSettings(data.settings || {})
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to load settings' })
       }
@@ -35,36 +38,68 @@ export default function SettingsPage() {
     }
   }
 
-  const updateSetting = async (category: string, key: string, value: any) => {
+  const updateLocalSetting = (category: string, key: string, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [key]: value
+      }
+    }))
+    setHasChanges(true)
+  }
+
+  const saveAllSettings = async () => {
     setSaving(true)
+    setMessage(null)
+
     try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, key, value })
-      })
+      const savePromises = []
 
-      const data = await response.json()
-
-      if (response.ok) {
-        // Update local state
-        setSettings(prev => ({
-          ...prev,
-          [category]: {
-            ...prev[category],
-            [key]: value
+      // Compare settings with original and save only changed ones
+      for (const [category, categorySettings] of Object.entries(settings)) {
+        for (const [key, value] of Object.entries(categorySettings)) {
+          const originalValue = originalSettings[category]?.[key]
+          if (JSON.stringify(value) !== JSON.stringify(originalValue)) {
+            savePromises.push(
+              fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category, key, value })
+              })
+            )
           }
-        }))
-        setMessage({ type: 'success', text: 'Setting saved successfully' })
+        }
+      }
+
+      if (savePromises.length === 0) {
+        setMessage({ type: 'error', text: 'No changes to save' })
+        setSaving(false)
+        return
+      }
+
+      const responses = await Promise.all(savePromises)
+      const failed = responses.filter(r => !r.ok)
+
+      if (failed.length === 0) {
+        setOriginalSettings(settings)
+        setHasChanges(false)
+        setMessage({ type: 'success', text: `Saved ${savePromises.length} setting${savePromises.length > 1 ? 's' : ''} successfully` })
         setTimeout(() => setMessage(null), 3000)
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to save setting' })
+        setMessage({ type: 'error', text: `Failed to save ${failed.length} setting${failed.length > 1 ? 's' : ''}` })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to save setting' })
+      setMessage({ type: 'error', text: 'Failed to save settings' })
     } finally {
       setSaving(false)
     }
+  }
+
+  const resetSettings = () => {
+    setSettings(originalSettings)
+    setHasChanges(false)
+    setMessage(null)
   }
 
   const getSetting = (category: string, key: string, defaultValue: any = '') => {
@@ -81,9 +116,27 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-gray-600">Configure system parameters and processing options</p>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="mt-1 text-gray-600">Configure system parameters and processing options</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={resetSettings}
+            className="btn-secondary"
+            disabled={saving || !hasChanges}
+          >
+            Reset Changes
+          </button>
+          <button
+            onClick={saveAllSettings}
+            className={`btn-primary ${hasChanges ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}
+            disabled={saving || !hasChanges}
+          >
+            {saving ? 'Saving...' : hasChanges ? 'Save Settings' : 'No Changes'}
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -114,7 +167,7 @@ export default function SettingsPage() {
                   max="1"
                   className="input"
                   value={getSetting('content_filtering', 'score_threshold', 0.65)}
-                  onChange={(e) => updateSetting('content_filtering', 'score_threshold', parseFloat(e.target.value))}
+                  onChange={(e) => updateLocalSetting('content_filtering', 'score_threshold', parseFloat(e.target.value))}
                   disabled={saving}
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -131,7 +184,7 @@ export default function SettingsPage() {
                   max="20"
                   className="input"
                   value={getSetting('content_filtering', 'max_episodes_per_digest', 5)}
-                  onChange={(e) => updateSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
                   disabled={saving}
                 />
               </div>
@@ -152,7 +205,7 @@ export default function SettingsPage() {
                   max="20"
                   className="input"
                   value={getSetting('pipeline', 'max_episodes_per_run', 3)}
-                  onChange={(e) => updateSetting('pipeline', 'max_episodes_per_run', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('pipeline', 'max_episodes_per_run', parseInt(e.target.value))}
                   disabled={saving}
                 />
               </div>
@@ -176,7 +229,7 @@ export default function SettingsPage() {
                   max="30"
                   className="input"
                   value={getSetting('audio_processing', 'chunk_duration_minutes', 10)}
-                  onChange={(e) => updateSetting('audio_processing', 'chunk_duration_minutes', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('audio_processing', 'chunk_duration_minutes', parseInt(e.target.value))}
                   disabled={saving}
                 />
               </div>
@@ -190,7 +243,7 @@ export default function SettingsPage() {
                   max="10"
                   className="input"
                   value={getSetting('audio_processing', 'max_chunks_per_episode', 3)}
-                  onChange={(e) => updateSetting('audio_processing', 'max_chunks_per_episode', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('audio_processing', 'max_chunks_per_episode', parseInt(e.target.value))}
                   disabled={saving}
                 />
               </div>
@@ -200,7 +253,7 @@ export default function SettingsPage() {
                   id="transcribe-all-chunks"
                   className="h-4 w-4 text-primary-600 rounded border-gray-300"
                   checked={getSetting('audio_processing', 'transcribe_all_chunks', false)}
-                  onChange={(e) => updateSetting('audio_processing', 'transcribe_all_chunks', e.target.checked)}
+                  onChange={(e) => updateLocalSetting('audio_processing', 'transcribe_all_chunks', e.target.checked)}
                   disabled={saving}
                 />
                 <label htmlFor="transcribe-all-chunks" className="ml-2 text-sm text-gray-700">
@@ -224,7 +277,7 @@ export default function SettingsPage() {
                   max="50000"
                   className="input"
                   value={getSetting('transcript_processing', 'max_transcript_length', 15000)}
-                  onChange={(e) => updateSetting('transcript_processing', 'max_transcript_length', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('transcript_processing', 'max_transcript_length', parseInt(e.target.value))}
                   disabled={saving}
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -241,7 +294,7 @@ export default function SettingsPage() {
                   max="60"
                   className="input"
                   value={getSetting('transcript_processing', 'chunk_overlap_seconds', 10)}
-                  onChange={(e) => updateSetting('transcript_processing', 'chunk_overlap_seconds', parseInt(e.target.value))}
+                  onChange={(e) => updateLocalSetting('transcript_processing', 'chunk_overlap_seconds', parseInt(e.target.value))}
                   disabled={saving}
                 />
               </div>
@@ -265,7 +318,7 @@ export default function SettingsPage() {
                   <select
                     className="input"
                     value={getSetting('ai_content_scoring', 'model', 'gpt-4o-mini')}
-                    onChange={(e) => updateSetting('ai_content_scoring', 'model', e.target.value)}
+                    onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -283,7 +336,7 @@ export default function SettingsPage() {
                     max="4000"
                     className="input"
                     value={getSetting('ai_content_scoring', 'max_tokens', 1000)}
-                    onChange={(e) => updateSetting('ai_content_scoring', 'max_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -297,7 +350,7 @@ export default function SettingsPage() {
                     max="200000"
                     className="input"
                     value={getSetting('ai_content_scoring', 'max_input_tokens', 120000)}
-                    onChange={(e) => updateSetting('ai_content_scoring', 'max_input_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_input_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -311,7 +364,7 @@ export default function SettingsPage() {
                     max="20"
                     className="input"
                     value={getSetting('ai_content_scoring', 'max_episodes_per_batch', 10)}
-                    onChange={(e) => updateSetting('ai_content_scoring', 'max_episodes_per_batch', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_episodes_per_batch', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -329,7 +382,7 @@ export default function SettingsPage() {
                   <select
                     className="input"
                     value={getSetting('ai_digest_generation', 'model', 'gpt-4o')}
-                    onChange={(e) => updateSetting('ai_digest_generation', 'model', e.target.value)}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
                     <option value="gpt-4o">GPT-4o</option>
@@ -347,7 +400,7 @@ export default function SettingsPage() {
                     max="50000"
                     className="input"
                     value={getSetting('ai_digest_generation', 'max_output_tokens', 25000)}
-                    onChange={(e) => updateSetting('ai_digest_generation', 'max_output_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'max_output_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -361,7 +414,7 @@ export default function SettingsPage() {
                     max="200000"
                     className="input"
                     value={getSetting('ai_digest_generation', 'max_input_tokens', 150000)}
-                    onChange={(e) => updateSetting('ai_digest_generation', 'max_input_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'max_input_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -376,7 +429,7 @@ export default function SettingsPage() {
                     max="50"
                     className="input"
                     value={getSetting('ai_digest_generation', 'transcript_buffer_percent', 20.0)}
-                    onChange={(e) => updateSetting('ai_digest_generation', 'transcript_buffer_percent', parseFloat(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_buffer_percent', parseFloat(e.target.value))}
                     disabled={saving}
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -397,7 +450,7 @@ export default function SettingsPage() {
                   <select
                     className="input"
                     value={getSetting('ai_metadata_generation', 'model', 'gpt-4o-mini')}
-                    onChange={(e) => updateSetting('ai_metadata_generation', 'model', e.target.value)}
+                    onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -415,7 +468,7 @@ export default function SettingsPage() {
                     max="100"
                     className="input"
                     value={getSetting('ai_metadata_generation', 'max_title_tokens', 50)}
-                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_title_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_title_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -429,7 +482,7 @@ export default function SettingsPage() {
                     max="500"
                     className="input"
                     value={getSetting('ai_metadata_generation', 'max_summary_tokens', 200)}
-                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_summary_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_summary_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -443,7 +496,7 @@ export default function SettingsPage() {
                     max="1000"
                     className="input"
                     value={getSetting('ai_metadata_generation', 'max_description_tokens', 500)}
-                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_description_tokens', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_description_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -461,7 +514,7 @@ export default function SettingsPage() {
                   <select
                     className="input"
                     value={getSetting('ai_tts_generation', 'model', 'eleven_turbo_v2_5')}
-                    onChange={(e) => updateSetting('ai_tts_generation', 'model', e.target.value)}
+                    onChange={(e) => updateLocalSetting('ai_tts_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
                     <option value="eleven_turbo_v2_5">ElevenLabs Turbo v2.5</option>
@@ -479,7 +532,7 @@ export default function SettingsPage() {
                     max="50000"
                     className="input"
                     value={getSetting('ai_tts_generation', 'max_characters', 35000)}
-                    onChange={(e) => updateSetting('ai_tts_generation', 'max_characters', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_tts_generation', 'max_characters', parseInt(e.target.value))}
                     disabled={saving}
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -500,7 +553,7 @@ export default function SettingsPage() {
                   <select
                     className="input"
                     value={getSetting('ai_stt_transcription', 'model', 'whisper-1')}
-                    onChange={(e) => updateSetting('ai_stt_transcription', 'model', e.target.value)}
+                    onChange={(e) => updateLocalSetting('ai_stt_transcription', 'model', e.target.value)}
                     disabled={saving}
                   >
                     <option value="whisper-1">Whisper-1</option>
@@ -517,7 +570,7 @@ export default function SettingsPage() {
                     max="100"
                     className="input"
                     value={getSetting('ai_stt_transcription', 'max_file_size_mb', 20)}
-                    onChange={(e) => updateSetting('ai_stt_transcription', 'max_file_size_mb', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('ai_stt_transcription', 'max_file_size_mb', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -538,7 +591,7 @@ export default function SettingsPage() {
                     max="90"
                     className="input"
                     value={getSetting('retention', 'local_mp3_days', 7)}
-                    onChange={(e) => updateSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -552,7 +605,7 @@ export default function SettingsPage() {
                     max="30"
                     className="input"
                     value={getSetting('retention', 'audio_cache_days', 3)}
-                    onChange={(e) => updateSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -566,7 +619,7 @@ export default function SettingsPage() {
                     max="365"
                     className="input"
                     value={getSetting('retention', 'logs_days', 30)}
-                    onChange={(e) => updateSetting('retention', 'logs_days', parseInt(e.target.value))}
+                    onChange={(e) => updateLocalSetting('retention', 'logs_days', parseInt(e.target.value))}
                     disabled={saving}
                   />
                 </div>
@@ -574,6 +627,24 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Bottom Save Buttons */}
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-6 border-t border-gray-200">
+        <button
+          onClick={resetSettings}
+          className="btn-secondary"
+          disabled={saving || !hasChanges}
+        >
+          Reset Changes
+        </button>
+        <button
+          onClick={saveAllSettings}
+          className={`btn-primary ${hasChanges ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}
+          disabled={saving || !hasChanges}
+        >
+          {saving ? 'Saving...' : hasChanges ? 'Save Settings' : 'No Changes'}
+        </button>
       </div>
 
       {saving && (
