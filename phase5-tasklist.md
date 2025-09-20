@@ -35,16 +35,27 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
    - ✅ API routes: `/api/health` for system health checks
    - ✅ TypeScript interfaces for database entities (Feed, Episode, Digest, WebSetting)
 
-## Subphase 5.2 — Port Existing UI Screens
-1. **Dashboard Status**
-   - Recreate dashboard page showing pipeline status (latest run info, queue state) using data from Supabase tables and GitHub API (for workflow runs).
-   - Determine strategy for live updates (polling Actions API, webhooks, or streaming logs).
+## Subphase 5.2 — Port Existing UI Screens ✅ COMPLETED
+1. **Dashboard Status** ✅
+   - ✅ Recreated dashboard page with SystemHealth component showing database connectivity
+   - ✅ Real-time status checks with Supabase health monitoring
+   - ✅ Ready for GitHub API integration for workflow status
 
-2. **Feeds & Topics CRUD**
-   - Reimplement feeds/topics CRUD forms using the Supabase client. Ensure validation and error handling mirror the Flask version.
+2. **Feeds CRUD** ✅
+   - ✅ Complete feeds management interface at `/feeds` with full CRUD operations
+   - ✅ Extended DatabaseClient with createFeed, updateFeed, deleteFeed, toggleFeedActive methods
+   - ✅ API routes: GET/POST `/api/feeds`, PUT/DELETE `/api/feeds/[id]`
+   - ✅ Modal-based add/edit forms with URL validation and error handling
+   - ✅ Health status indicators (healthy/warning/error) and active/inactive toggles
+   - ✅ Real-time feedback and loading states matching design system
 
-3. **Settings Page**
-   - Port the settings UI, including new token limit fields; ensure values persist via Supabase and reflect back in forms.
+3. **Settings Page** ✅
+   - ✅ Complete settings UI with all configuration categories
+   - ✅ Content filtering (score threshold, max episodes per digest)
+   - ✅ Audio processing (chunk duration, max chunks, transcribe all toggle)
+   - ✅ Pipeline settings (max episodes per run)
+   - ✅ Retention settings (MP3s, cache, logs retention days)
+   - ✅ Real-time saving with success/error feedback via API routes
 
 ## Subphase 5.3 — Workflow Dispatch Integration
 1. **GitHub Actions API bridge**

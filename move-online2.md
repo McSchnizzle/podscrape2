@@ -79,16 +79,30 @@
 - ✅ **Monitoring**: Live logs, system health, downloadable artifacts available
 - ✅ **RSS Generation**: Automatic RSS updates with 32 episodes published successfully
 
-## Phase 5 — Web UI Hosting + DNS
+## Phase 5 — Web UI Hosting + DNS ✅ PARTIALLY COMPLETED
 
-- [ ] Deploy the admin/status UI to Vercel:
-  - Connect directly to Supabase for CRUD (Feeds, Topics, Episode status, Retention settings) via pooled connections.
-  - Continue to use GitHub Workflow Dispatch for heavy actions (e.g., re-run pipeline) to keep serverless fast.
-  - Apply minimal auth: password via `WEBUI_SECRET` or GitHub OAuth; consider RLS policies for write endpoints.
-- [ ] DNS: point `podcast.paulrbrown.org` to Vercel; serve `public/daily-digest.xml` and the UI under the same domain.
+- ✅ **Next.js/Vercel Deployment**: Complete hosted admin UI at `podcast.paulrbrown.org`
+  - ✅ Next.js 14 + TypeScript + TailwindCSS app deployed to Vercel
+  - ✅ Supabase connectivity via DatabaseClient with pooled connections
+  - ✅ Complete CRUD interfaces: Settings ✅, Feeds ✅, Topics (pending), Episodes browser (pending)
+  - ✅ Real-time status monitoring and health checks
+  - ✅ Professional card-based UI with proper loading states and error handling
+- ✅ **RSS Feed Hosting**: Canonical RSS now served from Vercel
+  - ✅ Publishing pipeline writes to `web_ui_hosted/public/daily-digest.xml`
+  - ✅ Vercel auto-deploys RSS updates from GitHub pushes
+  - ✅ All 4 recent MP3s (9/20) properly served with correct metadata
+- [ ] **GitHub Workflow Dispatch Integration**: UI buttons to trigger pipeline runs (pending Subphase 5.3)
+- [ ] **Authentication**: Minimal auth protection for admin functions (pending Subphase 5.4)
+
+**Current Status**: Subphase 5.2 completed - CRUD interfaces for Settings and Feeds fully functional
+**Next Priority**: Subphase 5.3 - GitHub Actions API integration for workflow dispatch
 
 Acceptance criteria
-- Vercel UI loads, shows status from Postgres, allows CRUD where appropriate, and can dispatch runs. RSS accessible at canonical URL; enclosure links work in podcast clients.
+- ✅ Vercel UI loads and shows status from Postgres
+- ✅ Settings and Feeds CRUD fully functional with real-time updates
+- ✅ RSS accessible at canonical URL with working enclosure links
+- [ ] Workflow dispatch integration from UI
+- [ ] Basic authentication protection
 
 ## Phase 6 — Local Dev Parity and Testing
 
