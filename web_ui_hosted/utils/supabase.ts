@@ -18,11 +18,15 @@ export const supabase = createClient(supabaseUrl, supabaseServiceRole, {
 // Database types (subset of main types)
 export interface Feed {
   id: number
-  url: string
+  feed_url: string  // matches database field name
   title: string
-  health_status: 'healthy' | 'warning' | 'error'
+  description?: string
+  active: boolean   // matches database field name
+  consecutive_failures: number
   last_checked?: string
-  is_active: boolean
+  last_episode_date?: string
+  total_episodes_processed: number
+  total_episodes_failed: number
   created_at: string
   updated_at: string
 }
@@ -142,14 +146,16 @@ export class DatabaseClient {
   }
 
   // Feed CRUD operations
-  async createFeed(url: string, title: string) {
+  async createFeed(feed_url: string, title: string) {
     const { data, error } = await supabase
       .from('feeds')
       .insert({
-        url,
+        feed_url,
         title,
-        health_status: 'healthy',
-        is_active: true,
+        active: true,
+        consecutive_failures: 0,
+        total_episodes_processed: 0,
+        total_episodes_failed: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -183,11 +189,11 @@ export class DatabaseClient {
     return true
   }
 
-  async toggleFeedActive(id: number, is_active: boolean) {
-    return this.updateFeed(id, { is_active })
+  async toggleFeedActive(id: number, active: boolean) {
+    return this.updateFeed(id, { active })
   }
 
-  async updateFeedHealth(id: number, health_status: 'healthy' | 'warning' | 'error') {
-    return this.updateFeed(id, { health_status, last_checked: new Date().toISOString() })
+  async updateFeedHealth(id: number, consecutive_failures: number = 0) {
+    return this.updateFeed(id, { consecutive_failures, last_checked: new Date().toISOString() })
   }
 }

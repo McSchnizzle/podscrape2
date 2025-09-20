@@ -10,7 +10,7 @@ export default function FeedsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null)
-  const [newFeed, setNewFeed] = useState({ url: '', title: '' })
+  const [newFeed, setNewFeed] = useState({ feed_url: '', title: '' })
 
   useEffect(() => {
     fetchFeeds()
@@ -34,7 +34,7 @@ export default function FeedsPage() {
   }
 
   const addFeed = async () => {
-    if (!newFeed.url || !newFeed.title) {
+    if (!newFeed.feed_url || !newFeed.title) {
       setMessage({ type: 'error', text: 'URL and title are required' })
       return
     }
@@ -51,7 +51,7 @@ export default function FeedsPage() {
 
       if (response.ok) {
         setFeeds([data.feed, ...feeds])
-        setNewFeed({ url: '', title: '' })
+        setNewFeed({ feed_url: '', title: '' })
         setShowAddForm(false)
         setMessage({ type: 'success', text: 'Feed added successfully' })
         setTimeout(() => setMessage(null), 3000)
@@ -117,16 +117,27 @@ export default function FeedsPage() {
     }
   }
 
-  const toggleFeedActive = async (id: number, is_active: boolean) => {
-    await updateFeed(id, { is_active })
+  const toggleFeedActive = async (id: number, active: boolean) => {
+    await updateFeed(id, { active })
   }
 
-  const getHealthStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'text-success-700 bg-success-50 border-success-200'
-      case 'warning': return 'text-warning-700 bg-warning-50 border-warning-200'
-      case 'error': return 'text-error-700 bg-error-50 border-error-200'
-      default: return 'text-gray-700 bg-gray-50 border-gray-200'
+  const getHealthStatusColor = (consecutive_failures: number) => {
+    if (consecutive_failures === 0) {
+      return 'text-success-700 bg-success-50 border-success-200'
+    } else if (consecutive_failures <= 2) {
+      return 'text-warning-700 bg-warning-50 border-warning-200'
+    } else {
+      return 'text-error-700 bg-error-50 border-error-200'
+    }
+  }
+
+  const getHealthStatusText = (consecutive_failures: number) => {
+    if (consecutive_failures === 0) {
+      return 'healthy'
+    } else if (consecutive_failures <= 2) {
+      return 'warning'
+    } else {
+      return 'error'
     }
   }
 
@@ -177,8 +188,8 @@ export default function FeedsPage() {
                 <input
                   type="url"
                   className="input"
-                  value={newFeed.url}
-                  onChange={(e) => setNewFeed({ ...newFeed, url: e.target.value })}
+                  value={newFeed.feed_url}
+                  onChange={(e) => setNewFeed({ ...newFeed, feed_url: e.target.value })}
                   placeholder="https://example.com/feed.xml"
                   disabled={saving}
                 />
@@ -201,7 +212,7 @@ export default function FeedsPage() {
               <button
                 onClick={() => {
                   setShowAddForm(false)
-                  setNewFeed({ url: '', title: '' })
+                  setNewFeed({ feed_url: '', title: '' })
                 }}
                 className="btn-secondary"
                 disabled={saving}
@@ -211,7 +222,7 @@ export default function FeedsPage() {
               <button
                 onClick={addFeed}
                 className="btn-primary"
-                disabled={saving || !newFeed.url || !newFeed.title}
+                disabled={saving || !newFeed.feed_url || !newFeed.title}
               >
                 {saving ? 'Adding...' : 'Add Feed'}
               </button>
@@ -233,8 +244,8 @@ export default function FeedsPage() {
                 <input
                   type="url"
                   className="input"
-                  value={editingFeed.url}
-                  onChange={(e) => setEditingFeed({ ...editingFeed, url: e.target.value })}
+                  value={editingFeed.feed_url}
+                  onChange={(e) => setEditingFeed({ ...editingFeed, feed_url: e.target.value })}
                   disabled={saving}
                 />
               </div>
@@ -261,11 +272,11 @@ export default function FeedsPage() {
               </button>
               <button
                 onClick={() => updateFeed(editingFeed.id, {
-                  url: editingFeed.url,
+                  feed_url: editingFeed.feed_url,
                   title: editingFeed.title
                 })}
                 className="btn-primary"
-                disabled={saving || !editingFeed.url || !editingFeed.title}
+                disabled={saving || !editingFeed.feed_url || !editingFeed.title}
               >
                 {saving ? 'Updating...' : 'Update Feed'}
               </button>
@@ -290,19 +301,19 @@ export default function FeedsPage() {
                     <h3 className="text-lg font-medium text-gray-900 truncate">
                       {feed.title}
                     </h3>
-                    <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.health_status)}`}>
-                      {feed.health_status}
+                    <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.consecutive_failures)}`}>
+                      {getHealthStatusText(feed.consecutive_failures)}
                     </span>
                     <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                      feed.is_active
+                      feed.active
                         ? 'text-success-700 bg-success-50 border-success-200'
                         : 'text-gray-700 bg-gray-50 border-gray-200'
                     }`}>
-                      {feed.is_active ? 'Active' : 'Inactive'}
+                      {feed.active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1 truncate">
-                    {feed.url}
+                    {feed.feed_url}
                   </p>
                   {feed.last_checked && (
                     <p className="text-xs text-gray-400 mt-1">
@@ -312,15 +323,15 @@ export default function FeedsPage() {
                 </div>
                 <div className="flex items-center space-x-2 ml-4">
                   <button
-                    onClick={() => toggleFeedActive(feed.id, !feed.is_active)}
+                    onClick={() => toggleFeedActive(feed.id, !feed.active)}
                     className={`btn-sm ${
-                      feed.is_active
+                      feed.active
                         ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         : 'bg-success-100 text-success-700 hover:bg-success-200'
                     }`}
                     disabled={saving}
                   >
-                    {feed.is_active ? 'Disable' : 'Enable'}
+                    {feed.active ? 'Disable' : 'Enable'}
                   </button>
                   <button
                     onClick={() => setEditingFeed(feed)}

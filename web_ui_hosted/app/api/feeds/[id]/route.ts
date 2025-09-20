@@ -17,12 +17,12 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { url, title, is_active, health_status } = body
+    const { feed_url, title, active, consecutive_failures } = body
 
     // Validate URL if provided
-    if (url) {
+    if (feed_url) {
       try {
-        new URL(url)
+        new URL(feed_url)
       } catch {
         return NextResponse.json(
           { error: 'Invalid URL format' },
@@ -32,11 +32,11 @@ export async function PUT(
     }
 
     const updates: any = {}
-    if (url !== undefined) updates.url = url
+    if (feed_url !== undefined) updates.feed_url = feed_url
     if (title !== undefined) updates.title = title
-    if (is_active !== undefined) updates.is_active = is_active
-    if (health_status !== undefined) {
-      updates.health_status = health_status
+    if (active !== undefined) updates.active = active
+    if (consecutive_failures !== undefined) {
+      updates.consecutive_failures = consecutive_failures
       updates.last_checked = new Date().toISOString()
     }
 

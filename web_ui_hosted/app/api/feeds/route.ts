@@ -18,9 +18,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { url, title } = await request.json()
+    const { feed_url, title } = await request.json()
 
-    if (!url || !title) {
+    if (!feed_url || !title) {
       return NextResponse.json(
         { error: 'URL and title are required' },
         { status: 400 }
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Basic URL validation
     try {
-      new URL(url)
+      new URL(feed_url)
     } catch {
       return NextResponse.json(
         { error: 'Invalid URL format' },
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const feed = await db.createFeed(url, title)
+    const feed = await db.createFeed(feed_url, title)
     return NextResponse.json({ feed })
   } catch (error) {
     console.error('Failed to create feed:', error)
