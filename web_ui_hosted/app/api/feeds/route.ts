@@ -5,12 +5,18 @@ const db = new DatabaseClient()
 
 export async function GET() {
   try {
+    console.log('API: Starting to fetch feeds...')
     const feeds = await db.getFeeds()
+    console.log(`API: Successfully fetched ${feeds.length} feeds`)
     return NextResponse.json({ feeds })
   } catch (error) {
     console.error('Failed to fetch feeds:', error)
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
     return NextResponse.json(
-      { error: 'Failed to fetch feeds' },
+      {
+        error: 'Failed to fetch feeds',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
