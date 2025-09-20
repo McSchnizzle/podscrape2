@@ -35,8 +35,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      GH_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
       DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
@@ -108,7 +108,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run discovery phase (seed data)
+      - name: Discovery
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -126,7 +126,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run audio phase (seed transcripts table)
+      - name: Audio
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -141,7 +141,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run scoring phase (seed scoring table)
+      - name: Scoring
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -156,7 +156,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Run digest phase
+      - name: Digest
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -178,7 +178,7 @@ jobs:
           find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
           echo "before_file=$(realpath "$BASELINE")" >> "$GITHUB_OUTPUT"
 
-      - name: Run TTS phase
+      - name: TTS
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -189,11 +189,11 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Persist and publish TTS outputs
+      - name: Publishing
         if: success() && inputs.dry_run != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
           TARGET_BRANCH: ${{ github.ref_name }}
           BASELINE_FILE: ${{ steps.capture_mp3_baseline.outputs.before_file }}
         run: |
@@ -232,7 +232,24 @@ jobs:
           RELEASE_DATE="${DATE_PART:0:4}-${DATE_PART:4:2}-${DATE_PART:6:2}"
 
           source "${VENV_PATH}/bin/activate"
-          python scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"
+
+          echo "Publishing MP3 files to GitHub Release:"
+          echo "  Release date: $RELEASE_DATE"
+          echo "  Files to publish:"
+          for file in "${FILES[@]}"; do
+            echo "    - $file ($([ -f "$file" ] && echo "exists" || echo "MISSING"))"
+          done
+
+          echo "Creating GitHub Release and uploading MP3 assets..."
+          if ! python scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"; then
+            echo "ERROR: Failed to create GitHub Release and upload MP3 files"
+            exit 1
+          fi
+
+          echo "Verifying GitHub Release was created..."
+          sleep 5  # Give GitHub API time to propagate
+
+          echo "Running RSS publishing..."
           python scripts/run_publishing.py --verbose
           cp data/rss/daily-digest.xml data/rss/test-feed.xml
           cp public/daily-digest.xml public/test-feed.xml
