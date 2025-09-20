@@ -186,13 +186,24 @@ Generate metadata that accurately reflects the content and would attract the tar
             )
             
             metadata_json = response.output_text.strip()
-            
+
+            # Log token usage information
+            if hasattr(response, 'usage'):
+                usage = response.usage
+                logger.info(f"OpenAI API usage - Model: {self.ai_model}, "
+                           f"Input tokens: {usage.get('input_tokens', 'unknown')}, "
+                           f"Output tokens: {usage.get('output_tokens', 'unknown')}, "
+                           f"Total tokens: {usage.get('total_tokens', 'unknown')}")
+            else:
+                logger.info(f"OpenAI API call completed - Model: {self.ai_model}, "
+                           f"Max description tokens: {self.max_description_tokens}")
+
             # Clean up JSON if it has markdown formatting
             if metadata_json.startswith('```json'):
                 metadata_json = metadata_json.replace('```json', '').replace('```', '').strip()
             elif metadata_json.startswith('```'):
                 metadata_json = metadata_json.replace('```', '').strip()
-            
+
             # Parse JSON response
             try:
                 metadata_dict = json.loads(metadata_json)

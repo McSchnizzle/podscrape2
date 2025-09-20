@@ -236,15 +236,26 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             # Parse response using Responses API format
             scores_json = response.output_text
             scores = json.loads(scores_json)
-            
+
+            # Log token usage information
+            if hasattr(response, 'usage'):
+                usage = response.usage
+                logger.info(f"OpenAI API usage - Model: {self.ai_model}, "
+                           f"Input tokens: {usage.get('input_tokens', 'unknown')}, "
+                           f"Output tokens: {usage.get('output_tokens', 'unknown')}, "
+                           f"Total tokens: {usage.get('total_tokens', 'unknown')}")
+            else:
+                logger.info(f"OpenAI API call completed - Model: {self.ai_model}, "
+                           f"Max tokens: {self.max_tokens}")
+
             # Validate scores are within expected range
             for topic_name, score in scores.items():
                 if not (0.0 <= score <= 1.0):
                     logger.warning(f"Score {score} for topic {topic_name} outside valid range [0.0, 1.0]")
                     scores[topic_name] = max(0.0, min(1.0, score))  # Clamp to valid range
-            
+
             processing_time = (datetime.now() - start_time).total_seconds()
-            
+
             logger.info(f"Successfully scored {'episode ' + episode_id if episode_id else 'transcript'} with GPT-5-mini "
                        f"in {processing_time:.2f}s")
             

@@ -1,0 +1,197 @@
+11:37:51 - INFO - Dry run mode: OFF
+11:37:51 - INFO - Environment variables verified (repository set)
+11:37:51 - INFO - Database manager initialized with PostgreSQL
+11:37:51 - INFO - GitHub Actions detection: GH_ACTIONS=true, GITHUB_ACTIONS=true, _is_github_actions=True
+11:37:52 - INFO - GitHub Publisher initialized for repository: McSchnizzle/podscrape2
+11:37:52 - INFO - RSS Generator initialized for: Daily AI & Tech Digest
+11:37:52 - INFO - Database manager initialized with PostgreSQL
+11:37:56 - INFO - GitHub Publisher initialized for repository: McSchnizzle/podscrape2
+11:37:56 - INFO - Retention Manager initialized with 5 policies
+11:37:57 - INFO - Skipping Vercel deployer initialization in GitHub Actions environment
+11:37:57 - INFO - Publishing pipeline initialized successfully
+11:37:57 - INFO - ================================================================================
+11:37:57 - INFO - 📋 PHASE: PUBLISHING
+11:37:57 - INFO - 📝 Publishing Pipeline Phase
+11:37:57 - INFO - ================================================================================
+11:37:57 - INFO - 📁 Log file: /home/runner/work/podscrape2/podscrape2/logs/publishing_20250919_113751.log
+11:37:57 - INFO - 🚀 Starting complete publishing pipeline...
+11:37:57 - INFO - Searching for unpublished digests from last 30 days...
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/AI_and_Technology_20250919_040643.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/AI_and_Technology_20250919_002528.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/AI_and_Technology_20250919_035243.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/AI_and_Technology_20250919_110547.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/Social_Movements_and_Community_Organizing_20250919_002646.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/Social_Movements_and_Community_Organizing_20250919_110550.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/Social_Movements_and_Community_Organizing_20250919_035411.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/Social_Movements_and_Community_Organizing_20250918_122402.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/Social_Movements_and_Community_Organizing_20250918_141047.mp3
+11:37:59 - WARNING - MP3 file not found: data/completed-tts/current/AI_and_Technology_20250918_051205.mp3
+11:38:00 - WARNING - MP3 file not found: data/completed-tts/current/Social_Movements_and_Community_Organizing_20250918_051318.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Community_Organizing_20250909_190338.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Community_Organizing_20250909_202243.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Community_Organizing_20250909_205142.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Societal_Culture_Change_20250909_205107.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Societal_Culture_Change_20250909_190453.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Societal_Culture_Change_20250909_202341.mp3
+11:38:10 - WARNING - MP3 file not found: data/completed-tts/old-4-topics-backup/Societal_Culture_Change_20250909_195719.mp3
+11:38:10 - INFO - Found 47 digests with MP3 files:
+11:38:10 - INFO -   - 2025-09-17 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-17 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-17 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-16 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-16 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-16 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-16 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-16 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-15 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-14 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-14 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-14 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-14 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-13 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-13 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-13 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-13 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-12 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-12 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-12 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-11 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-11 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-11 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-11 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-10 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-09 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-09 | AI and Technology | PUBLISHED
+11:38:10 - INFO -   - 2025-09-09 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO -   - 2025-09-09 | Social Movements and Community Organizing | PUBLISHED
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-17)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-17
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-17)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-17
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-17)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-17
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-16)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-16
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-16)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-16
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-16)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-16
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-16)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-16
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-16)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-16
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-15)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-15
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-14)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-14
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-14)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-14
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-14)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-14
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-14)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-14
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-13)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-13
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-13)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-13
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-13)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-13
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-13)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-13
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-12)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-12
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-12)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-12
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-12)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-12
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-11)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-11
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-11)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-11
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-11)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-11
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-11)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-11
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-10)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-10
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-09)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-09
+11:38:10 - INFO - Verifying digest: AI and Technology (2025-09-09)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-09
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-09)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-09
+11:38:10 - INFO - Verifying digest: Social Movements and Community Organizing (2025-09-09)
+11:38:10 - INFO -   ✅ Digest ready for RSS: https://github.com/McSchnizzle/podscrape2/releases/tag/daily-2025-09-09
+11:38:10 - INFO - Verified 47 digests ready for RSS (not ready: 0)
+11:38:10 - INFO - Generating RSS feed...
+11:38:10 - INFO - Creating RSS feed with 47 published episodes
+11:38:10 - INFO - Generating RSS feed with 47 episodes
+11:38:10 - INFO - RSS feed generated successfully (47700 characters)
+11:38:10 - INFO - ✅ RSS feed generated: data/rss/daily-digest.xml
+11:38:10 - INFO - ✅ Wrote public RSS: public/daily-digest.xml
+11:38:10 - INFO - Publishing decision point: dry_run=False, _is_github_actions=True
+11:38:10 - INFO - Running in GitHub Actions - calling commit_rss_to_main
+11:38:10 - INFO - 📝 Committing RSS feed to main branch...
+11:38:10 - INFO -    📄 Saved RSS to public/daily-digest.xml
+11:38:10 - INFO -    📄 Saved RSS to data/rss/daily-digest.xml
+11:38:12 - INFO -    ✅ RSS feed committed and pushed to main
+11:38:12 - INFO -    🚀 Vercel will automatically deploy the updated RSS feed
+11:38:12 - INFO - ================================================================================
+11:38:12 - INFO - 🏁 PUBLISHING ✅ COMPLETED
+11:38:12 - INFO - ================================================================================
+11:38:12 - INFO - RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml
+{"success": true, "message": "Publishing pipeline completed successfully", "phase": "publishing"}

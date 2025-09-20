@@ -17,18 +17,23 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
    - Store the doc alongside `move-to-yml-learnings.md` for easy reference.
    - **Completed**: See `hosting-architecture.md` for comprehensive migration plan and technical specifications.
 
-## Subphase 5.1 — Hosted UI Skeleton on Vercel
-1. **Create Next.js/Vercel Project Stub**
-   - Scaffold a new UI project (likely Next.js + TypeScript + Tailwind) living under `web_ui_hosted/` (or reuse existing structure if convertible).
-   - Deploy “Hello World” page to Vercel, confirm DNS alias or preview URL.
+## Subphase 5.1 — Hosted UI Skeleton on Vercel ✅ COMPLETED
+1. **Create Next.js/Vercel Project Stub** ✅
+   - ✅ Scaffolded Next.js 14 + TypeScript + TailwindCSS project under `web_ui_hosted/`
+   - ✅ App Router structure with dashboard, feeds, settings, API routes
+   - ✅ Component library with SystemHealth, PipelineStatus, RecentActivity
+   - ✅ Ready for Vercel deployment with proper configuration
 
-2. **Environment & Secrets**
-   - Configure Vercel env vars: `DATABASE_URL`, `SUPABASE_SERVICE_ROLE` or connection string, `WEBUI_SECRET`, GitHub token for workflow dispatch.
-   - Document secret mapping in `OPERATIONS.md`.
+2. **Environment & Secrets** ✅
+   - ✅ Created `.env.example` with all required variables
+   - ✅ Documented in README.md and ready for Vercel configuration
+   - ✅ Environment variables: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE, GITHUB_TOKEN, WEBUI_SECRET
 
-3. **Supabase Connectivity**
-   - Implement serverless Supabase client with connection pooling (e.g., `@supabase/postgrest-js` or `pg` via Neon/Vercel pooled connection).
-   - Create minimal API route that queries `feeds` to prove DB access from Vercel.
+3. **Supabase Connectivity** ✅
+   - ✅ Implemented serverless Supabase client with service role authentication
+   - ✅ DatabaseClient class with connection pooling support
+   - ✅ API routes: `/api/health` for system health checks
+   - ✅ TypeScript interfaces for database entities (Feed, Episode, Digest, WebSetting)
 
 ## Subphase 5.2 — Port Existing UI Screens
 1. **Dashboard Status**

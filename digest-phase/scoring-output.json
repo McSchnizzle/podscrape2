@@ -1,0 +1,12 @@
+{
+  "success": false,
+  "episodes_scored": 0,
+  "episodes_failed": 1,
+  "episodes": [],
+  "failed": [
+    {
+      "guid": "34360768-9279-11f0-8797-abca1dddb78e",
+      "error": "Episode not found in database"
+    }
+  ]
+}

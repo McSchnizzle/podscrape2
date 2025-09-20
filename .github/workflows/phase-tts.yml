@@ -1,6 +1,8 @@
 name: Phase TTS
 
 on:
+  schedule:
+    - cron: '0 5 * * *'  # Daily at 5:00 AM UTC
   workflow_dispatch:
     inputs:
       limit:
@@ -36,7 +38,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
       DRY_RUN: ${{ inputs.dry_run }}
       LIMIT: ${{ inputs.limit }}
       DAYS_BACK: ${{ inputs.days_back }}
@@ -193,7 +195,7 @@ jobs:
         if: success() && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+          GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
           TARGET_BRANCH: ${{ github.ref_name }}
           BASELINE_FILE: ${{ steps.capture_mp3_baseline.outputs.before_file }}
         run: |

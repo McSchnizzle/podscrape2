@@ -186,12 +186,42 @@ class PublishingPipelineRunner:
                 return True
 
             # Check if digest already has GitHub URL (uploaded by TTS phase)
-            if not digest.get('github_url'):
-                self.logger.warning(f"  ⚠️  Digest not yet uploaded to GitHub - skipping RSS generation")
-                return False
+            if digest.get('github_url'):
+                self.logger.info(f"  ✅ Digest ready for RSS: {digest['github_url']}")
+                return True
 
-            self.logger.info(f"  ✅ Digest ready for RSS: {digest['github_url']}")
-            return True
+            # If no GitHub URL, check if a GitHub release exists for this date
+            # This handles the case where TTS created a release but database wasn't updated due to workflow failure
+            release_date = digest['digest_date']
+            tag_name = f"daily-{release_date}"
+
+            try:
+                existing_release = self.github_publisher.get_release_by_tag(tag_name)
+                if existing_release and existing_release.assets:
+                    # Find the MP3 file for this specific digest
+                    mp3_filename = Path(digest['mp3_path']).name if digest.get('mp3_path') else None
+                    if mp3_filename:
+                        # Check if this specific MP3 is in the release assets
+                        asset_names = [asset['name'] for asset in existing_release.assets]
+                        if mp3_filename in asset_names:
+                            # Update database with GitHub URL
+                            github_url = f"https://github.com/{self.github_publisher.repository}/releases/tag/{tag_name}"
+                            self.logger.info(f"  🔧 Found existing GitHub release, updating database: {github_url}")
+
+                            # Update the digest record with GitHub URL
+                            self.digest_repo.update_digest(digest['id'], {'github_url': github_url})
+
+                            # Update the digest dict for RSS generation
+                            digest['github_url'] = github_url
+
+                            self.logger.info(f"  ✅ Digest repaired and ready for RSS: {github_url}")
+                            return True
+
+            except Exception as repair_error:
+                self.logger.warning(f"  ⚠️  Failed to check for existing GitHub release: {repair_error}")
+
+            self.logger.warning(f"  ⚠️  Digest not yet uploaded to GitHub - skipping RSS generation")
+            return False
 
         except Exception as e:
             self.logger.error(f"  ❌ Failed to verify digest: {e}")

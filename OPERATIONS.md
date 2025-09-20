@@ -9,7 +9,7 @@ The following GitHub repository secrets are required for the CI bootstrap and su
 - `OPENAI_API_KEY`
 - `ELEVENLABS_API_KEY`
 - `GH_TOKEN` (fine-grained PAT with `workflow` scope)
-- `GH_REPOSITORY` (owner/repo string for GitHub API convenience)
+- `GITHUB_REPOSITORY` (owner/repo string for GitHub API convenience)
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
@@ -122,3 +122,93 @@ Add new entries below as additional Phase 4 subphases go live.
   - Updated database persistence to store GitHub Release URLs after upload
 - **Benefits**: Eliminates file transfer between workflows, improves error recovery, enables parallel TTS execution
 - **Deployment Strategy**: Publishing now commits RSS to main branch, triggering automatic Vercel deployment
+
+### 2025-09-19 — TTS Workflow Publishing Fix
+- **Issue**: Environment variable error `GH_REPOSITORY: unbound variable` causing git push failures
+- **Root Cause**: Workflow used `${{ secrets.GH_REPOSITORY }}` instead of `${{ secrets.GITHUB_REPOSITORY }}`
+- **Fix Applied**: Updated `.github/workflows/phase-tts.yml` lines 39 and 196
+- **Database Repair Logic**: Enhanced publishing pipeline to detect and repair UNPUBLISHED digests with existing GitHub releases
+- **Validation**: RSS feed increased from 31 to 32 episodes, including recovered September 20th digest
+- **Result**: Workflow now successfully publishes MP3s and updates RSS feed without manual intervention
+
+## Phase 4 Completion Status
+
+### ✅ Completed Subphases
+- 4.0: CI/CD Bootstrap
+- 4.1: Discovery Workflow
+- 4.2: Audio Workflow
+- 4.3: Scoring Workflow
+- 4.4: Digest Workflow
+- 4.5: TTS Workflow (with publishing integration)
+- 4.6: Publishing Workflow (RSS generation focus)
+
+### ❌ Remaining Tasks
+- 4.7: Orchestrated Full Run (`.github/workflows/full-pipeline.yml`)
+- Web UI CI Controls page (`/ci-controls` route)
+- End-to-end validation of complete pipeline
+
+## Common Issues & Troubleshooting
+
+### TTS Workflow Failures
+- **Symptom**: Git push fails with "unbound variable"
+- **Cause**: Environment variable name mismatch
+- **Fix**: Verify `GITHUB_REPOSITORY` secret exists (not `GH_REPOSITORY`)
+
+### Missing Episodes in RSS Feed
+- **Symptom**: GitHub releases exist but episodes missing from RSS
+- **Cause**: Database not updated after release creation
+- **Fix**: Run publishing pipeline - it auto-repairs UNPUBLISHED → PUBLISHED status
+
+### Workflow Dispatch Not Working
+- **Symptom**: Manual workflow triggers fail
+- **Cause**: Missing `WEBUI_DISPATCH_PAT` with workflow scope
+- **Fix**: Generate fine-grained PAT with `actions:write` permission
+
+## Quick Commands
+
+### View Recent Workflow Runs
+```bash
+gh run list --limit 10
+gh run view <RUN_ID>
+gh run download <RUN_ID> -n <ARTIFACT_NAME>
+```
+
+### Test Publishing Pipeline Locally
+```bash
+python3 scripts/run_publishing.py --verbose --days-back 7
+```
+
+### Check RSS Feed Status
+```bash
+curl -s https://podcast.paulrbrown.org/daily-digest.xml | grep -c "<item>"
+```
+
+### Validate GitHub Releases
+```bash
+gh release list --limit 5
+gh release view daily-YYYY-MM-DD
+```
+
+
+### 2025-09-19 — Phase 4 Workflow Consolidation & Completion
+- **Status**: ✅ **PHASE 4 COMPLETE** - Full pipeline operational
+- **Primary Workflow**: `Phase TTS` (`.github/workflows/phase-tts.yml`) - **ORCHESTRATED FULL PIPELINE**
+- **Execution**: Daily scheduled execution at 5:00 AM UTC + manual dispatch
+- **Architecture**: Single comprehensive workflow: Discovery → Audio → Scoring → Digest → TTS → Publishing
+- **Workflow Cleanup**: Removed redundant individual phase workflows:
+  - ❌ `phase-discovery.yml` (removed - use phase-tts.yml with parameters)
+  - ❌ `phase-audio.yml` (removed - use phase-tts.yml with parameters)
+  - ❌ `phase-scoring.yml` (removed - use phase-tts.yml with parameters)
+  - ❌ `phase-digest.yml` (removed - use phase-tts.yml with parameters)
+  - ❌ `phase-publishing.yml` (removed - use phase-tts.yml with parameters)
+- **Control**: Use command-line parameters for phase-specific execution:
+  - `--limit N`: Limit number of episodes processed
+  - `--days-back N`: Discovery lookback window
+  - `--dry-run true/false`: Enable dry-run mode
+- **Recent Success**: Run ID `17873538510` - Complete end-to-end pipeline execution
+
+### Active Workflows Post-Consolidation
+- ✅ **phase-tts.yml**: Primary orchestrated pipeline (scheduled + manual dispatch)
+- ✅ **ci-bootstrap.yml**: Environment validation and secret verification
+- ✅ **publishing-only.yml**: Standalone publishing for maintenance scenarios
+- ✅ **tts-simulator*.yml**: Development testing workflows

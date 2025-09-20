@@ -1,0 +1,136 @@
+name: Publishing Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "Discovery lookback window (default: 7)"
+        required: false
+        default: "7"
+
+concurrency:
+  group: publishing-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publishing:
+    name: Test Publishing Pipeline
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    env:
+      PYTHON_VERSION: "3.11"
+      VENV_PATH: .venv
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      DAYS_BACK: ${{ inputs.days_back }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure git for commits
+        run: |
+          git config --global user.name "Paul Brown"
+          git config --global user.email "brownpr0@gmail.com"
+
+      - name: Ensure required secrets present
+        run: |
+          missing=()
+          for var in DATABASE_URL GITHUB_TOKEN GITHUB_REPOSITORY; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            pip-${{ runner.os }}-
+
+      - name: Cache virtual environment
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            venv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          if [ ! -d "${VENV_PATH}" ]; then
+            python -m venv "${VENV_PATH}"
+          fi
+          source "${VENV_PATH}/bin/activate"
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Check GitHub Releases
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          echo "=== Checking recent GitHub releases ==="
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 10
+
+      - name: Run Publishing Pipeline
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          source "${VENV_PATH}/bin/activate"
+
+          echo "=== Running Publishing Pipeline ==="
+          echo "Target branch: $TARGET_BRANCH"
+          echo "Repository: $GITHUB_REPOSITORY"
+
+          python scripts/run_publishing.py --verbose
+
+          echo "=== Copying RSS files ==="
+          cp data/rss/daily-digest.xml data/rss/test-feed.xml
+          cp public/daily-digest.xml public/test-feed.xml
+
+          echo "=== Checking for changes to commit ==="
+          git add data/rss/daily-digest.xml data/rss/test-feed.xml \
+            public/daily-digest.xml public/test-feed.xml
+
+          if git diff --cached --quiet; then
+            echo "No repository changes to commit after publishing."
+          else
+            echo "=== Committing RSS feed updates ==="
+            COMMIT_MSG="Update RSS feeds with existing releases - $(date -u +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "$COMMIT_MSG"
+
+            echo "=== Pushing changes ==="
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
+
+            echo "✅ RSS feeds updated and pushed successfully"
+          fi
+
+      - name: Verify RSS Feed Update
+        run: |
+          echo "=== Verifying RSS feed deployment ==="
+          echo "RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml"
+
+          # Give Vercel time to deploy
+          sleep 30
+
+          # Check if RSS contains recent episodes
+          curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
