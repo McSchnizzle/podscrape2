@@ -215,4 +215,51 @@ export class DatabaseClient {
     // Update last_checked timestamp to indicate a manual check was performed
     return this.updateFeed(id, { last_checked: new Date().toISOString() })
   }
+
+  async getPipelineStats() {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+
+      // Get episodes processed today
+      const { count: episodesProcessedToday } = await supabase
+        .from('episodes')
+        .select('*', { count: 'exact', head: true })
+        .gte('updated_at', `${today}T00:00:00Z`)
+        .in('status', ['transcribed', 'scored', 'digested', 'published'])
+
+      // Get digests generated today
+      const { count: digestsGeneratedToday } = await supabase
+        .from('digests')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', `${today}T00:00:00Z`)
+
+      // Get total episodes
+      const { count: totalEpisodes } = await supabase
+        .from('episodes')
+        .select('*', { count: 'exact', head: true })
+
+      // Get last successful digest
+      const { data: lastSuccessfulDigest } = await supabase
+        .from('digests')
+        .select('created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      return {
+        episodesProcessedToday: episodesProcessedToday || 0,
+        digestsGeneratedToday: digestsGeneratedToday || 0,
+        totalEpisodes: totalEpisodes || 0,
+        lastSuccessfulRun: lastSuccessfulDigest?.[0]?.created_at || null
+      }
+    } catch (error) {
+      console.error('Failed to get pipeline stats:', error)
+      return {
+        episodesProcessedToday: 0,
+        digestsGeneratedToday: 0,
+        totalEpisodes: 0,
+        lastSuccessfulRun: null
+      }
+    }
+  }
 }
