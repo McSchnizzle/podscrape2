@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         status: ep.status,
         published_date: ep.published_date,
         scored_at: ep.scored_at,
-        feed_title_display: 'Unknown Feed', // TODO: Re-add feed join once basic query works
+        feed_title_display: ep.feeds?.title || 'Unknown Feed',
         score_labels: scoreLabels,
         included: inclusionMap[ep.id] || [],
         scores: ep.scores || {}

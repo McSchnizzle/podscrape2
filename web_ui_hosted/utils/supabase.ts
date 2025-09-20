@@ -336,11 +336,10 @@ export class DatabaseClient {
         limit = 100
       } = filters
 
-      // First try simple query without join to debug
       let query = supabase
         .from('episodes')
         .select('*')
-        .order('published_date', { ascending: false })
+        .order(sortBy, { ascending: sortDir === 'asc' })
         .limit(limit)
 
       // Apply status filter
@@ -354,11 +353,31 @@ export class DatabaseClient {
 
       let episodes = data || []
 
+      // Get feed titles for episodes (since we can't join due to missing FK constraint)
+      if (episodes.length > 0) {
+        const feedIds = [...new Set(episodes.map(ep => ep.feed_id).filter(Boolean))]
+        if (feedIds.length > 0) {
+          const { data: feeds, error: feedsError } = await supabase
+            .from('feeds')
+            .select('id, title')
+            .in('id', feedIds)
+
+          if (!feedsError && feeds) {
+            const feedMap = Object.fromEntries(feeds.map(f => [f.id, f.title]))
+            episodes = episodes.map(ep => ({
+              ...ep,
+              feeds: ep.feed_id ? { title: feedMap[ep.feed_id] || 'Unknown Feed' } : null
+            }))
+          }
+        }
+      }
+
       // Apply text search on the frontend for simplicity
       if (q) {
         const searchTerm = q.toLowerCase()
         episodes = episodes.filter(ep =>
-          ep.title?.toLowerCase().includes(searchTerm)
+          ep.title?.toLowerCase().includes(searchTerm) ||
+          ep.feeds?.title?.toLowerCase().includes(searchTerm)
         )
       }
 
