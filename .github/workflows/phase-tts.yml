@@ -241,8 +241,12 @@ jobs:
           done
 
           echo "Creating GitHub Release and uploading MP3 assets..."
-          if ! python scripts/publish_release_assets.py --publish-date "$RELEASE_DATE" "${FILES[@]}"; then
+          echo "Command: python scripts/publish_release_assets.py --publish-date \"$RELEASE_DATE\" ${FILES[*]}"
+
+          if ! python scripts/publish_release_assets.py --verbose --publish-date "$RELEASE_DATE" "${FILES[@]}"; then
             echo "ERROR: Failed to create GitHub Release and upload MP3 files"
+            echo "Checking for any GitHub releases created today..."
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 5 || echo "Failed to list releases"
             exit 1
           fi
 
@@ -264,7 +268,7 @@ jobs:
 
           COMMIT_MSG="Add TTS audio files - $(date -u +'%Y-%m-%d %H:%M:%S')"
           git commit -m "$COMMIT_MSG"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_REPOSITORY}.git" "$TARGET_BRANCH"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
 
       - name: Collect TTS logs and MP3 files
         if: always()
