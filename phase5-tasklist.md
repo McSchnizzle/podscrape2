@@ -78,9 +78,22 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 3. **Minimal Auth/Session Hardening**
    - Add basic auth (password or GitHub OAuth) to admin routes; protect secrets. Document in `OPERATIONS.md`.
 
-## Subphase 5.5 — Final Validation & Handover
+## Subphase 5.5 — Mobile Responsiveness & Final Polish
+1. **Mobile Responsiveness**
+   - Ensure all pages work properly on mobile devices (phone/tablet)
+   - Responsive tables, modals, and navigation
+   - Touch-friendly buttons and form controls
+   - Proper viewport scaling and text sizing
+
+2. **Feature Parity Validation**
+   - All Flask UI features implemented in hosted version
+   - Table vs card layout decisions documented
+   - Missing pages implemented (Topics, Episodes, Script Lab, Publishing)
+
+## Subphase 5.6 — Final Validation & Handover
 1. **Regression Tests**
    - Run manual walkthrough plus Playwright (or Cypress) smoke tests against hosted UI for dashboard, feeds/topics, settings, and workflow dispatch.
+   - Mobile device testing on iOS/Android
 
 2. **Runbook Update**
    - Update `OPERATIONS.md` with hosted UI URLs, login steps, workflow dispatch instructions, and troubleshooting tips.

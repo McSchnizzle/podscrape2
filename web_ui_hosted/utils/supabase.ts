@@ -25,6 +25,7 @@ export interface Feed {
   consecutive_failures: number
   last_checked?: string
   last_episode_date?: string
+  latest_episode_title?: string
   total_episodes_processed: number
   total_episodes_failed: number
   created_at: string
@@ -89,11 +90,35 @@ export class DatabaseClient {
   async getFeeds() {
     const { data, error } = await supabase
       .from('feeds')
-      .select('*')
+      .select(`
+        *,
+        episodes(
+          title,
+          published_date
+        )
+      `)
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return data as Feed[]
+
+    // Process feeds to include latest episode data
+    return (data || []).map(feed => {
+      const episodes = (feed as any).episodes || []
+      const latestEpisode = episodes.length > 0
+        ? episodes.reduce((latest: any, current: any) => {
+            if (!latest.published_date) return current
+            if (!current.published_date) return latest
+            return new Date(current.published_date) > new Date(latest.published_date) ? current : latest
+          })
+        : null
+
+      return {
+        ...feed,
+        latest_episode_title: latestEpisode?.title || null,
+        last_episode_date: latestEpisode?.published_date || null,
+        episodes: undefined // Remove the episodes array from the result
+      } as Feed
+    })
   }
 
   async getRecentEpisodes(limit: number = 10) {
@@ -195,5 +220,10 @@ export class DatabaseClient {
 
   async updateFeedHealth(id: number, consecutive_failures: number = 0) {
     return this.updateFeed(id, { consecutive_failures, last_checked: new Date().toISOString() })
+  }
+
+  async checkFeed(id: number) {
+    // Update last_checked timestamp to indicate a manual check was performed
+    return this.updateFeed(id, { last_checked: new Date().toISOString() })
   }
 }
