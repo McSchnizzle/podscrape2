@@ -225,7 +225,7 @@ jobs:
           mapfile -t FILES < "$NEW_LIST"
           PRIMARY_FILE=${FILES[0]}
           BASENAME=$(basename "$PRIMARY_FILE")
-          DATE_PART=$(echo "$BASENAME" | sed -E 's/.*_(\d{8})_\d{6}\.mp3/\1/')
+          DATE_PART=$(echo "$BASENAME" | sed -E 's/.*_([0-9]{8})_[0-9]{6}\.mp3/\1/')
           if [ -z "$DATE_PART" ]; then
             DATE_PART=$(date -u +%Y%m%d)
           fi
