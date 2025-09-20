@@ -340,7 +340,7 @@ export class DatabaseClient {
         .from('episodes')
         .select(`
           *,
-          feeds:feed_id (
+          feeds!feed_id (
             title
           )
         `)
