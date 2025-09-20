@@ -209,6 +209,23 @@ export default function SettingsPage() {
                   disabled={saving}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Days Back for Discovery
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  className="input"
+                  value={getSetting('pipeline', 'days_back', 7)}
+                  onChange={(e) => updateLocalSetting('pipeline', 'days_back', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Number of days to look back when discovering new episodes
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -321,6 +338,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -385,6 +403,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -453,6 +472,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4-turbo">GPT-4 Turbo</option>

@@ -12,6 +12,17 @@ export async function GET(request: NextRequest) {
 
     const db = new DatabaseClient();
 
+    // Test database connection first
+    const healthCheck = await db.getSystemHealth();
+    console.log('Database health check:', healthCheck);
+
+    if (healthCheck.database === 'error') {
+      return NextResponse.json({
+        error: 'Database connection failed',
+        detail: healthCheck.error
+      }, { status: 500 });
+    }
+
     // Get episodes with filters
     const episodes = await db.getEpisodes({
       q,
@@ -20,6 +31,8 @@ export async function GET(request: NextRequest) {
       sortDir,
       limit
     });
+
+    console.log(`Found ${episodes.length} episodes with filters:`, { q, status, sortBy, sortDir, limit });
 
     // Get recent digests to build inclusion map
     const recentDigests = await db.getRecentDigests(14);

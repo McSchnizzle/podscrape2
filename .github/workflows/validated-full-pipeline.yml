@@ -1,18 +1,10 @@
-name: Phase TTS
+name: Validated Full Pipeline
 
 on:
   schedule:
     - cron: '0 5 * * *'  # Daily at 5:00 AM UTC
   workflow_dispatch:
     inputs:
-      limit:
-        description: "Maximum digests to include"
-        required: false
-        default: ""
-      days_back:
-        description: "Discovery lookback window"
-        required: false
-        default: ""
       dry_run:
         description: "Enable dry run mode (true/false)"
         required: false
@@ -24,7 +16,7 @@ concurrency:
 
 jobs:
   tts:
-    name: Run TTS Phase
+    name: Run Validated Pipeline
     runs-on: ubuntu-latest
 
     permissions:
@@ -40,8 +32,6 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
       DRY_RUN: ${{ inputs.dry_run }}
-      LIMIT: ${{ inputs.limit }}
-      DAYS_BACK: ${{ inputs.days_back }}
 
     steps:
       - name: Checkout repository
@@ -115,16 +105,8 @@ jobs:
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
 
-          DISCOVERY_CMD="python scripts/run_discovery.py --verbose --output artifacts/discovery-output.json"
-          if [ -n "$LIMIT" ]; then
-            DISCOVERY_CMD="$DISCOVERY_CMD --limit \"$LIMIT\""
-          fi
-          if [ -n "$DAYS_BACK" ]; then
-            DISCOVERY_CMD="$DISCOVERY_CMD --days-back \"$DAYS_BACK\""
-          fi
-
-          echo "Running: $DISCOVERY_CMD"
-          eval "$DISCOVERY_CMD"
+          echo "Running: python scripts/run_discovery.py --verbose --output artifacts/discovery-output.json"
+          python scripts/run_discovery.py --verbose --output artifacts/discovery-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
@@ -133,13 +115,8 @@ jobs:
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
 
-          AUDIO_CMD="python scripts/run_audio.py --verbose --output artifacts/audio-output.json"
-          if [ -n "$LIMIT" ]; then
-            AUDIO_CMD="$AUDIO_CMD --limit \"$LIMIT\""
-          fi
-
-          echo "Running: $AUDIO_CMD"
-          eval "$AUDIO_CMD < artifacts/discovery-output.json"
+          echo "Running: python scripts/run_audio.py --verbose --output artifacts/audio-output.json"
+          python scripts/run_audio.py --verbose --output artifacts/audio-output.json < artifacts/discovery-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
@@ -148,13 +125,8 @@ jobs:
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
 
-          SCORING_CMD="python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json"
-          if [ -n "$LIMIT" ]; then
-            SCORING_CMD="$SCORING_CMD --limit \"$LIMIT\""
-          fi
-
-          echo "Running: $SCORING_CMD"
-          eval "$SCORING_CMD < artifacts/audio-output.json"
+          echo "Running: python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json"
+          python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json < artifacts/audio-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 

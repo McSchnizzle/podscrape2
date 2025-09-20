@@ -45,11 +45,21 @@ export default function EpisodesPage() {
       if (response.ok) {
         const data = await response.json();
         setEpisodes(data.episodes || []);
+        setMessage(null); // Clear any previous error messages
       } else {
-        console.error('Failed to load episodes');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to load episodes:', errorData);
+        setMessage({
+          type: 'error',
+          text: `Failed to load episodes: ${errorData.error || 'Unknown error'}`
+        });
       }
     } catch (error) {
       console.error('Error loading episodes:', error);
+      setMessage({
+        type: 'error',
+        text: `Network error loading episodes: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
     } finally {
       setLoading(false);
     }

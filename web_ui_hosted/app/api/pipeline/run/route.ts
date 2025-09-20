@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { daysBack = "7", phaseLimit = "publishing" } = body
+    const { dryRun = "false" } = body
 
-    // Trigger the full-pipeline workflow
+    // Trigger the validated full pipeline workflow
     const response = await fetch(
-      `https://api.github.com/repos/${githubRepo}/actions/workflows/full-pipeline.yml/dispatches`,
+      `https://api.github.com/repos/${githubRepo}/actions/workflows/validated-full-pipeline.yml/dispatches`,
       {
         method: 'POST',
         headers: {
@@ -28,8 +28,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           ref: 'main',
           inputs: {
-            days_back: daysBack,
-            phase_limit: phaseLimit
+            dry_run: dryRun
           }
         })
       }
@@ -46,8 +45,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Full pipeline workflow triggered successfully',
-      inputs: { daysBack, phaseLimit }
+      message: 'Validated pipeline workflow triggered successfully',
+      inputs: { dryRun }
     })
 
   } catch (error) {
