@@ -98,13 +98,26 @@ export class DatabaseClient {
 
       if (feedsError) throw feedsError
 
-      // For now, return feeds without episode data to get the page working
-      // We'll add episode data back once the basic functionality is confirmed
-      return (feeds || []).map(feed => ({
-        ...feed,
-        latest_episode_title: null,
-        last_episode_date: null
-      })) as Feed[]
+      // Get latest episode for each feed
+      const feedsWithEpisodes = []
+
+      for (const feed of feeds || []) {
+        // Get the latest episode for this feed
+        const { data: latestEpisode } = await supabase
+          .from('episodes')
+          .select('title, published_date')
+          .eq('feed_id', feed.id)
+          .order('published_date', { ascending: false })
+          .limit(1)
+
+        feedsWithEpisodes.push({
+          ...feed,
+          latest_episode_title: latestEpisode?.[0]?.title || null,
+          last_episode_date: latestEpisode?.[0]?.published_date || null
+        })
+      }
+
+      return feedsWithEpisodes as Feed[]
     } catch (error) {
       console.error('Database error in getFeeds:', error)
       throw error
@@ -147,18 +160,45 @@ export class DatabaseClient {
 
 
   async updateSetting(category: string, key: string, value: string) {
-    const { data, error } = await supabase
+    // Infer value type from the value
+    let value_type = 'string'
+    if (value === 'true' || value === 'false') {
+      value_type = 'bool'
+    } else if (!isNaN(Number(value))) {
+      value_type = value.includes('.') ? 'float' : 'int'
+    }
+
+    // First try to update existing record
+    const { data: updateData, error: updateError } = await supabase
       .from('web_settings')
-      .upsert({
-        category,
-        setting_key: key,
+      .update({
         setting_value: value,
+        value_type: value_type,
         updated_at: new Date().toISOString()
       })
+      .eq('category', category)
+      .eq('setting_key', key)
       .select()
 
-    if (error) throw error
-    return data?.[0] as WebSetting
+    // If update didn't affect any rows, insert a new record
+    if (updateData && updateData.length === 0) {
+      const { data: insertData, error: insertError } = await supabase
+        .from('web_settings')
+        .insert({
+          category,
+          setting_key: key,
+          setting_value: value,
+          value_type: value_type,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+
+      if (insertError) throw insertError
+      return insertData?.[0] as WebSetting
+    }
+
+    if (updateError) throw updateError
+    return updateData?.[0] as WebSetting
   }
 
   // Feed CRUD operations

@@ -22,6 +22,9 @@ export function Navigation() {
               <a href="/feeds" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Feeds
               </a>
+              <a href="/topics" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
+                Topics
+              </a>
               <a href="/settings" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Settings
               </a>
@@ -77,6 +80,13 @@ export function Navigation() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Feeds
+            </a>
+            <a
+              href="/topics"
+              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Topics
             </a>
             <a
               href="/settings"

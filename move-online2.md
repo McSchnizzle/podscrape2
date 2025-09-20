@@ -79,12 +79,12 @@
 - ✅ **Monitoring**: Live logs, system health, downloadable artifacts available
 - ✅ **RSS Generation**: Automatic RSS updates with 32 episodes published successfully
 
-## Phase 5 — Web UI Hosting + DNS ✅ COMPLETED
+## Phase 5 — Web UI Hosting + DNS ⚠️ IN PROGRESS
 
-- ✅ **Next.js/Vercel Deployment**: Complete hosted admin UI at `podcast.paulrbrown.org`
+- ✅ **Next.js/Vercel Deployment**: Basic hosted admin UI at `podcast.paulrbrown.org`
   - ✅ Next.js 14 + TypeScript + TailwindCSS app deployed to Vercel
   - ✅ Supabase connectivity via DatabaseClient with pooled connections
-  - ✅ Complete CRUD interfaces: Settings ✅, Feeds ✅, Episodes browser (basic), Topics (pending)
+  - ⚠️ **Partial CRUD interfaces**: Only 3/8 pages implemented (Dashboard, Feeds, Settings)
   - ✅ Real-time status monitoring and health checks
   - ✅ Professional card-based UI with proper loading states and error handling
 - ✅ **RSS Feed Hosting**: Canonical RSS now served from Vercel
@@ -94,28 +94,35 @@
 - ✅ **GitHub Workflow Dispatch Integration**: Complete UI buttons to trigger pipeline runs
   - ✅ Real GitHub Actions API integration with workflow triggers
   - ✅ Live status monitoring with 30-second refresh intervals
-  - ✅ Working "Run Full Pipeline" and "Publishing Only" buttons
+  - ✅ Working "Run Full Pipeline" and "Publishing Only" buttons (fixed pipeline phase limit issue)
   - ✅ Real-time workflow activity display with status icons
   - ✅ Logs page for detailed workflow monitoring and step progress
   - ✅ Database integration for episode counts and processing stats
-- ✅ **Comprehensive Settings Management**: Complete AI configuration parity with local web UI
+- ⚠️ **Settings Management**: Database loading fixed, saving issues remain
+  - ✅ **Fixed database loading**: Settings now load actual Supabase values (fixed column name mismatch)
+  - ❌ **Saving broken**: Shows "saving" but doesn't persist changes to database
   - ✅ AI Content Scoring: model selection, token limits, batch processing controls
   - ✅ AI Digest Generation: model, output/input tokens, transcript buffer settings
   - ✅ AI Metadata Generation: model, title/summary/description token limits
   - ✅ AI TTS Generation: ElevenLabs model selection, character limits
   - ✅ AI STT Transcription: Whisper model selection, file size limits
   - ✅ Transcript Processing: max length, chunk overlap configuration
-  - ✅ All settings persist to database with real-time updates
 
-**Current Status**: Phase 5 fully completed - All core functionality implemented and tested in production
-**Next Priority**: Phase 6 - Local Dev Parity and Testing
+**Current Issues Blocking Completion**:
+- ❌ **Settings saving bug**: Shows "saving" but changes don't persist
+- ❌ **Feeds page incomplete**: Missing latest episode information
+- ❌ **Missing 5 pages**: Topics, Script Lab, Episodes, Publishing, Maintenance pages not implemented
+- ❌ **Feature parity**: Hosted UI has only 3/8 pages from local Flask UI
+
+**Current Status**: Phase 5 incomplete - Major functionality missing and bugs present
+**Next Priority**: Complete Phase 5 feature parity before Phase 6
 
 Acceptance criteria
 - ✅ Vercel UI loads and shows status from Postgres
-- ✅ Settings and Feeds CRUD fully functional with real-time updates
+- ⚠️ **Settings and Feeds CRUD**: Loading works, saving broken, feeds missing latest episode data
 - ✅ RSS accessible at canonical URL with working enclosure links
 - ✅ Workflow dispatch integration from UI working in production
-- ✅ Complete settings parity with local web UI
+- ❌ **Complete settings parity**: Missing 5 pages, saving functionality broken
 - ✅ Live GitHub Actions status monitoring and workflow triggers
 - ⚠️ Basic authentication protection (deferred to Phase 7 - not critical for current functionality)
 

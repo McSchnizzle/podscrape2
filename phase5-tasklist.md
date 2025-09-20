@@ -96,7 +96,8 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 ## Subphase 5.5 — Complete Feature Parity Implementation ⚠️ IN PROGRESS
 1. **Critical Functionality Fixes** ⚠️
    - ✅ Fix dashboard pipeline triggering (was stopping at discovery phase)
-   - ❌ **Settings page database loading**: Values don't load from database on page load (only saves work)
+   - ✅ **Settings page database loading**: Fixed column name mismatch (setting_key/setting_value vs key/value)
+   - ❌ **Settings page saving bug**: Shows "saving" but changes don't persist to database
    - ❌ **Feeds page missing data**: Latest episode information not displayed for feeds
 
 2. **Missing Pages Implementation** ❌
@@ -137,10 +138,14 @@ Goal: move the Flask-based admin/status UI from local-only usage to a hosted dep
 **Subphase 5.6**: ❌ BLOCKED - Cannot validate until 5.5 complete
 
 **Current Issues Blocking Completion**:
-- ❌ **Settings page**: Values don't load from database (only saves work)
-- ❌ **Feeds page**: Missing latest episode information display
+- ❌ **Settings page saving**: Shows "saving" but changes don't persist to database
+- ❌ **Feeds page incomplete**: Missing latest episode information display
 - ❌ **Missing 5 pages**: Topics, Script Lab, Episodes, Publishing, Maintenance pages not implemented
 - ❌ **Feature parity**: Hosted UI has only 3/8 pages from local Flask UI
+
+**Recent Progress**:
+- ✅ **Fixed settings loading**: Resolved database column name mismatch (setting_key/setting_value vs key/value)
+- ✅ **Fixed pipeline triggering**: Full pipeline now runs completely instead of stopping at discovery phase
 
 **Achievements So Far**:
 - ✅ GitHub Actions workflow integration working in production
