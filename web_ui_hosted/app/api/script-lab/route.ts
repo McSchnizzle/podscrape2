@@ -10,7 +10,8 @@ interface ScriptLabKnobs {
   pace: string;
 }
 
-const PROJECT_ROOT = process.cwd();
+// Project root is one level up from the hosted UI
+const PROJECT_ROOT = path.join(process.cwd(), '..');
 
 const editorKey = (topic: string, key: string): string => `${topic}:${key}`;
 
@@ -18,9 +19,9 @@ const loadTopicInstructions = async (topicName: string): Promise<string> => {
   try {
     const topicsPath = path.join(PROJECT_ROOT, 'config', 'topics.json');
     const topicsData = await fs.readFile(topicsPath, 'utf-8');
-    const topics = JSON.parse(topicsData);
+    const topicsConfig = JSON.parse(topicsData);
 
-    const topic = topics.find((t: any) => t.name === topicName);
+    const topic = topicsConfig.topics.find((t: any) => t.name === topicName);
     if (topic?.instruction_file) {
       const instructionPath = path.join(PROJECT_ROOT, 'digest_instructions', topic.instruction_file);
       try {
@@ -39,9 +40,9 @@ const saveTopicInstructions = async (topicName: string, content: string): Promis
   try {
     const topicsPath = path.join(PROJECT_ROOT, 'config', 'topics.json');
     const topicsData = await fs.readFile(topicsPath, 'utf-8');
-    const topics = JSON.parse(topicsData);
+    const topicsConfig = JSON.parse(topicsData);
 
-    const topic = topics.find((t: any) => t.name === topicName);
+    const topic = topicsConfig.topics.find((t: any) => t.name === topicName);
     if (topic) {
       if (!topic.instruction_file) {
         topic.instruction_file = topicName.replace(/\s+/g, '_') + '.md';
@@ -51,7 +52,7 @@ const saveTopicInstructions = async (topicName: string, content: string): Promis
       await fs.writeFile(instructionPath, content, 'utf-8');
 
       // Save updated topics.json
-      await fs.writeFile(topicsPath, JSON.stringify(topics, null, 2));
+      await fs.writeFile(topicsPath, JSON.stringify(topicsConfig, null, 2));
     }
   } catch (error) {
     throw new Error(`Failed to save instructions: ${error}`);
@@ -83,11 +84,17 @@ export async function GET(request: NextRequest) {
     // Load topic instructions
     const content = await loadTopicInstructions(topic);
 
-    // Load editor knobs from database settings
-    const typeOfShow = await db.getSetting(`editor.${editorKey(topic, 'type_of_show')}`) || 'newscast';
-    const voiceLabel = await db.getSetting(`editor.${editorKey(topic, 'voice_label')}`) || 'American news anchor';
-    const tone = await db.getSetting(`editor.${editorKey(topic, 'tone')}`) || 'neutral';
-    const pace = await db.getSetting(`editor.${editorKey(topic, 'pace')}`) || 'moderate';
+    // Load editor knobs from database settings (match Flask app format)
+    const settings = await db.getSettings();
+    const findSetting = (category: string, key: string): string | null => {
+      const setting = settings.find(s => s.category === category && s.setting_key === key);
+      return setting?.setting_value || null;
+    };
+
+    const typeOfShow = findSetting('editor', editorKey(topic, 'type_of_show')) || 'newscast';
+    const voiceLabel = findSetting('editor', editorKey(topic, 'voice_label')) || 'American news anchor';
+    const tone = findSetting('editor', editorKey(topic, 'tone')) || 'neutral';
+    const pace = findSetting('editor', editorKey(topic, 'pace')) || 'moderate';
 
     return NextResponse.json({
       content,
@@ -129,19 +136,19 @@ export async function POST(request: NextRequest) {
       const voiceId = mapVoiceLabelToId(voice_label);
       const topicsPath = path.join(PROJECT_ROOT, 'config', 'topics.json');
       const topicsData = await fs.readFile(topicsPath, 'utf-8');
-      const topics = JSON.parse(topicsData);
+      const topicsConfig = JSON.parse(topicsData);
 
-      const topicObj = topics.find((t: any) => t.name === topic);
+      const topicObj = topicsConfig.topics.find((t: any) => t.name === topic);
       if (topicObj) {
         topicObj.voice_id = voiceId;
-        await fs.writeFile(topicsPath, JSON.stringify(topics, null, 2));
+        await fs.writeFile(topicsPath, JSON.stringify(topicsConfig, null, 2));
       }
 
-      // Save editor knobs
-      await db.setSetting(`editor.${editorKey(topic, 'type_of_show')}`, type_of_show);
-      await db.setSetting(`editor.${editorKey(topic, 'voice_label')}`, voice_label);
-      await db.setSetting(`editor.${editorKey(topic, 'tone')}`, tone);
-      await db.setSetting(`editor.${editorKey(topic, 'pace')}`, pace);
+      // Save editor knobs (match Flask app format)
+      await db.updateSetting('editor', editorKey(topic, 'type_of_show'), type_of_show);
+      await db.updateSetting('editor', editorKey(topic, 'voice_label'), voice_label);
+      await db.updateSetting('editor', editorKey(topic, 'tone'), tone);
+      await db.updateSetting('editor', editorKey(topic, 'pace'), pace);
 
       return NextResponse.json({
         success: true,

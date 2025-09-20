@@ -64,10 +64,8 @@ function saveTopicsConfig(config: TopicsConfig): void {
 export async function GET() {
   try {
     const config = loadTopicsConfig()
-    return NextResponse.json({
-      topics: config.topics,
-      settings: config.settings
-    })
+    // Return just the topic names for Script Lab compatibility
+    return NextResponse.json(config.topics.map(t => ({ name: t.name })))
   } catch (error) {
     console.error('Topics API error:', error)
     return NextResponse.json(
