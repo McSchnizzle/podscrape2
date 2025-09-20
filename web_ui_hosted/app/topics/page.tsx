@@ -72,7 +72,7 @@ export default function TopicsPage() {
 
   const saveTopics = async () => {
     // Validate topics
-    const errors = []
+    const errors: string[] = []
     topics.forEach((topic, index) => {
       if (!topic.name.trim()) {
         errors.push(`Topic ${index + 1} must have a name`)
