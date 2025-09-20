@@ -56,7 +56,7 @@ export async function GET() {
         event: run.event,
         workflowId: run.workflow_id
       }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by newest first
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) // Sort by newest first
 
     return NextResponse.json({
       workflows,
