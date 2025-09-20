@@ -96,160 +96,481 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Content Filtering */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Content Filtering</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Score Threshold
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="1"
-                className="input"
-                value={getSetting('content_filtering', 'score_threshold', 0.65)}
-                onChange={(e) => updateSetting('content_filtering', 'score_threshold', parseFloat(e.target.value))}
-                disabled={saving}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Minimum relevance score for episodes (0.0 - 1.0)
-              </p>
+      <div className="space-y-8">
+        {/* Core Settings */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Content Filtering */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Content Filtering</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Score Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  className="input"
+                  value={getSetting('content_filtering', 'score_threshold', 0.65)}
+                  onChange={(e) => updateSetting('content_filtering', 'score_threshold', parseFloat(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum relevance score for episodes (0.0 - 1.0)
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Episodes per Digest
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="input"
+                  value={getSetting('content_filtering', 'max_episodes_per_digest', 5)}
+                  onChange={(e) => updateSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Episodes per Digest
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                className="input"
-                value={getSetting('content_filtering', 'max_episodes_per_digest', 5)}
-                onChange={(e) => updateSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
-                disabled={saving}
-              />
+          </div>
+
+          {/* Pipeline Settings */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Episodes per Run
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="input"
+                  value={getSetting('pipeline', 'max_episodes_per_run', 3)}
+                  onChange={(e) => updateSetting('pipeline', 'max_episodes_per_run', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Audio Processing */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Audio Processing</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Chunk Duration (minutes)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                className="input"
-                value={getSetting('audio_processing', 'chunk_duration_minutes', 10)}
-                onChange={(e) => updateSetting('audio_processing', 'chunk_duration_minutes', parseInt(e.target.value))}
-                disabled={saving}
-              />
+        {/* Audio & Transcript Processing */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Audio Processing */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Audio Processing</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Chunk Duration (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  className="input"
+                  value={getSetting('audio_processing', 'chunk_duration_minutes', 10)}
+                  onChange={(e) => updateSetting('audio_processing', 'chunk_duration_minutes', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Chunks per Episode
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  className="input"
+                  value={getSetting('audio_processing', 'max_chunks_per_episode', 3)}
+                  onChange={(e) => updateSetting('audio_processing', 'max_chunks_per_episode', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="transcribe-all-chunks"
+                  className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                  checked={getSetting('audio_processing', 'transcribe_all_chunks', false)}
+                  onChange={(e) => updateSetting('audio_processing', 'transcribe_all_chunks', e.target.checked)}
+                  disabled={saving}
+                />
+                <label htmlFor="transcribe-all-chunks" className="ml-2 text-sm text-gray-700">
+                  Transcribe all chunks
+                </label>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Chunks per Episode
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                className="input"
-                value={getSetting('audio_processing', 'max_chunks_per_episode', 3)}
-                onChange={(e) => updateSetting('audio_processing', 'max_chunks_per_episode', parseInt(e.target.value))}
-                disabled={saving}
-              />
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="transcribe-all-chunks"
-                className="h-4 w-4 text-primary-600 rounded border-gray-300"
-                checked={getSetting('audio_processing', 'transcribe_all_chunks', false)}
-                onChange={(e) => updateSetting('audio_processing', 'transcribe_all_chunks', e.target.checked)}
-                disabled={saving}
-              />
-              <label htmlFor="transcribe-all-chunks" className="ml-2 text-sm text-gray-700">
-                Transcribe all chunks
-              </label>
+          </div>
+
+          {/* Transcript Processing */}
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Transcript Processing</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Transcript Length
+                </label>
+                <input
+                  type="number"
+                  min="1000"
+                  max="50000"
+                  className="input"
+                  value={getSetting('transcript_processing', 'max_transcript_length', 15000)}
+                  onChange={(e) => updateSetting('transcript_processing', 'max_transcript_length', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Maximum characters per transcript for processing
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Chunk Overlap (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  className="input"
+                  value={getSetting('transcript_processing', 'chunk_overlap_seconds', 10)}
+                  onChange={(e) => updateSetting('transcript_processing', 'chunk_overlap_seconds', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Pipeline Settings */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Episodes per Run
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                className="input"
-                value={getSetting('pipeline', 'max_episodes_per_run', 3)}
-                onChange={(e) => updateSetting('pipeline', 'max_episodes_per_run', parseInt(e.target.value))}
-                disabled={saving}
-              />
-            </div>
-          </div>
-        </div>
+        {/* AI Configuration */}
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">AI Configuration</h2>
 
-        {/* Retention Settings */}
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Local MP3s (days)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="90"
-                className="input"
-                value={getSetting('retention', 'local_mp3_days', 7)}
-                onChange={(e) => updateSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
-                disabled={saving}
-              />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* AI Content Scoring */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Content Scoring</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('ai_content_scoring', 'model', 'gpt-4o-mini')}
+                    onChange={(e) => updateSetting('ai_content_scoring', 'model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Output Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="100"
+                    max="4000"
+                    className="input"
+                    value={getSetting('ai_content_scoring', 'max_tokens', 1000)}
+                    onChange={(e) => updateSetting('ai_content_scoring', 'max_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Input Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="200000"
+                    className="input"
+                    value={getSetting('ai_content_scoring', 'max_input_tokens', 120000)}
+                    onChange={(e) => updateSetting('ai_content_scoring', 'max_input_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Episodes per Batch
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    className="input"
+                    value={getSetting('ai_content_scoring', 'max_episodes_per_batch', 10)}
+                    onChange={(e) => updateSetting('ai_content_scoring', 'max_episodes_per_batch', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Audio Cache (days)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                className="input"
-                value={getSetting('retention', 'audio_cache_days', 3)}
-                onChange={(e) => updateSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
-                disabled={saving}
-              />
+
+            {/* AI Digest Generation */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Digest Generation</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'model', 'gpt-4o')}
+                    onChange={(e) => updateSetting('ai_digest_generation', 'model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Output Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="50000"
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'max_output_tokens', 25000)}
+                    onChange={(e) => updateSetting('ai_digest_generation', 'max_output_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Input Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="200000"
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'max_input_tokens', 150000)}
+                    onChange={(e) => updateSetting('ai_digest_generation', 'max_input_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transcript Buffer (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="50"
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'transcript_buffer_percent', 20.0)}
+                    onChange={(e) => updateSetting('ai_digest_generation', 'transcript_buffer_percent', parseFloat(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Buffer percentage for transcript token calculations
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Logs (days)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="365"
-                className="input"
-                value={getSetting('retention', 'logs_days', 30)}
-                onChange={(e) => updateSetting('retention', 'logs_days', parseInt(e.target.value))}
-                disabled={saving}
-              />
+
+            {/* AI Metadata Generation */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Metadata Generation</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('ai_metadata_generation', 'model', 'gpt-4o-mini')}
+                    onChange={(e) => updateSetting('ai_metadata_generation', 'model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Title Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="100"
+                    className="input"
+                    value={getSetting('ai_metadata_generation', 'max_title_tokens', 50)}
+                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_title_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Summary Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="50"
+                    max="500"
+                    className="input"
+                    value={getSetting('ai_metadata_generation', 'max_summary_tokens', 200)}
+                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_summary_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Description Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="100"
+                    max="1000"
+                    className="input"
+                    value={getSetting('ai_metadata_generation', 'max_description_tokens', 500)}
+                    onChange={(e) => updateSetting('ai_metadata_generation', 'max_description_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* AI TTS Generation */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">TTS Generation</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('ai_tts_generation', 'model', 'eleven_turbo_v2_5')}
+                    onChange={(e) => updateSetting('ai_tts_generation', 'model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="eleven_turbo_v2_5">ElevenLabs Turbo v2.5</option>
+                    <option value="eleven_multilingual_v2">ElevenLabs Multilingual v2</option>
+                    <option value="eleven_english_v1">ElevenLabs English v1</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Characters
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="50000"
+                    className="input"
+                    value={getSetting('ai_tts_generation', 'max_characters', 35000)}
+                    onChange={(e) => updateSetting('ai_tts_generation', 'max_characters', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum characters per TTS generation
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AI STT Transcription */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">STT Transcription</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('ai_stt_transcription', 'model', 'whisper-1')}
+                    onChange={(e) => updateSetting('ai_stt_transcription', 'model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="whisper-1">Whisper-1</option>
+                    <option value="local-whisper">Local Whisper</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max File Size (MB)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    className="input"
+                    value={getSetting('ai_stt_transcription', 'max_file_size_mb', 20)}
+                    onChange={(e) => updateSetting('ai_stt_transcription', 'max_file_size_mb', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Retention Settings */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Local MP3s (days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="90"
+                    className="input"
+                    value={getSetting('retention', 'local_mp3_days', 7)}
+                    onChange={(e) => updateSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Audio Cache (days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    className="input"
+                    value={getSetting('retention', 'audio_cache_days', 3)}
+                    onChange={(e) => updateSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Logs (days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    className="input"
+                    value={getSetting('retention', 'logs_days', 30)}
+                    onChange={(e) => updateSetting('retention', 'logs_days', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
