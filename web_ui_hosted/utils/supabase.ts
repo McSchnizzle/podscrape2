@@ -140,4 +140,54 @@ export class DatabaseClient {
     if (error) throw error
     return data?.[0] as WebSetting
   }
+
+  // Feed CRUD operations
+  async createFeed(url: string, title: string) {
+    const { data, error } = await supabase
+      .from('feeds')
+      .insert({
+        url,
+        title,
+        health_status: 'healthy',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+
+    if (error) throw error
+    return data?.[0] as Feed
+  }
+
+  async updateFeed(id: number, updates: Partial<Feed>) {
+    const { data, error } = await supabase
+      .from('feeds')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+
+    if (error) throw error
+    return data?.[0] as Feed
+  }
+
+  async deleteFeed(id: number) {
+    const { error } = await supabase
+      .from('feeds')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return true
+  }
+
+  async toggleFeedActive(id: number, is_active: boolean) {
+    return this.updateFeed(id, { is_active })
+  }
+
+  async updateFeedHealth(id: number, health_status: 'healthy' | 'warning' | 'error') {
+    return this.updateFeed(id, { health_status, last_checked: new Date().toISOString() })
+  }
 }
