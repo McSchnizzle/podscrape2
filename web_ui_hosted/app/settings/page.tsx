@@ -338,6 +338,8 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5">GPT-5</option>
+                    <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
@@ -403,6 +405,8 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5">GPT-5</option>
+                    <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -472,6 +476,8 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5">GPT-5</option>
+                    <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
