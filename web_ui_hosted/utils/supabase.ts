@@ -517,7 +517,7 @@ export class DatabaseClient {
 
       // Get feed titles for episodes (since we can't join due to missing FK constraint)
       if (episodes.length > 0) {
-        const feedIds = [...new Set(episodes.map(ep => ep.feed_id).filter(Boolean))]
+        const feedIds = Array.from(new Set(episodes.map(ep => ep.feed_id).filter(Boolean)))
         if (feedIds.length > 0) {
           const { data: feeds, error: feedsError } = await supabase
             .from('feeds')
