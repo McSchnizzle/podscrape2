@@ -566,6 +566,23 @@ export class DatabaseClient {
     }
   }
 
+  async getDigests(limit: number = 20) {
+    try {
+      const { data, error } = await supabase
+        .from('digests')
+        .select('*')
+        .order('digest_date', { ascending: false })
+        .order('topic', { ascending: true })
+        .limit(limit)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to load digests:', error)
+      return []
+    }
+  }
+
   async getRecentDigests(days: number = 14) {
     try {
       const startDate = new Date()

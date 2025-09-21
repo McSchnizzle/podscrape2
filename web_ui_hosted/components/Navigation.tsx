@@ -31,6 +31,12 @@ export function Navigation() {
               <a href="/episodes" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Episodes
               </a>
+              <a href="/publishing" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
+                Publishing
+              </a>
+              <a href="/maintenance" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
+                Maintenance
+              </a>
               <a href="/settings" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Settings
               </a>
@@ -107,6 +113,20 @@ export function Navigation() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Episodes
+            </a>
+            <a
+              href="/publishing"
+              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Publishing
+            </a>
+            <a
+              href="/maintenance"
+              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Maintenance
             </a>
             <a
               href="/settings"
