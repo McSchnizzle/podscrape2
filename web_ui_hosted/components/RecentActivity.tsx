@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 
 interface Activity {
-  id: number
+  id: string
   type: string
   message: string
   time: string

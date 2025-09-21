@@ -43,6 +43,7 @@ export interface Episode {
   scores?: Record<string, number>
   created_at: string
   updated_at: string
+  inclusion?: Array<{ topic: string; date: string }>
 }
 
 export interface Digest {
@@ -55,6 +56,56 @@ export interface Digest {
   digest_date?: string
   created_at: string
   updated_at: string
+}
+
+export interface TopicRecord {
+  id: number
+  slug: string
+  name: string
+  description?: string
+  voice_id?: string
+  voice_settings?: Record<string, any>
+  instructions_md?: string
+  is_active: boolean
+  sort_order: number
+  last_generated_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TopicInstructionVersionRecord {
+  id: number
+  topic_id: number
+  version: number
+  instructions_md: string
+  change_note?: string
+  created_at: string
+  created_by?: string
+}
+
+export interface PipelineRunRecord {
+  id: string
+  workflow_run_id?: number
+  workflow_name?: string
+  trigger?: string
+  status?: string
+  conclusion?: string
+  started_at?: string
+  finished_at?: string
+  phase?: Record<string, any>
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DigestEpisodeLinkRecord {
+  id: number
+  digest_id: number
+  episode_id: number
+  topic?: string
+  score?: number
+  position?: number
+  created_at: string
 }
 
 export interface WebSetting {
@@ -126,6 +177,89 @@ export class DatabaseClient {
       console.error('Database error in getFeeds:', error)
       throw error
     }
+  }
+
+  async getTopics(): Promise<TopicRecord[]> {
+    const { data, error } = await supabase
+      .from('topics')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+
+    if (error) throw error
+    return data as TopicRecord[]
+  }
+
+  async getTopicByName(name: string): Promise<TopicRecord | null> {
+    const { data, error } = await supabase
+      .from('topics')
+      .select('*')
+      .eq('name', name)
+      .limit(1)
+      .maybeSingle()
+
+    if (error) throw error
+    return data as TopicRecord | null
+  }
+
+  async upsertTopic(topic: Partial<TopicRecord> & { name: string }): Promise<TopicRecord> {
+    const payload = {
+      ...topic,
+      sort_order: topic.sort_order ?? 0,
+      is_active: topic.is_active ?? true,
+    }
+
+    const { data, error } = await supabase
+      .from('topics')
+      .upsert(payload, { onConflict: 'slug' })
+      .select()
+      .limit(1)
+      .single()
+
+    if (error) throw error
+    return data as TopicRecord
+  }
+
+  async deleteTopic(id: number): Promise<void> {
+    const { error } = await supabase
+      .from('topics')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  async addTopicInstructionVersion(params: {
+    topic_id: number
+    instructions_md: string
+    change_note?: string
+    created_by?: string
+  }): Promise<TopicInstructionVersionRecord> {
+    const { data, error } = await supabase
+      .from('topic_instruction_versions')
+      .insert({
+        topic_id: params.topic_id,
+        instructions_md: params.instructions_md,
+        change_note: params.change_note,
+        created_by: params.created_by
+      })
+      .select()
+      .limit(1)
+      .single()
+
+    if (error) throw error
+    return data as TopicInstructionVersionRecord
+  }
+
+  async getPipelineRuns(limit: number = 5): Promise<PipelineRunRecord[]> {
+    const { data, error } = await supabase
+      .from('pipeline_runs')
+      .select('*')
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data as PipelineRunRecord[]
   }
 
   async getRecentEpisodes(limit: number = 10) {
@@ -353,6 +487,34 @@ export class DatabaseClient {
 
       let episodes = data || []
 
+      const episodeIds = episodes.map(ep => ep.id).filter(Boolean)
+      let digestLinks: DigestEpisodeLinkRecord[] = []
+      let digestsMap: Record<number, any> = {}
+
+      if (episodeIds.length > 0) {
+        const { data: linkData, error: linkError } = await supabase
+          .from('digest_episode_links')
+          .select('*')
+          .in('episode_id', episodeIds)
+
+        if (!linkError && linkData) {
+          digestLinks = linkData as DigestEpisodeLinkRecord[]
+          const digestIds = [...new Set(digestLinks.map(link => link.digest_id))]
+          if (digestIds.length > 0) {
+            const { data: digestData, error: digestError } = await supabase
+              .from('digests')
+              .select('id, topic, digest_date')
+              .in('id', digestIds)
+
+            if (!digestError && digestData) {
+              digestData.forEach(d => {
+                digestsMap[d.id] = d
+              })
+            }
+          }
+        }
+      }
+
       // Get feed titles for episodes (since we can't join due to missing FK constraint)
       if (episodes.length > 0) {
         const feedIds = [...new Set(episodes.map(ep => ep.feed_id).filter(Boolean))]
@@ -381,7 +543,23 @@ export class DatabaseClient {
         )
       }
 
-      return episodes
+      const inclusionMap: Record<number, Array<{ topic: string; date: string }>> = {}
+      digestLinks.forEach(link => {
+        const digest = digestsMap[link.digest_id]
+        if (!digest) return
+        if (!inclusionMap[link.episode_id]) {
+          inclusionMap[link.episode_id] = []
+        }
+        inclusionMap[link.episode_id].push({
+          topic: digest.topic,
+          date: digest.digest_date
+        })
+      })
+
+      return episodes.map(ep => ({
+        ...ep,
+        inclusion: inclusionMap[ep.id] || []
+      }))
     } catch (error) {
       console.error('Failed to get episodes:', error)
       return []

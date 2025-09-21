@@ -12,7 +12,16 @@ from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
 
-from ..database.models import Episode, get_episode_repo, Digest, get_digest_repo
+from ..database.models import (
+    Episode,
+    get_episode_repo,
+    Digest,
+    get_digest_repo,
+    TopicRepository,
+    get_topic_repo,
+    DigestEpisodeLink,
+    get_digest_episode_link_repo,
+)
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager
 
@@ -20,13 +29,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TopicInstruction:
-    """Topic instruction loaded from markdown file"""
+    """Topic instruction loaded from database or filesystem."""
     name: str
     filename: str
     content: str
     voice_id: str
     active: bool
     description: str
+    voice_settings: Optional[Dict[str, Any]] = None
+    topic_id: Optional[int] = None
+    source: str = "file"
 
 class ScriptGenerationError(Exception):
     """Raised when script generation fails"""
@@ -38,11 +50,29 @@ class ScriptGenerator:
     Loads instructions from digest_instructions/ directory and enforces word limits.
     """
     
-    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None):
+    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None,
+                 topic_repo: TopicRepository = None, digest_episode_link_repo = None):
         self.web_config = web_config
-        self.config = config_manager or ConfigManager(web_config=web_config)
+        self.topic_repo = topic_repo
+        self.digest_episode_link_repo = digest_episode_link_repo
+
+        self.config = config_manager or ConfigManager(web_config=web_config, topic_repo=self.topic_repo)
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
+        if self.topic_repo is None:
+            try:
+                self.topic_repo = getattr(self.config, "topic_repo", None) or get_topic_repo()
+            except Exception as exc:
+                logger.debug("Topic repository unavailable, falling back to filesystem topics: %s", exc)
+                self.topic_repo = None
+
+        if self.digest_episode_link_repo is None:
+            try:
+                self.digest_episode_link_repo = get_digest_episode_link_repo()
+            except Exception as exc:
+                logger.debug("Digest episode link repository unavailable: %s", exc)
+                self.digest_episode_link_repo = None
+
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         # Per-digest episode cap (from web config if available)
         self.max_episodes_per_digest = 5
@@ -87,45 +117,64 @@ class ScriptGenerator:
     
     def _load_topic_instructions(self) -> Dict[str, TopicInstruction]:
         """Load topic instructions from digest_instructions/ directory"""
-        instructions = {}
+        instructions: Dict[str, TopicInstruction] = {}
         instructions_dir = Path('digest_instructions')
-        
-        if not instructions_dir.exists():
-            raise ScriptGenerationError(f"Instructions directory not found: {instructions_dir}")
+        instructions_dir_exists = instructions_dir.exists()
+        if not instructions_dir_exists:
+            logger.debug("digest_instructions directory not found; relying on database-backed instructions")
         
         for topic in self.topics:
             if not topic.get('active', True):
                 continue
             
+            instructions_md = topic.get('instructions_md')
+            if instructions_md:
+                instructions[topic['name']] = TopicInstruction(
+                    name=topic['name'],
+                    filename=topic.get('instruction_file') or f"{topic.get('slug') or topic['name'].replace(' ', '_')}.md",
+                    content=instructions_md,
+                    voice_id=topic.get('voice_id', ''),
+                    active=topic.get('active', True),
+                    description=topic.get('description', ''),
+                    voice_settings=topic.get('voice_settings'),
+                    topic_id=topic.get('id'),
+                    source='database'
+                )
+                logger.info(f"Loaded instructions for topic (database): {topic['name']}")
+                continue
+
             instruction_file = topic.get('instruction_file')
             if not instruction_file:
-                logger.warning(f"No instruction file specified for topic: {topic['name']}")
+                logger.warning(f"No instruction source for topic: {topic['name']}")
                 continue
-            
-            instruction_path = instructions_dir / instruction_file
-            if not instruction_path.exists():
+
+            instruction_path = instructions_dir / instruction_file if instructions_dir_exists else None
+            if not instruction_path or not instruction_path.exists():
                 logger.warning(f"Instruction file not found: {instruction_path}")
                 continue
-            
+
             try:
                 with open(instruction_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                
+
                 instructions[topic['name']] = TopicInstruction(
                     name=topic['name'],
                     filename=instruction_file,
                     content=content,
                     voice_id=topic.get('voice_id', ''),
                     active=topic.get('active', True),
-                    description=topic.get('description', '')
+                    description=topic.get('description', ''),
+                    voice_settings=topic.get('voice_settings'),
+                    topic_id=topic.get('id'),
+                    source='filesystem'
                 )
-                
-                logger.info(f"Loaded instructions for topic: {topic['name']}")
-                
+
+                logger.info(f"Loaded instructions for topic (filesystem): {topic['name']}")
+
             except Exception as e:
                 logger.error(f"Failed to load instructions for {topic['name']}: {e}")
                 continue
-        
+
         logger.info(f"Loaded instructions for {len(instructions)} topics")
         return instructions
 
@@ -352,6 +401,10 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
 
+        if digest.id:
+            self._persist_digest_links(digest, topic, episodes)
+            self._record_topic_generation(topic, digest_timestamp)
+
         # Mark episodes as digested now that they're included in a digest
         if episodes:  # Only if we actually used episodes
             logger.info(f"Marking {len(episodes)} episodes as digested")
@@ -389,6 +442,46 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         # Episodes are now marked as 'digested' automatically in create_digest()
         return digests
+
+    def _record_topic_generation(self, topic_name: str, generated_at: datetime):
+        """Update topic metadata when a digest is generated."""
+        if not self.topic_repo:
+            return
+        instruction = self.topic_instructions.get(topic_name)
+        if not instruction or instruction.topic_id is None:
+            return
+        try:
+            self.topic_repo.record_generation(instruction.topic_id, generated_at)
+        except Exception as exc:
+            logger.debug("Failed to record topic generation for %s: %s", topic_name, exc)
+
+    def _persist_digest_links(self, digest: Digest, topic_name: str, episodes: List[Episode]):
+        """Persist digest ↔ episode relationships for UI reporting."""
+        if not self.digest_episode_link_repo or not digest.id or not episodes:
+            return
+
+        links: List[DigestEpisodeLink] = []
+        for position, episode in enumerate(episodes, start=1):
+            if episode.id is None:
+                continue
+            score = None
+            if episode.scores and topic_name in episode.scores:
+                score = episode.scores.get(topic_name)
+            links.append(DigestEpisodeLink(
+                digest_id=digest.id,
+                episode_id=episode.id,
+                topic=topic_name,
+                score=score,
+                position=position
+            ))
+
+        if not links:
+            return
+
+        try:
+            self.digest_episode_link_repo.replace_links_for_digest(digest.id, links)
+        except Exception as exc:
+            logger.debug("Failed to persist digest episode links for digest %s: %s", digest.id, exc)
     
     def get_undigested_episodes(self, start_date: date = None, 
                                end_date: date = None, limit: int = 5) -> List[Episode]:

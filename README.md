@@ -156,25 +156,14 @@ python3 scripts/run_tts.py         # Create audio
 python3 scripts/run_publishing.py  # Publish to GitHub/RSS
 ```
 
-#### Topic Configuration (config/topics.json)
-```json
-{
-  "topics": [
-    {
-      "name": "AI News",
-      "instruction_file": "AI News.md",
-      "voice_id": "elevenlabs_voice_id_1",
-      "active": true
-    },
-    {
-      "name": "Tech News and Tech Culture", 
-      "instruction_file": "Tech News and Tech Culture.md",
-      "voice_id": "elevenlabs_voice_id_2",
-      "active": true
-    }
-  ]
-}
-```
+#### Topic Management (Supabase)
+- Topics, instructions, and voice settings now live in the Supabase `topics` table.
+- To migrate legacy JSON/topic files:
+  ```bash
+  python3 scripts/migrate_topics_to_supabase.py --dry-run   # preview
+  python3 scripts/migrate_topics_to_supabase.py             # import into Supabase
+  ```
+- Edit topics from the hosted Web UI (Topics page) or locally via Supabase SQL/editor.
 
 ## 🔄 Daily Operation
 

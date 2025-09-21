@@ -18,6 +18,16 @@ interface PipelineStatus {
     lastSuccessfulRun: string | null
     totalEpisodes: number
   }
+  pipelineRuns?: Array<{
+    id: string
+    status?: string
+    conclusion?: string
+    started_at?: string
+    finished_at?: string
+    workflow_name?: string
+    trigger?: string
+    phase?: { history?: Array<{ phase: string; status: string; timestamp: string }> }
+  }>
 }
 
 export function PipelineStatus() {
@@ -107,6 +117,39 @@ export function PipelineStatus() {
     }
   }
 
+  const renderPipelineRuns = () => {
+    if (!status?.pipelineRuns || status.pipelineRuns.length === 0) {
+      return (
+        <div className="text-sm text-gray-500">No Supabase pipeline runs recorded yet.</div>
+      )
+    }
+
+    return (
+      <div className="space-y-3">
+        {status.pipelineRuns.slice(0, 3).map((run) => {
+          const started = run.started_at ? new Date(run.started_at) : null
+          const finished = run.finished_at ? new Date(run.finished_at) : null
+          const duration = started && finished ? `${Math.round((finished.getTime() - started.getTime()) / 60000)} min` : '—'
+          return (
+            <div key={run.id} className="border border-gray-200 rounded-md p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">{run.workflow_name || 'Pipeline Run'}</span>
+                <span>
+                  {getStatusBadge(run.status || 'unknown', run.conclusion || 'unknown')}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                <div>Trigger: {run.trigger || 'manual'}</div>
+                <div>Started: {started ? started.toLocaleString() : '—'}</div>
+                <div>Duration: {duration}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="card">
@@ -160,6 +203,11 @@ export function PipelineStatus() {
         >
           {triggering ? 'Triggering...' : 'Run Pipeline Now'}
         </button>
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <h4 className="text-sm font-semibold text-gray-700 mb-2">Supabase Pipeline History</h4>
+        {renderPipelineRuns()}
       </div>
     </div>
   )

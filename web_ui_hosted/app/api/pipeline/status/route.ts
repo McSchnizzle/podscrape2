@@ -45,6 +45,7 @@ export async function GET() {
     // Get database stats
     const db = new DatabaseClient()
     const stats = await db.getPipelineStats()
+    const pipelineRuns = await db.getPipelineRuns(5)
 
     return NextResponse.json({
       lastRun: latestRun ? {
@@ -75,7 +76,8 @@ export async function GET() {
         digestsGeneratedToday: stats.digestsGeneratedToday || 0,
         lastSuccessfulRun: stats.lastSuccessfulRun,
         totalEpisodes: stats.totalEpisodes || 0
-      }
+      },
+      pipelineRuns
     })
 
   } catch (error) {

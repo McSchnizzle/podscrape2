@@ -29,6 +29,9 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       GITHUB_REPOSITORY: ${{ secrets.GH_REPOSITORY }}
+      PIPELINE_RUN_ID: ${{ format('{0}-{1}', github.run_id, github.run_attempt) }}
+      PIPELINE_WORKFLOW_NAME: ${{ github.workflow }}
+      PIPELINE_TRIGGER: ${{ github.event_name }}
       DAYS_BACK: ${{ inputs.days_back }}
 
     steps:

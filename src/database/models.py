@@ -9,11 +9,20 @@ from datetime import datetime, date, timedelta, UTC
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, func
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
-from .sqlalchemy_models import Base, Feed as FeedModel, Episode as EpisodeModel, Digest as DigestModel
+from .sqlalchemy_models import (
+    Base,
+    Feed as FeedModel,
+    Episode as EpisodeModel,
+    Digest as DigestModel,
+    Topic as TopicModel,
+    TopicInstructionVersion as TopicInstructionModel,
+    DigestEpisodeLink as DigestEpisodeLinkModel,
+    PipelineRun as PipelineRunModel,
+)
 from src.config.env import require_database_url
 
 # Configure logging
@@ -80,6 +89,60 @@ class Digest:
     published_at: Optional[datetime] = None
     id: Optional[int] = None
     generated_at: Optional[datetime] = None
+
+
+@dataclass
+class Topic:
+    slug: str
+    name: str
+    description: Optional[str] = None
+    voice_id: Optional[str] = None
+    voice_settings: Optional[Dict[str, Any]] = None
+    instructions_md: Optional[str] = None
+    is_active: bool = True
+    sort_order: int = 0
+    last_generated_at: Optional[datetime] = None
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+@dataclass
+class TopicInstructionVersion:
+    topic_id: int
+    version: int
+    instructions_md: str
+    change_note: Optional[str] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    id: Optional[int] = None
+
+
+@dataclass
+class DigestEpisodeLink:
+    digest_id: int
+    episode_id: int
+    topic: Optional[str] = None
+    score: Optional[float] = None
+    position: Optional[int] = None
+    created_at: Optional[datetime] = None
+    id: Optional[int] = None
+
+
+@dataclass
+class PipelineRun:
+    id: str
+    workflow_run_id: Optional[int] = None
+    workflow_name: Optional[str] = None
+    trigger: Optional[str] = None
+    status: Optional[str] = None
+    conclusion: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    phase: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 class DatabaseManager:
     """
@@ -773,6 +836,240 @@ class DigestRepository:
             generated_at=model.generated_at
         )
 
+
+class TopicRepository:
+    """Repository for topic metadata and instructions."""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    def get_active_topics(self) -> List[Topic]:
+        """Return all active topics ordered by sort order/name."""
+        return self._safe_query_topics(active_only=True)
+
+    def get_all_topics(self) -> List[Topic]:
+        """Return all topics (active + inactive)."""
+        return self._safe_query_topics(active_only=False)
+
+    def update_instructions(self, topic_id: int, instructions_md: str,
+                            change_note: str = None, created_by: str = None) -> TopicInstructionVersion:
+        """Persist new instruction text and version for a topic."""
+        with self.db.get_session() as session:
+            try:
+                topic_model = session.query(TopicModel).filter(TopicModel.id == topic_id).first()
+                if topic_model is None:
+                    raise ValueError(f"Topic {topic_id} not found")
+
+                topic_model.instructions_md = instructions_md
+                topic_model.updated_at = datetime.now(UTC)
+
+                latest_version = session.query(func.max(TopicInstructionModel.version))\
+                    .filter(TopicInstructionModel.topic_id == topic_id)\
+                    .scalar() or 0
+
+                version_model = TopicInstructionModel(
+                    topic_id=topic_id,
+                    version=latest_version + 1,
+                    instructions_md=instructions_md,
+                    change_note=change_note,
+                    created_at=datetime.now(UTC),
+                    created_by=created_by
+                )
+                session.add(version_model)
+                session.commit()
+                session.refresh(topic_model)
+                session.refresh(version_model)
+                return self._model_to_instruction_version(version_model)
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to update instructions for topic {topic_id}: {exc}")
+                raise
+
+    def upsert_topic(self, topic: Topic) -> Topic:
+        """Create or update a topic based on slug."""
+        if not topic.slug:
+            raise ValueError("Topic slug must be provided for upsert")
+
+        with self.db.get_session() as session:
+            try:
+                model = session.query(TopicModel).filter(TopicModel.slug == topic.slug).first()
+                now = datetime.now(UTC)
+                voice_settings = topic.voice_settings if topic.voice_settings is None else dict(topic.voice_settings)
+
+                if model:
+                    model.name = topic.name
+                    model.description = topic.description
+                    model.voice_id = topic.voice_id
+                    model.voice_settings = voice_settings
+                    model.is_active = topic.is_active
+                    model.sort_order = topic.sort_order
+                    model.updated_at = now
+                    if topic.last_generated_at:
+                        model.last_generated_at = topic.last_generated_at
+                else:
+                    model = TopicModel(
+                        slug=topic.slug,
+                        name=topic.name,
+                        description=topic.description,
+                        voice_id=topic.voice_id,
+                        voice_settings=voice_settings,
+                        is_active=topic.is_active,
+                        sort_order=topic.sort_order,
+                        instructions_md=topic.instructions_md,
+                        last_generated_at=topic.last_generated_at,
+                        created_at=topic.created_at or now,
+                        updated_at=topic.updated_at or now,
+                    )
+                    session.add(model)
+
+                if topic.instructions_md:
+                    model.instructions_md = topic.instructions_md
+
+                session.commit()
+                session.refresh(model)
+                return self._model_to_topic(model)
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to upsert topic {topic.slug}: {exc}")
+                raise
+
+    def record_generation(self, topic_id: int, generated_at: datetime | None = None):
+        """Update topic metadata when a digest is generated."""
+        with self.db.get_session() as session:
+            try:
+                topic_model = session.query(TopicModel).filter(TopicModel.id == topic_id).first()
+                if topic_model is None:
+                    return
+                topic_model.last_generated_at = generated_at or datetime.now(UTC)
+                topic_model.updated_at = datetime.now(UTC)
+                session.commit()
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to record digest generation for topic {topic_id}: {exc}")
+
+    def _safe_query_topics(self, active_only: bool) -> List[Topic]:
+        with self.db.get_session() as session:
+            try:
+                query = session.query(TopicModel)
+                if active_only:
+                    query = query.filter(TopicModel.is_active == True)  # noqa: E712
+                topic_models = query.order_by(TopicModel.sort_order.asc(), TopicModel.name.asc()).all()
+                return [self._model_to_topic(model) for model in topic_models]
+            except ProgrammingError as exc:
+                # Table might not exist yet during migrations or local dev; log and fallback
+                logger.debug(f"Topics table unavailable: {exc}")
+                return []
+
+    def _model_to_topic(self, model: TopicModel) -> Topic:
+        return Topic(
+            id=model.id,
+            slug=model.slug,
+            name=model.name,
+            description=model.description,
+            voice_id=model.voice_id,
+            voice_settings=model.voice_settings,
+            instructions_md=model.instructions_md,
+            is_active=model.is_active,
+            sort_order=model.sort_order,
+            last_generated_at=model.last_generated_at,
+            created_at=model.created_at,
+            updated_at=model.updated_at
+        )
+
+    def _model_to_instruction_version(self, model: TopicInstructionModel) -> TopicInstructionVersion:
+        return TopicInstructionVersion(
+            id=model.id,
+            topic_id=model.topic_id,
+            version=model.version,
+            instructions_md=model.instructions_md,
+            change_note=model.change_note,
+            created_at=model.created_at,
+            created_by=model.created_by
+        )
+
+
+class DigestEpisodeLinkRepository:
+    """Repository for digest ↔ episode relationship records."""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    def replace_links_for_digest(self, digest_id: int, links: List[DigestEpisodeLink]):
+        """Replace episode links for a given digest in a single transaction."""
+        with self.db.get_session() as session:
+            try:
+                session.query(DigestEpisodeLinkModel).filter(DigestEpisodeLinkModel.digest_id == digest_id).delete()
+                for link in links:
+                    session.add(DigestEpisodeLinkModel(
+                        digest_id=digest_id,
+                        episode_id=link.episode_id,
+                        topic=link.topic,
+                        score=link.score,
+                        position=link.position,
+                        created_at=link.created_at or datetime.now(UTC)
+                    ))
+                session.commit()
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to replace digest links for digest {digest_id}: {exc}")
+                raise
+
+
+class PipelineRunRepository:
+    """Repository for pipeline run metadata used by hosted dashboard."""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    def upsert(self, run: PipelineRun):
+        with self.db.get_session() as session:
+            try:
+                model = session.query(PipelineRunModel).filter(PipelineRunModel.id == run.id).first()
+                if model:
+                    for field in ("workflow_run_id", "workflow_name", "trigger", "status", "conclusion",
+                                  "started_at", "finished_at", "phase", "notes"):
+                        value = getattr(run, field)
+                        if value is not None:
+                            setattr(model, field, value)
+                    model.updated_at = datetime.now(UTC)
+                else:
+                    model = PipelineRunModel(
+                        id=run.id,
+                        workflow_run_id=run.workflow_run_id,
+                        workflow_name=run.workflow_name,
+                        trigger=run.trigger,
+                        status=run.status,
+                        conclusion=run.conclusion,
+                        started_at=run.started_at,
+                        finished_at=run.finished_at,
+                        phase=run.phase,
+                        notes=run.notes,
+                        created_at=run.created_at or datetime.now(UTC),
+                        updated_at=run.updated_at or datetime.now(UTC)
+                    )
+                    session.add(model)
+                session.commit()
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to upsert pipeline run {run.id}: {exc}")
+                raise
+
+    def update_fields(self, run_id: str, **fields):
+        with self.db.get_session() as session:
+            try:
+                model = session.query(PipelineRunModel).filter(PipelineRunModel.id == run_id).first()
+                if not model:
+                    return
+                for key, value in fields.items():
+                    if hasattr(model, key):
+                        setattr(model, key, value)
+                model.updated_at = datetime.now(UTC)
+                session.commit()
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to update pipeline run {run_id}: {exc}")
+
+
 def get_database_manager() -> DatabaseManager:
     """Factory function to get database manager"""
     return DatabaseManager()
@@ -794,3 +1091,24 @@ def get_digest_repo(db_manager: DatabaseManager = None) -> DigestRepository:
     if db_manager is None:
         db_manager = get_database_manager()
     return DigestRepository(db_manager)
+
+
+def get_topic_repo(db_manager: DatabaseManager = None) -> TopicRepository:
+    """Get topic repository"""
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return TopicRepository(db_manager)
+
+
+def get_digest_episode_link_repo(db_manager: DatabaseManager = None) -> DigestEpisodeLinkRepository:
+    """Get digest-episode link repository"""
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return DigestEpisodeLinkRepository(db_manager)
+
+
+def get_pipeline_run_repo(db_manager: DatabaseManager = None) -> PipelineRunRepository:
+    """Get pipeline run repository"""
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return PipelineRunRepository(db_manager)

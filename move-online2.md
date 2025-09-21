@@ -2,6 +2,8 @@
 
 **Pending work to complete the move to online infrastructure**
 
+> **2025-09-20 Update:** See `docs/complete-hosted-migration-plan.md` for the detailed Supabase-first roadmap covering topics/settings migration, pipeline refactors, and hosted UI parity. Items below will be reconciled against that plan as work proceeds on `feature/complete-hosted-migration`.
+
 ## Phase 1a — Database Migration ✅ COMPLETED
 
 - [x] **Utility Script Updates**: Update remaining scripts to use new repository pattern

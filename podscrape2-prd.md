@@ -51,7 +51,7 @@ An optional local Web UI (Flask on 127.0.0.1:5001) provides configuration and op
   - “Check feed” verifies TLS and audio enclosure reachability (no pipeline run)
   - Latest episode title + published date displayed per RSS feed
 - **Topics**:
-  - List/edit topics from `config/topics.json`
+  - List/edit topics from Supabase `topics` table (Web UI Topics page)
   - Edit voice_id, instruction_file (upload/validate under `digest_instructions/`), description, active
   - Persist via `ConfigManager.save_topics()`; ContentScorer uses `ConfigManager` with `WebConfigManager` override
 - **Dashboard**:
@@ -188,7 +188,7 @@ GITHUB_REPOSITORY=your-username/your-repo-name
 
 ### Configuration Files
 - **config/feeds.json**: RSS podcast feed management
-- **config/topics.json**: Topic configuration with voice settings
+- **Supabase topics**: Topic configuration, voice settings, instructions
 - **digest_instructions/*.md**: Topic-specific generation instructions
 
 ## Success Metrics

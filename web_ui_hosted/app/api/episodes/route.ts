@@ -37,23 +37,6 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${episodes.length} episodes with filters:`, { q, status, sortBy, sortDir, limit });
 
     // Get recent digests to build inclusion map
-    const recentDigests = await db.getRecentDigests(14);
-    const inclusionMap: Record<number, Array<{ topic: string; date: string }>> = {};
-
-    for (const digest of recentDigests) {
-      if (digest.episode_ids) {
-        for (const episodeId of digest.episode_ids) {
-          if (!inclusionMap[episodeId]) {
-            inclusionMap[episodeId] = [];
-          }
-          inclusionMap[episodeId].push({
-            topic: digest.topic,
-            date: digest.digest_date || digest.created_at.split('T')[0]
-          });
-        }
-      }
-    }
-
     // Process episodes for display
     const processedEpisodes = episodes.map(ep => {
       // Create score labels
@@ -75,7 +58,7 @@ export async function GET(request: NextRequest) {
         scored_at: ep.scored_at,
         feed_title_display: ep.feeds?.title || 'Unknown Feed',
         score_labels: scoreLabels,
-        included: inclusionMap[ep.id] || [],
+        included: ep.inclusion || [],
         scores: ep.scores || {}
       };
     });

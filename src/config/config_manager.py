@@ -9,12 +9,14 @@ from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
 
+from src.database.models import get_topic_repo, TopicRepository, Topic
+
 logger = logging.getLogger(__name__)
 
 class ConfigManager:
     """Manages application configuration from JSON files"""
     
-    def __init__(self, config_dir: str = "config", web_config: Any = None):
+    def __init__(self, config_dir: str = "config", web_config: Any = None, topic_repo: TopicRepository | None = None):
         # Resolve to project-root-relative config by default to avoid CWD issues
         if config_dir == "config":
             project_root = Path(__file__).parent.parent.parent
@@ -24,6 +26,15 @@ class ConfigManager:
         self._topics_config = None
         # Optional WebConfigManager injection
         self.web_config = web_config
+        # Optional database-backed topic repository
+        self.topic_repo = topic_repo
+        if self.topic_repo is None:
+            try:
+                self.topic_repo = get_topic_repo()
+                logger.debug("Topic repository initialized from database")
+            except Exception as exc:
+                logger.debug("Database topic repository unavailable: %s", exc)
+                self.topic_repo = None
         
     def _load_topics_config(self) -> Dict[str, Any]:
         """Load topics configuration from JSON file"""
@@ -44,7 +55,11 @@ class ConfigManager:
         return self._topics_config
     
     def get_topics(self) -> List[Dict[str, Any]]:
-        """Get list of active topics"""
+        """Get list of active topics."""
+        db_topics = self._get_database_topics(active_only=True)
+        if db_topics:
+            return db_topics
+
         config = self._load_topics_config()
         return [topic for topic in config.get("topics", []) if topic.get("active", True)]
 
@@ -53,6 +68,10 @@ class ConfigManager:
 
         For Web UI management screens where inactive topics must be visible.
         """
+        db_topics = self._get_database_topics(active_only=False)
+        if db_topics:
+            return db_topics
+
         config = self._load_topics_config()
         return list(config.get("topics", []))
     
@@ -123,3 +142,32 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to save topics config: {e}")
             raise
+
+    def _get_database_topics(self, active_only: bool) -> List[Dict[str, Any]]:
+        if not self.topic_repo:
+            return []
+        try:
+            topics = self.topic_repo.get_active_topics() if active_only else self.topic_repo.get_all_topics()
+            if not topics:
+                return []
+            return [self._topic_to_config_dict(topic) for topic in topics if active_only is False or topic.is_active]
+        except Exception as exc:
+            logger.debug("Falling back to JSON topics due to database error: %s", exc)
+            return []
+
+    def _topic_to_config_dict(self, topic: Topic) -> Dict[str, Any]:
+        """Convert Topic dataclass to legacy config-style dict for compatibility."""
+        return {
+            "id": topic.id,
+            "slug": topic.slug,
+            "name": topic.name,
+            "description": topic.description,
+            "voice_id": topic.voice_id,
+            "voice_settings": topic.voice_settings or {},
+            "instructions_md": topic.instructions_md,
+            "instruction_file": None,  # retained for legacy compatibility
+            "active": topic.is_active,
+            "sort_order": topic.sort_order,
+            "last_generated_at": topic.last_generated_at.isoformat() if topic.last_generated_at else None,
+            "source": "database"
+        }

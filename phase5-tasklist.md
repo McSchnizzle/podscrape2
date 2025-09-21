@@ -2,6 +2,8 @@
 
 Goal: move the Flask-based admin/status UI from local-only usage to a hosted deployment on Vercel, wired into Supabase and GitHub Actions. We’ll work through incremental subphases so each milestone is easy to verify.
 
+> **Roadmap Note (2025-09-20):** Hosted migration work is now tracked in `docs/complete-hosted-migration-plan.md`. The remaining tasks below will be updated or closed out as the new plan lands on branch `feature/complete-hosted-migration`.
+
 ## Subphase 5.0 — Wrap Up Phase 4 Prerequisites
 1. **Tune Digest & Episode Limits**
    - Review current settings in `web_settings` and lower `ai_digest_generation` token caps (input/output) to reasonable values for Vercel/Actions execution.

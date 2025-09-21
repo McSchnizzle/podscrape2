@@ -11,6 +11,7 @@ from sqlalchemy import (
     Date,
     Boolean,
     Text,
+    Float,
     Index,
     UniqueConstraint,
 )
@@ -102,3 +103,81 @@ class Digest(Base):
         Index("ix_digests_timestamp", "digest_timestamp"),
     )
 
+
+class Topic(Base):
+    __tablename__ = "topics"
+
+    id = Column(Integer, primary_key=True)
+    slug = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    voice_id = Column(String(255))
+    voice_settings = Column(JSONB)
+    instructions_md = Column(Text)
+    is_active = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    last_generated_at = Column(DateTime(timezone=False))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_topics_active", "is_active"),
+        Index("ix_topics_sort", "sort_order"),
+    )
+
+
+class TopicInstructionVersion(Base):
+    __tablename__ = "topic_instruction_versions"
+
+    id = Column(Integer, primary_key=True)
+    topic_id = Column(Integer, nullable=False)
+    version = Column(Integer, nullable=False)
+    instructions_md = Column(Text, nullable=False)
+    change_note = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_by = Column(String(255))
+
+    __table_args__ = (
+        UniqueConstraint("topic_id", "version", name="uq_topic_instruction_version"),
+        Index("ix_topic_instruction_topic", "topic_id"),
+    )
+
+
+class DigestEpisodeLink(Base):
+    __tablename__ = "digest_episode_links"
+
+    id = Column(Integer, primary_key=True)
+    digest_id = Column(Integer, nullable=False)
+    episode_id = Column(Integer, nullable=False)
+    topic = Column(String(256))
+    score = Column(Float)
+    position = Column(Integer)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_digest_episode_digest", "digest_id"),
+        Index("ix_digest_episode_episode", "episode_id"),
+        UniqueConstraint("digest_id", "episode_id", name="uq_digest_episode"),
+    )
+
+
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id = Column(String(64), primary_key=True)
+    workflow_run_id = Column(Integer)
+    workflow_name = Column(String(255))
+    trigger = Column(String(128))
+    status = Column(String(64))
+    conclusion = Column(String(64))
+    started_at = Column(DateTime(timezone=False))
+    finished_at = Column(DateTime(timezone=False))
+    phase = Column(JSONB)
+    notes = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_pipeline_runs_started", "started_at"),
+        Index("ix_pipeline_runs_workflow", "workflow_run_id"),
+    )
