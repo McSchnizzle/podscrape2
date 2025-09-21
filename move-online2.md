@@ -110,31 +110,29 @@
   - ✅ AI STT Transcription: Whisper model selection, file size limits
   - ✅ Transcript Processing: max length, chunk overlap configuration
 - ✅ **Complete Page Implementation**:
-  - ✅ **Topics page**: Full topic management with voice mappings and instruction files
-  - ✅ **Script Lab page**: Digest generation testing with instruction editing and preview
-  - ✅ **Episodes page**: Complete episode browsing, filtering, and management actions
+  - ✅ **Topics page**: Full topic management with Supabase-backed voice and instruction editing
+  - ✅ **Script Lab page**: Digest generation testing with Supabase instructions and preview
+  - ✅ **Episodes page**: Complete episode browsing, filtering, and digest inclusion badges
   - ✅ **Feeds page**: Enhanced with latest episode data and comprehensive feed management
+  - ✅ **Publishing page**: GitHub releases and RSS publishing management dashboard
+  - ✅ **Maintenance page**: System maintenance tools with pipeline runs and GitHub activity
   - ✅ **Enhanced navigation**: All pages properly linked in responsive navigation
 
-**Remaining Tasks (2/8 pages)**:
-- ⚠️ **Publishing page**: GitHub releases and RSS publishing management
-- ⚠️ **Maintenance page**: System maintenance tools and utilities
-
-**Current Status**: Phase 5 substantially complete - Core functionality implemented
-**Next Priority**: Complete final 2 pages for full feature parity
+**Current Status**: Phase 5 complete – hosted UI achieves feature parity with Supabase data
 
 Acceptance criteria
-- ✅ Vercel UI loads and shows status from Postgres
+- ✅ Vercel UI loads and shows status from Supabase
 - ✅ **Settings and Feeds CRUD**: Complete functionality with manual save UX and latest episode data
 - ✅ RSS accessible at canonical URL with working enclosure links
 - ✅ Workflow dispatch integration from UI working in production
-- ✅ **Major feature parity**: 6/8 pages implemented with core podcast management functionality
+- ✅ **Major feature parity**: 8/8 pages migrated from legacy Flask UI
 - ✅ Live GitHub Actions status monitoring with enhanced refresh capabilities
+- ✅ Playwright smoke suite validates Dashboard, Topics, Publishing, Maintenance, Script Lab, Navigation on Vercel/production
 - ⚠️ Basic authentication protection (deferred to Phase 7 - not critical for current functionality)
 
 ## Phase 6 — Local Dev Parity and Testing
 
-- [ ] Playwright UI tests adapted to run in CI against hosted or local server.
+- [ ] Playwright UI tests adapted to run in CI against hosted or local server. *(Smokes running manually; next step is CI integration.)*
 - [ ] Provide `scripts/run_web_ui.sh` support for prod‑like `.env` and port override.
 - [ ] `scripts/bootstrap_local.sh` to set `.env` with `DATABASE_URL`, verify Supabase connectivity, fetch recent logs (Artifacts) and optionally last N MP3s (from Releases) for debugging.
 - [ ] Document Makefile targets or `scripts/*` commands for common flows:
