@@ -499,7 +499,7 @@ export class DatabaseClient {
 
         if (!linkError && linkData) {
           digestLinks = linkData as DigestEpisodeLinkRecord[]
-          const digestIds = [...new Set(digestLinks.map(link => link.digest_id))]
+          const digestIds = Array.from(new Set(digestLinks.map(link => link.digest_id)))
           if (digestIds.length > 0) {
             const { data: digestData, error: digestError } = await supabase
               .from('digests')
