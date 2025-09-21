@@ -7,7 +7,7 @@ import os
 import json
 import logging
 from datetime import date, datetime, UTC
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
