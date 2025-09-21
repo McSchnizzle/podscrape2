@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 
 interface Topic {
   name: string;
-  instruction_file?: string;
-  voice_id?: string;
 }
 
 interface ScriptLabData {
@@ -41,10 +39,16 @@ export default function ScriptLabPage() {
       try {
         const response = await fetch('/api/topics');
         if (response.ok) {
-          const data = await response.json();
-          setTopics(data);
-          if (data.length > 0 && !selectedTopic) {
-            setSelectedTopic(data[0].name);
+          const payload = await response.json();
+          const list: Topic[] = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload.topics)
+              ? payload.topics.map((topic: any) => ({ name: topic.name }))
+              : [];
+
+          setTopics(list);
+          if (list.length > 0 && !selectedTopic) {
+            setSelectedTopic(list[0].name);
           }
         }
       } catch (error) {
