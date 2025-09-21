@@ -3,14 +3,15 @@
 ## Purpose
 Create a single roadmap for finishing the GitHub + Vercel + Supabase migration. This plan stems from the audit findings, `move-online2.md`, `phase5-tasklist.md`, and `gh-publishing-workflow-learnings.md`, and it targets the seven open issues called out on 2025-09-20.
 
-## Current Gaps Snapshot
-- Hosted Topics & Script Lab still mutate `config/topics.json` and `digest_instructions/*.md`, so Supabase never receives topic changes.
-- Pipelines (discovery → digest) rely on `ConfigManager` + filesystem instructions; validated workflow therefore only processes the `AI and Technology` topic.
-- Episodes + digests tables store relationships via JSON, preventing reliable joins for UI reporting (feed attribution, digest inclusion, run status).
-- `validated-full-pipeline.yml` moves JSON between phases via temp files, with no durable run metadata or GitHub log surfacing for the hosted dashboard.
-- Hosted UI dashboard filters GitHub Actions by legacy workflow names (“Full Pipeline”), so live status/log links are inaccurate.
-- Publishing/Maintenance pages from Flask are missing; live “View Logs” lacks the run parsing that exists in the Flask UI.
-- README/podscrape2-prd still reflect “local Flask first” assumptions and do not document the hosted flow.
+## Current Gaps Snapshot (2025-09-20)
+- [x] Hosted Topics & Script Lab now save to Supabase (`topics`, `topic_instruction_versions`); filesystem files kept as legacy read-only.
+- [x] Pipeline config reads multi-topic metadata from Supabase; orchestrator logs runs to `pipeline_runs`.
+- [x] Episodes API surfaces digest membership via `digest_episode_links` so UI can show feed/digest attribution.
+- [x] `validated-full-pipeline.yml` receives `PIPELINE_RUN_ID` and orchestrator updates Supabase for live monitoring.
+- [x] Hosted dashboard/activity components consume Supabase + GitHub data; workflow labels align with “Run Validated Pipeline”.
+- [x] Publishing & Maintenance pages reimplemented in Next.js using Supabase data and GitHub dispatch APIs.
+- [x] README/PRD/Operations updated for hosted-first workflow and Supabase migration steps.
+- [ ] Automated caching strategy and Playwright smoke suite still pending.
 
 ## Supabase Schema Additions & Changes
 1. `topics`

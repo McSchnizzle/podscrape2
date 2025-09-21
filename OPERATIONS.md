@@ -18,6 +18,23 @@ The following GitHub repository secrets are required for the CI bootstrap and su
 Keep these secrets updated whenever credentials rotate. Validate the full set with the `CI Bootstrap` workflow after any change.
 Run `python scripts/doctor.py` locally and confirm the CI/CD secrets block passes before dispatching workflows.
 
+## Supabase Schema Migration & Backfill (Hosted UI)
+- Ensure Supabase credentials (`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE` if used) are present in your shell or `.env` before running migrations.
+- Apply the latest Alembic migrations:
+  ```bash
+  python3 -m alembic upgrade head
+  ```
+- Backfill topics and instructions from the legacy JSON/markdown files:
+  ```bash
+  python3 scripts/migrate_topics_to_supabase.py --dry-run   # preview changes
+  python3 scripts/migrate_topics_to_supabase.py             # perform import
+  ```
+- After the import succeeds, treat `config/topics.json` and `digest_instructions/*.md` as read-only. Updates should flow through the hosted Topics or Script Lab pages backed by Supabase.
+- Verify the import by visiting the hosted Topics page or querying:
+  ```bash
+  psql "$DATABASE_URL" -c 'select name, slug, last_generated_at from topics order by sort_order;'
+  ```
+
 ## Phase 4 Rollout Log
 
 ### 2025-09-17 — CI Bootstrap Validation
