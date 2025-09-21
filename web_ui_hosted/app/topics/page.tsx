@@ -2,28 +2,24 @@
 
 import { useState, useEffect } from 'react'
 
-interface Topic {
+interface TopicRow {
+  id?: number
   name: string
-  instruction_file: string
+  slug: string
   voice_id: string
-  active: boolean
   description: string
+  active: boolean
+  sort_order: number
+  last_generated_at?: string | null
 }
 
-interface TopicsSettings {
-  score_threshold: number
-  max_words_per_script: number
-  default_voice_settings: {
-    stability: number
-    similarity_boost: number
-    style: number
-    use_speaker_boost: boolean
-  }
-}
+const slugify = (value: string) =>
+  value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'topic'
+
+const scriptLabLink = (name: string) => `/script-lab?topic=${encodeURIComponent(name)}`
 
 export default function TopicsPage() {
-  const [topics, setTopics] = useState<Topic[]>([])
-  const [settings, setSettings] = useState<TopicsSettings | null>(null)
+  const [topics, setTopics] = useState<TopicRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -38,8 +34,17 @@ export default function TopicsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setTopics(data.topics || [])
-        setSettings(data.settings || null)
+        const mapped: TopicRow[] = (data.topics || []).map((topic: any, index: number) => ({
+          id: topic.id,
+          name: topic.name,
+          slug: topic.slug || slugify(topic.name),
+          voice_id: topic.voice_id || '',
+          description: topic.description || '',
+          active: Boolean(topic.active ?? topic.is_active ?? true),
+          sort_order: typeof topic.sort_order === 'number' ? topic.sort_order : index * 10,
+          last_generated_at: topic.last_generated_at || null,
+        }))
+        setTopics(mapped)
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to load topics' })
       }
@@ -51,19 +56,38 @@ export default function TopicsPage() {
   }
 
   const addTopic = () => {
+    const sortOrder = (topics.length + 1) * 10
     setTopics([...topics, {
       name: '',
-      instruction_file: '',
+      slug: `topic-${sortOrder}`,
       voice_id: '',
+      description: '',
       active: true,
-      description: ''
+      sort_order: sortOrder,
+      last_generated_at: null,
     }])
   }
 
-  const updateTopic = (index: number, field: keyof Topic, value: any) => {
-    const newTopics = [...topics]
-    newTopics[index] = { ...newTopics[index], [field]: value }
-    setTopics(newTopics)
+  const updateTopic = (index: number, field: keyof TopicRow, value: any) => {
+    const next = [...topics]
+    const current = next[index]
+    if (!current) return
+
+    if (field === 'name') {
+      const newName = String(value)
+      next[index] = { ...current, name: newName }
+      if (!current.id) {
+        next[index].slug = slugify(newName)
+      }
+    } else if (field === 'slug') {
+      next[index] = { ...current, slug: slugify(String(value)) }
+    } else if (field === 'sort_order') {
+      const numeric = Number(value)
+      next[index] = { ...current, sort_order: Number.isFinite(numeric) ? numeric : current.sort_order }
+    } else {
+      next[index] = { ...current, [field]: value }
+    }
+    setTopics(next)
   }
 
   const removeTopic = (index: number) => {
@@ -71,11 +95,13 @@ export default function TopicsPage() {
   }
 
   const saveTopics = async () => {
-    // Validate topics
     const errors: string[] = []
     topics.forEach((topic, index) => {
       if (!topic.name.trim()) {
         errors.push(`Topic ${index + 1} must have a name`)
+      }
+      if (!topic.slug.trim()) {
+        errors.push(`Topic ${index + 1} requires a slug`)
       }
     })
 
@@ -89,7 +115,17 @@ export default function TopicsPage() {
       const response = await fetch('/api/topics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topics })
+        body: JSON.stringify({
+          topics: topics.map(topic => ({
+            id: topic.id,
+            name: topic.name.trim(),
+            slug: topic.slug.trim(),
+            voice_id: topic.voice_id.trim(),
+            description: topic.description,
+            active: topic.active,
+            sort_order: topic.sort_order,
+          }))
+        })
       })
 
       const data = await response.json()
@@ -97,6 +133,7 @@ export default function TopicsPage() {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Topics saved successfully' })
         setTimeout(() => setMessage(null), 3000)
+        fetchTopics()
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to save topics' })
       }
@@ -120,7 +157,7 @@ export default function TopicsPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Topics</h1>
         <p className="mt-1 text-gray-600">
-          Configure digest topics, voice settings, and instruction files
+          Configure digest topics, voice settings, sort order, and manage instructions via Script Lab
         </p>
       </div>
 
@@ -152,16 +189,18 @@ export default function TopicsPage() {
               <tr>
                 <th className="text-left p-3 border-b font-medium text-gray-700">Active</th>
                 <th className="text-left p-3 border-b font-medium text-gray-700">Name</th>
+                <th className="text-left p-3 border-b font-medium text-gray-700">Slug</th>
                 <th className="text-left p-3 border-b font-medium text-gray-700">Voice ID</th>
-                <th className="text-left p-3 border-b font-medium text-gray-700">Instruction File</th>
                 <th className="text-left p-3 border-b font-medium text-gray-700">Description</th>
+                <th className="text-left p-3 border-b font-medium text-gray-700">Sort Order</th>
+                <th className="text-left p-3 border-b font-medium text-gray-700">Last Generated</th>
                 <th className="text-left p-3 border-b font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
               {topics.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-gray-500">
+                  <td colSpan={8} className="p-6 text-center text-gray-500">
                     No topics configured. Click "Add Topic" to get started.
                   </td>
                 </tr>
@@ -191,20 +230,21 @@ export default function TopicsPage() {
                     <td className="p-3 align-top">
                       <input
                         type="text"
-                        value={topic.voice_id}
-                        onChange={(e) => updateTopic(index, 'voice_id', e.target.value)}
-                        className="input w-56"
-                        placeholder="ElevenLabs Voice ID"
+                        value={topic.slug}
+                        onChange={(e) => updateTopic(index, 'slug', e.target.value)}
+                        className="input w-40"
+                        placeholder="topic-slug"
                         disabled={saving}
+                        required
                       />
                     </td>
                     <td className="p-3 align-top">
                       <input
                         type="text"
-                        value={topic.instruction_file}
-                        onChange={(e) => updateTopic(index, 'instruction_file', e.target.value)}
-                        className="input w-64"
-                        placeholder="e.g., AI and Technology.md"
+                        value={topic.voice_id}
+                        onChange={(e) => updateTopic(index, 'voice_id', e.target.value)}
+                        className="input w-48"
+                        placeholder="ElevenLabs Voice ID"
                         disabled={saving}
                       />
                     </td>
@@ -218,13 +258,33 @@ export default function TopicsPage() {
                       />
                     </td>
                     <td className="p-3 align-top">
-                      <button
-                        onClick={() => removeTopic(index)}
-                        className="px-2 py-1 text-xs rounded border bg-error-100 text-error-700 hover:bg-error-200 border-error-300"
+                      <input
+                        type="number"
+                        value={topic.sort_order}
+                        onChange={(e) => updateTopic(index, 'sort_order', e.target.value)}
+                        className="input w-24"
                         disabled={saving}
-                      >
-                        Remove
-                      </button>
+                      />
+                    </td>
+                    <td className="p-3 align-top text-sm text-gray-500">
+                      {topic.last_generated_at ? new Date(topic.last_generated_at).toLocaleString() : '—'}
+                    </td>
+                    <td className="p-3 align-top">
+                      <div className="flex items-center gap-3">
+                        <a
+                          href={scriptLabLink(topic.name)}
+                          className="text-sm text-primary-600 hover:text-primary-700"
+                        >
+                          Script Lab
+                        </a>
+                        <button
+                          onClick={() => removeTopic(index)}
+                          className="text-sm text-error-600 hover:text-error-700"
+                          disabled={saving}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -233,63 +293,16 @@ export default function TopicsPage() {
           </table>
         </div>
 
-        <div className="flex justify-between items-center mt-6">
-          <div className="text-sm text-gray-600">
-            {topics.length} topic{topics.length !== 1 ? 's' : ''} configured,{' '}
-            {topics.filter(t => t.active).length} active
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="btn-secondary"
-              disabled={saving}
-            >
-              Reset
-            </button>
-            <button
-              onClick={saveTopics}
-              className="btn-primary"
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Save Topics'}
-            </button>
-          </div>
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={saveTopics}
+            className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : 'Save Topics'}
+          </button>
         </div>
       </div>
-
-      {/* Settings Summary */}
-      {settings && (
-        <div className="card">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="font-medium text-gray-700">Score Threshold:</span>{' '}
-              <span className="text-gray-600">{settings.score_threshold}</span>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Max Words per Script:</span>{' '}
-              <span className="text-gray-600">{settings.max_words_per_script.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Voice Stability:</span>{' '}
-              <span className="text-gray-600">{settings.default_voice_settings.stability}</span>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Similarity Boost:</span>{' '}
-              <span className="text-gray-600">{settings.default_voice_settings.similarity_boost}</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-4">
-            These settings are managed in the main settings page and configuration files.
-          </p>
-        </div>
-      )}
-
-      {saving && (
-        <div className="fixed bottom-4 right-4 bg-primary-600 text-white px-4 py-2 rounded-md shadow-lg">
-          Saving...
-        </div>
-      )}
     </div>
   )
 }
