@@ -85,7 +85,11 @@ export default function PublishingPage() {
   const formatDate = (value?: string) => {
     if (!value) return '—'
     const parsed = new Date(value)
-    return isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-US', {
+    if (isNaN(parsed.getTime())) return value
+
+    // Debug: show both UTC and Pacific times
+    const utc = parsed.toLocaleString('en-US', { timeZone: 'UTC' })
+    const pacific = parsed.toLocaleString('en-US', {
       timeZone: 'America/Los_Angeles',
       year: 'numeric',
       month: '2-digit',
@@ -95,6 +99,11 @@ export default function PublishingPage() {
       second: '2-digit',
       hour12: true
     })
+
+    console.log('formatDate:', { input: value, utc, pacific })
+
+    // Temporarily show both to verify conversion is working
+    return `${pacific} PT (was ${utc} UTC)`
   }
 
   const formatDuration = (seconds?: number) => {
