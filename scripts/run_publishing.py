@@ -153,19 +153,23 @@ class PublishingPipelineRunner:
                 'rss_published_at': None  # This field doesn't exist in the new schema
             }
 
-            # Resolve MP3 path if only a filename or missing
-            from src.audio.audio_manager import AudioManager
-            resolved = AudioManager.resolve_existing_mp3_path(digest['mp3_path'])
-            if not resolved:
-                self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
-                continue
+            # If already published to GitHub, include regardless of local file existence
+            if digest['github_url']:
+                self.logger.info(f"Including already published digest: {digest['topic']} - {digest['digest_date']}")
             else:
-                digest['mp3_path'] = str(resolved)
-                # Persist normalized path for future runs
-                try:
-                    self.digest_repo.update_digest(digest_model.id, {'mp3_path': digest['mp3_path']})
-                except Exception:
-                    pass
+                # For unpublished digests, check if local MP3 file exists
+                from src.audio.audio_manager import AudioManager
+                resolved = AudioManager.resolve_existing_mp3_path(digest['mp3_path'])
+                if not resolved:
+                    self.logger.warning(f"MP3 file not found: {digest['mp3_path']}")
+                    continue
+                else:
+                    digest['mp3_path'] = str(resolved)
+                    # Persist normalized path for future runs
+                    try:
+                        self.digest_repo.update_digest(digest_model.id, {'mp3_path': digest['mp3_path']})
+                    except Exception:
+                        pass
 
             digests.append(digest)
 
