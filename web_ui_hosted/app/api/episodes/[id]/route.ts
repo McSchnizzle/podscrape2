@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DatabaseClient } from "@/utils/supabase";
+import { revalidateTag } from 'next/cache';
 
 export async function POST(
   request: NextRequest,
@@ -19,16 +20,26 @@ export async function POST(
     if (action === 'undigest') {
       // Reset episode to 'scored' status
       await db.updateEpisodeStatus(episodeId, 'scored');
+
+      // Invalidate episodes cache
+      revalidateTag('episodes-data');
+      console.log(`Episodes cache invalidated after undigest action on episode ${episodeId}`);
+
       return NextResponse.json({
         success: true,
         message: 'Episode reset to scored status'
       });
     } else if (action === 'reset_to_pending') {
-      // Reset episode to 'pending' status
+      // Reset episode to 'discovered' status (database uses 'discovered', not 'pending')
       await db.updateEpisodeStatus(episodeId, 'discovered');
+
+      // Invalidate episodes cache
+      revalidateTag('episodes-data');
+      console.log(`Episodes cache invalidated after reset_to_pending action on episode ${episodeId}`);
+
       return NextResponse.json({
         success: true,
-        message: 'Episode reset to pending status'
+        message: 'Episode reset to discovered status'
       });
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
