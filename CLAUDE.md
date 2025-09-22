@@ -28,6 +28,19 @@ The system uses PostgreSQL (Supabase) with SQLAlchemy models in `src/database/sq
 
 ## Development Commands
 
+### **CRITICAL: Version Management on Every Commit**
+**IMPORTANT**: Before making any commit, you MUST update the version number in `web_ui_hosted/app/version.ts`:
+
+```typescript
+export const VERSION = "0.78"; // Increment by 0.01 from previous version
+```
+
+**Current version tracking**:
+- Check current version: `web_ui_hosted/app/version.ts`
+- Version guide: `VERSION_GUIDE.md`
+- Every commit increments by 0.01 (e.g., 0.77 → 0.78 → 0.79)
+- Include version in commit message: `feat: add feature (v0.78)`
+
 ### Environment Setup
 ```bash
 # Use python3 explicitly (required on macOS)
