@@ -34,14 +34,14 @@ The hosted UI and pipeline are not fully integrated. Settings changes in the web
 - ✅ Database migration completed: AI & Technology, Social Movements, Psychedelics topics all active with full instructions
 **Validation**: Comprehensive testing confirms web UI changes immediately affect pipeline execution without file dependencies.
 
-### C. Fix Multi-Topic Pipeline Processing 🟡 HIGH
-**Problem**: Only AI & Tech digests appear in publishing data, other topics may not be processed.
-**Impact**: Limited topic coverage in daily digests.
-**Investigation needed**:
-- Debug `run_digest.py` topic discovery logic
-- Verify all active topics get processed
-- Check database for other topic digests
-**Implementation**: Ensure `create_daily_digests()` processes all active topics from database.
+### C. Fix Multi-Topic Pipeline Processing ✅ RESOLVED
+**Status**: ✅ INVESTIGATED - Multi-topic processing works correctly. Issue was content scarcity, not processing failure.
+**Findings**: All 3 topics process successfully with different activity levels based on content availability:
+- AI and Technology: 44 recent digests (34.7% episodes qualify, avg score 0.395)
+- Social Movements: 27 recent digests (22.4% episodes qualify, avg score 0.377)
+- Psychedelics and Spirituality: 2 recent digests (2.6% episodes qualify, avg score 0.071)
+**Root Cause**: Psychedelics content is genuinely rare in RSS feeds (only 1 qualifying episode in 50), not a processing issue.
+**Resolution**: System working as designed. Low psychedelics activity is expected behavior given content scarcity.
 
 ### D. Performance Optimization 🟡 HIGH
 **Problem**: Episodes and Topics pages load slowly due to lack of caching.
@@ -64,7 +64,7 @@ The hosted UI and pipeline are not fully integrated. Settings changes in the web
 ## Implementation Priority
 
 1. **Immediate** (blocks Phase 6): ✅ ~~A. Settings Bridge~~, ✅ ~~B. Topics Migration~~
-2. **Short-term** (UX critical): C. Multi-Topic Fix, D. Performance Caching
+2. **Short-term** (UX critical): ✅ ~~C. Multi-Topic Fix~~, D. Performance Caching
 3. **Nice-to-have**: E. Dashboard Enhancements
 
 ## Success Criteria
