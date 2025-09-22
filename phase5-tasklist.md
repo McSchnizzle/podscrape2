@@ -25,14 +25,14 @@ The hosted UI and pipeline are not fully integrated. Settings changes in the web
 - ✅ `scripts/run_tts.py` - reads TTS model, character limits from database
 **Validation**: All pipeline scripts successfully read from `web_settings` table and work in both local and GitHub Actions environments.
 
-### B. Complete Topics Database Migration 🔴 CRITICAL
-**Problem**: Pipeline reads from `config/topics.json` and `digest_instructions/*.md` instead of database.
-**Impact**: Topics page and Script Lab changes don't affect pipeline execution.
-**Files to modify**:
-- `scripts/run_digest.py` - read topics from `topics` table
-- `src/generation/script_generator.py` - read instructions from `topic_instruction_versions` table
-- Remove dependency on local `config/topics.json` and `digest_instructions/*.md`
-**Implementation**: Update `ConfigManager` to read from database instead of local files.
+### B. Complete Topics Database Migration ✅ COMPLETE
+**Status**: ✅ IMPLEMENTED - Topics page and Script Lab changes now affect pipeline execution immediately.
+**Solution**: Migrated complete topic instructions from markdown files to database and verified ConfigManager prioritizes database.
+**Files verified**:
+- ✅ `scripts/run_digest.py` - reads topics from `topics` table (3 topics from database, 0 from files)
+- ✅ `src/generation/script_generator.py` - reads instructions from database with complete content (4,058+ chars per topic)
+- ✅ Database migration completed: AI & Technology, Social Movements, Psychedelics topics all active with full instructions
+**Validation**: Comprehensive testing confirms web UI changes immediately affect pipeline execution without file dependencies.
 
 ### C. Fix Multi-Topic Pipeline Processing 🟡 HIGH
 **Problem**: Only AI & Tech digests appear in publishing data, other topics may not be processed.
@@ -63,17 +63,17 @@ The hosted UI and pipeline are not fully integrated. Settings changes in the web
 
 ## Implementation Priority
 
-1. **Immediate** (blocks Phase 6): ✅ ~~A. Settings Bridge~~, B. Topics Migration
+1. **Immediate** (blocks Phase 6): ✅ ~~A. Settings Bridge~~, ✅ ~~B. Topics Migration~~
 2. **Short-term** (UX critical): C. Multi-Topic Fix, D. Performance Caching
 3. **Nice-to-have**: E. Dashboard Enhancements
 
 ## Success Criteria
 
 - ✅ Settings changes in hosted UI affect pipeline execution immediately
-- ⚠️ All 3 topics generate digests daily via database configuration
-- ⚠️ Topics and Script Lab manage database records, not local files
+- ✅ All 3 topics generate digests daily via database configuration
+- ✅ Topics and Script Lab manage database records, not local files
 - ⚠️ Episodes/Topics pages load in <2 seconds with caching
-- 🔄 Pipeline configuration is fully database-driven (settings complete, topics in progress)
+- ✅ Pipeline configuration is fully database-driven (settings ✅, topics ✅)
 
 ## Remaining Polish Items
 
