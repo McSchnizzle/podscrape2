@@ -82,14 +82,16 @@ export default function PublishingPage() {
   }
 
   // Format dates in Pacific timezone (PST/PDT)
+  // Database stores UTC timestamps without timezone info, so we need to explicitly treat them as UTC
   const formatDate = (value?: string) => {
     if (!value) return '—'
-    const parsed = new Date(value)
+
+    // The database stores UTC timestamps without timezone info
+    // So when we parse them, we need to explicitly treat them as UTC
+    const parsed = new Date(value + 'Z') // Add 'Z' to indicate UTC
     if (isNaN(parsed.getTime())) return value
 
-    // Debug: show both UTC and Pacific times
-    const utc = parsed.toLocaleString('en-US', { timeZone: 'UTC' })
-    const pacific = parsed.toLocaleString('en-US', {
+    return parsed.toLocaleString('en-US', {
       timeZone: 'America/Los_Angeles',
       year: 'numeric',
       month: '2-digit',
@@ -99,11 +101,6 @@ export default function PublishingPage() {
       second: '2-digit',
       hour12: true
     })
-
-    console.log('formatDate:', { input: value, utc, pacific })
-
-    // Temporarily show both to verify conversion is working
-    return `${pacific} PT (was ${utc} UTC)`
   }
 
   const formatDuration = (seconds?: number) => {
