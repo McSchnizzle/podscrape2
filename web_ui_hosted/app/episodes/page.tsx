@@ -14,7 +14,7 @@ interface Episode {
   scores: Record<string, number>;
 }
 
-const statusOptions = ['', 'discovered', 'transcribed', 'scored', 'digested', 'published', 'not_relevant', 'failed'];
+const statusOptions = ['', 'pending', 'transcribed', 'scored', 'digested', 'published', 'not_relevant', 'failed'];
 const sortByOptions = [
   { value: 'scored_at', label: 'Scored' },
   { value: 'published_date', label: 'Published' },

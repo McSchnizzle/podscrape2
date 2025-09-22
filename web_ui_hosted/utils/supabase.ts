@@ -36,7 +36,7 @@ export interface Episode {
   id: number
   guid: string
   title: string
-  status: 'discovered' | 'transcribed' | 'scored' | 'digested' | 'published' | 'not_relevant' | 'failed'
+  status: 'pending' | 'transcribed' | 'scored' | 'digested' | 'published' | 'not_relevant' | 'failed'
   feed_id: number
   published_date?: string
   scored_at?: string

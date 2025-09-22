@@ -86,18 +86,21 @@ class DiscoveryRunner:
             from src.config.web_config import WebConfigManager
             web_config = WebConfigManager()
 
-            # Apply web settings if no explicit CLI values provided
+            # Apply web settings if no explicit CLI values provided - FAIL FAST if not available
             if limit is None:
-                limit = int(web_config.get_setting('pipeline', 'max_episodes_per_run', 3))
+                setting = web_config.get_setting('pipeline', 'max_episodes_per_run')
+                if setting is None:
+                    raise ValueError("Required database setting 'max_episodes_per_run' not found - pipeline cannot continue")
+                limit = int(setting)
             if days_back == 7:  # Default value, check web config
-                days_back = int(web_config.get_setting('pipeline', 'discovery_lookback_days', 7))
+                setting = web_config.get_setting('pipeline', 'discovery_lookback_days')
+                if setting is None:
+                    raise ValueError("Required database setting 'discovery_lookback_days' not found - pipeline cannot continue")
+                days_back = int(setting)
 
         except Exception as e:
-            self.logger.warning(f"Could not load web config, using defaults: {e}")
-            if limit is None:
-                limit = 3
-            if days_back is None:
-                days_back = 7
+            self.logger.error(f"Failed to load required database settings: {e}")
+            raise ValueError(f"Database configuration required for pipeline operation: {e}")
 
         self.limit = limit
         self.days_back = days_back

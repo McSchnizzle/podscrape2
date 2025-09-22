@@ -207,6 +207,20 @@ gh release view daily-YYYY-MM-DD
 ```
 
 
+### 2025-09-22 — Episode Status Workflow Improvement
+- **Goal**: Eliminate 'discovered' status orphan episodes and improve episode processing workflow
+- **Changes Implemented**:
+  - **Discovery Script**: Removed fallback defaults - pipeline now fails fast if required database settings unavailable
+  - **Web UI**: Changed "Reset to Discovered" to "Reset to Pending" with 'pending' status instead of 'discovered'
+  - **Status Migration**: Migrated 10 existing episodes from 'discovered' to 'pending' status with cleared transcript/score data
+  - **TypeScript Interface**: Updated Episode status type to use 'pending' instead of 'discovered'
+- **Benefits**:
+  - Episodes reset via Web UI now automatically enter processing queue on next discovery run
+  - When discovery finds fewer new episodes than `max_episodes_per_run`, backlog episodes fill remaining slots
+  - Eliminated orphan episodes stuck in unprocessed 'discovered' status
+  - FAIL FAST compliance prevents silent pipeline failures from missing database configuration
+- **Validation**: 10 episodes successfully migrated and ready for processing in next pipeline run
+
 ### 2025-09-19 — Phase 4 Workflow Consolidation & Completion
 - **Status**: ✅ **PHASE 4 COMPLETE** - Full pipeline operational
 - **Primary Workflow**: `Phase TTS` (`.github/workflows/phase-tts.yml`) - **ORCHESTRATED FULL PIPELINE**

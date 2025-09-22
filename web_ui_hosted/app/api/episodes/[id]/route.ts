@@ -30,8 +30,8 @@ export async function POST(
         message: 'Episode reset to scored status'
       });
     } else if (action === 'reset_to_pending') {
-      // Reset episode to 'discovered' status (database uses 'discovered', not 'pending')
-      await db.updateEpisodeStatus(episodeId, 'discovered');
+      // Reset episode to 'pending' status
+      await db.updateEpisodeStatus(episodeId, 'pending');
 
       // Invalidate episodes cache
       revalidateTag('episodes-data');
@@ -39,7 +39,7 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        message: 'Episode reset to discovered status'
+        message: 'Episode reset to pending status'
       });
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

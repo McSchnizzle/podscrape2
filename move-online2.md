@@ -142,6 +142,31 @@ Acceptance criteria
 - Dev can run single phases locally in minutes without incurring cloud costs.
 - UI tests green locally and in CI.
 
+## Phase 6.4 — Episode Status Workflow Improvement ✅ COMPLETED
+
+**Goal**: Eliminate 'discovered' status orphan episodes and improve episode processing workflow.
+
+### **Implementation Status**:
+- ✅ **Fail-Fast Database Configuration**: Removed fallback defaults in discovery script - pipeline now fails immediately if required database settings (`max_episodes_per_run`, `discovery_lookback_days`) are unavailable
+- ✅ **Status Workflow Simplification**:
+  - Eliminated 'discovered' status from Web UI and TypeScript interfaces
+  - Changed "Reset to Discovered" button to "Reset to Pending"
+  - Episodes reset via Web UI now use 'pending' status instead of 'discovered'
+- ✅ **Data Migration**: Migrated 10 existing episodes from 'discovered' to 'pending' status with transcript/score data cleared
+- ✅ **Discovery Phase Integration**: Existing logic already processes 'pending' episodes for resumption
+
+### **Technical Implementation**:
+- **Database Operations**: Episodes with 'pending' status automatically included in discovery phase processing queue
+- **Pipeline Flow**: When discovery finds fewer new episodes than `max_episodes_per_run`, backlog episodes with 'pending' status fill remaining slots
+- **Web UI Workflow**: Reset episode → clears transcripts/scores → sets status to 'pending' → next discovery run picks up episode for processing
+- **FAIL FAST Compliance**: Discovery script now exits with error if required database settings unavailable (no silent fallbacks)
+
+### **Benefits**:
+- ✅ **Eliminated orphan episodes**: No more episodes stuck in 'discovered' status
+- ✅ **Natural backlog processing**: Pending episodes processed when pipeline capacity available
+- ✅ **Improved reliability**: FAIL FAST configuration prevents silent pipeline failures
+- ✅ **Simplified workflow**: Single 'pending' status for all episodes awaiting processing
+
 ## Phase 6.5 — Database Retention and Cleanup System ⚠️ IN PROGRESS
 
 **Goal**: Implement automated database cleanup to prevent database bloat and manage episode/digest lifecycle.

@@ -113,6 +113,14 @@ Cleanup:
 - Test pipeline phase validation logic (check database content exists)
 - Validate GitHub Actions workflows with new architecture (no file system dependencies)
 
+## Completed Polish Items ✅
+
+- ✅ **Episode Status Workflow**: Eliminated 'discovered' status orphan episodes and implemented FAIL FAST database configuration
+  - Migrated 10 episodes from 'discovered' to 'pending' status with cleared transcript/score data
+  - Updated Web UI to use 'pending' status instead of 'discovered' for episode resets
+  - Removed fallback defaults in discovery script - pipeline now fails fast if database settings unavailable
+  - Discovery phase automatically processes 'pending' episodes creating natural backlog system
+
 ## Remaining Polish Items
 
 - ⚠️ **Transcript Database Migration**: Critical for full cloud-native architecture
