@@ -1,0 +1,68 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - heading "Podcast Digest Admin" [level=1] [ref=e8]
+          - generic [ref=e9]:
+            - link "Dashboard" [ref=e10] [cursor=pointer]:
+              - /url: /dashboard
+            - link "Feeds" [ref=e11] [cursor=pointer]:
+              - /url: /feeds
+            - link "Topics" [ref=e12] [cursor=pointer]:
+              - /url: /topics
+            - link "Script Lab" [ref=e13] [cursor=pointer]:
+              - /url: /script-lab
+            - link "Episodes" [ref=e14] [cursor=pointer]:
+              - /url: /episodes
+            - link "Settings" [ref=e15] [cursor=pointer]:
+              - /url: /settings
+        - generic [ref=e16]:
+          - generic [ref=e17]: Hosted Admin Interface
+          - button "Open main menu" [ref=e18]:
+            - generic [ref=e19]: Open main menu
+            - img [ref=e20]
+            - img [ref=e22]
+      - generic [ref=e25]:
+        - link "Dashboard" [ref=e26] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Feeds" [ref=e27] [cursor=pointer]:
+          - /url: /feeds
+        - link "Topics" [ref=e28] [cursor=pointer]:
+          - /url: /topics
+        - link "Script Lab" [ref=e29] [cursor=pointer]:
+          - /url: /script-lab
+        - link "Episodes" [ref=e30] [cursor=pointer]:
+          - /url: /episodes
+        - link "Settings" [ref=e31] [cursor=pointer]:
+          - /url: /settings
+  - main [ref=e32]:
+    - generic [ref=e34]:
+      - generic [ref=e35]:
+        - heading "Dashboard" [level=1] [ref=e36]
+        - paragraph [ref=e37]: Overview of your podcast digest system
+      - generic [ref=e38]:
+        - heading "System Health" [level=3] [ref=e39]
+        - generic [ref=e40]:
+          - generic [ref=e42]: "Database: healthy"
+          - generic [ref=e44]: "Environment: production"
+          - generic [ref=e46]: "Last check: 2:57:55 PM"
+      - generic [ref=e47]:
+        - heading "Pipeline Status" [level=3] [ref=e49]
+        - heading "Recent Activity" [level=3] [ref=e51]
+      - generic [ref=e52]:
+        - heading "Quick Actions" [level=3] [ref=e53]
+        - generic [ref=e54]:
+          - button "Run Full Pipeline" [ref=e55]
+          - button "Publishing Only" [ref=e56]
+          - button "View Logs" [ref=e57]
+          - link "Manage Feeds" [ref=e58] [cursor=pointer]:
+            - /url: /feeds
+          - link "Settings" [ref=e59] [cursor=pointer]:
+            - /url: /settings
+  - contentinfo [ref=e60]:
+    - paragraph [ref=e62]: Powered by Next.js + Supabase + GitHub Actions
+```

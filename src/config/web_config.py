@@ -295,3 +295,72 @@ class WebConfigManager:
             return min(current_value, max_limit) if max_limit > 0 else current_value
 
         return current_value
+
+
+class WebConfigReader:
+    """
+    Simple database configuration reader for pipeline scripts.
+    Provides a lightweight interface to read web_settings without complex initialization.
+    """
+
+    def __init__(self):
+        """Initialize with database connection"""
+        self.web_config = WebConfigManager()
+
+    def get_ai_scoring_config(self) -> Dict[str, Any]:
+        """Get AI content scoring configuration for run_scoring.py"""
+        return {
+            'model': self.web_config.get_setting('ai_content_scoring', 'model', 'gpt-5-mini'),
+            'max_tokens': self.web_config.get_setting('ai_content_scoring', 'max_tokens', 1000),
+            'max_episodes_per_batch': self.web_config.get_setting('ai_content_scoring', 'max_episodes_per_batch', 10),
+            'max_input_tokens': self.web_config.get_setting('ai_content_scoring', 'max_input_tokens', 120000),
+            'prompt_max_chars': self.web_config.get_setting('ai_content_scoring', 'prompt_max_chars', 4000)
+        }
+
+    def get_score_threshold(self) -> float:
+        """Get content filtering score threshold"""
+        return self.web_config.get_setting('content_filtering', 'score_threshold', 0.65)
+
+    def get_ai_digest_config(self) -> Dict[str, Any]:
+        """Get AI digest generation configuration for run_digest.py"""
+        return {
+            'model': self.web_config.get_setting('ai_digest_generation', 'model', 'gpt-5'),
+            'max_output_tokens': self.web_config.get_setting('ai_digest_generation', 'max_output_tokens', 25000),
+            'max_input_tokens': self.web_config.get_setting('ai_digest_generation', 'max_input_tokens', 150000),
+            'transcript_buffer_percent': self.web_config.get_setting('ai_digest_generation', 'transcript_buffer_percent', 20.0),
+            'transcript_min_chars': self.web_config.get_setting('ai_digest_generation', 'transcript_min_chars', 2000),
+            'transcript_max_chars': self.web_config.get_setting('ai_digest_generation', 'transcript_max_chars', 20000)
+        }
+
+    def get_ai_tts_config(self) -> Dict[str, Any]:
+        """Get AI TTS generation configuration for run_tts.py"""
+        return {
+            'model': self.web_config.get_setting('ai_tts_generation', 'model', 'eleven_turbo_v2_5'),
+            'max_characters': self.web_config.get_setting('ai_tts_generation', 'max_characters', 35000)
+        }
+
+    def get_audio_processing_config(self) -> Dict[str, Any]:
+        """Get audio processing configuration for run_audio.py"""
+        return {
+            'chunk_duration_minutes': self.web_config.get_setting('audio_processing', 'chunk_duration_minutes', 10),
+            'transcribe_all_chunks': self.web_config.get_setting('audio_processing', 'transcribe_all_chunks', True),
+            'max_chunks_per_episode': self.web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3),
+            'stt_model': self.web_config.get_setting('ai_stt_transcription', 'model', 'whisper-1'),
+            'max_file_size_mb': self.web_config.get_setting('ai_stt_transcription', 'max_file_size_mb', 20)
+        }
+
+    def get_pipeline_config(self) -> Dict[str, Any]:
+        """Get general pipeline configuration"""
+        return {
+            'max_episodes_per_run': self.web_config.get_setting('pipeline', 'max_episodes_per_run', 3),
+            'discovery_lookback_days': self.web_config.get_setting('pipeline', 'discovery_lookback_days', 3),
+            'max_episodes_per_digest': self.web_config.get_setting('content_filtering', 'max_episodes_per_digest', 5)
+        }
+
+    def get_transcript_processing_config(self) -> Dict[str, Any]:
+        """Get transcript processing configuration"""
+        return {
+            'ad_trim_enabled': self.web_config.get_setting('transcript_processing', 'ad_trim_enabled', True),
+            'ad_trim_start_percent': self.web_config.get_setting('transcript_processing', 'ad_trim_start_percent', 5.0),
+            'ad_trim_end_percent': self.web_config.get_setting('transcript_processing', 'ad_trim_end_percent', 5.0)
+        }

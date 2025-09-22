@@ -51,81 +51,46 @@ class ScoringRunner:
         self.limit = limit
         self.verbose = verbose
 
-        # Store Web UI settings (will be passed to ContentScorer)
-        self.web_settings = {}
+        # Initialize database configuration reader
+        from src.config.web_config import WebConfigReader
+        self.config_reader = WebConfigReader()
+
+        # Get settings from database (CLI overrides still supported for orchestrator)
+        self.scoring_config = self.config_reader.get_ai_scoring_config()
+        self.score_threshold = self.config_reader.get_score_threshold()
+
+        # Apply CLI overrides if provided (for orchestrator compatibility)
         if ai_model is not None:
-            self.web_settings['ai_model'] = ai_model
+            self.scoring_config['model'] = ai_model
         if max_tokens is not None:
-            self.web_settings['max_tokens'] = max_tokens
+            self.scoring_config['max_tokens'] = max_tokens
         if max_input_tokens is not None:
-            self.web_settings['max_input_tokens'] = max_input_tokens
+            self.scoring_config['max_input_tokens'] = max_input_tokens
         if max_episodes_per_batch is not None:
-            self.web_settings['max_episodes_per_batch'] = max_episodes_per_batch
+            self.scoring_config['max_episodes_per_batch'] = max_episodes_per_batch
         if score_threshold is not None:
-            self.web_settings['score_threshold'] = score_threshold
+            self.score_threshold = score_threshold
 
         # Initialize repositories and components
         self.episode_repo = get_episode_repo()
 
-        # Pass Web UI settings to ContentScorer via constructor override
+        # Initialize ContentScorer with database config
         self.content_scorer = self._create_content_scorer()
 
         # Verify API keys
         self._verify_dependencies()
 
         self.logger.info("Content scoring initialized")
-        if self.web_settings:
-            self.logger.info(f"Using Web UI settings: {self.web_settings}")
+        self.logger.info(f"Database settings - Model: {self.scoring_config['model']}, "
+                        f"Max tokens: {self.scoring_config['max_tokens']}, "
+                        f"Score threshold: {self.score_threshold}, "
+                        f"Batch size: {self.scoring_config['max_episodes_per_batch']}")
 
     def _create_content_scorer(self):
-        """Create ContentScorer with Web UI settings override"""
-        if self.web_settings:
-            # Create a wrapper class that overrides specific settings without modifying the database
-            from src.config.web_config import WebConfigManager
-
-            class OverrideWebConfig:
-                def __init__(self, base_config, overrides):
-                    self.base_config = base_config
-                    self.overrides = overrides
-
-                def get_setting(self, category, key, default=None):
-                    # Check if we have an override for this setting
-                    override_key = f"{category}.{key}"
-                    if override_key in self.overrides:
-                        return self.overrides[override_key]
-                    # Fall back to base config
-                    return self.base_config.get_setting(category, key, default)
-
-                def get_category(self, category):
-                    result = self.base_config.get_category(category)
-                    # Apply any overrides for this category
-                    for override_key, value in self.overrides.items():
-                        if override_key.startswith(f"{category}."):
-                            key = override_key.replace(f"{category}.", "")
-                            result[key] = value
-                    return result
-
-                # Forward all other methods to base_config
-                def __getattr__(self, name):
-                    return getattr(self.base_config, name)
-
-            base_config = WebConfigManager()
-            overrides = {}
-
-            # Map CLI settings to config paths (only for settings that ContentScorer actually uses)
-            for key, value in self.web_settings.items():
-                if key == 'ai_model':
-                    overrides['ai_content_scoring.model'] = value
-                elif key in ['max_tokens', 'max_episodes_per_batch']:
-                    overrides[f'ai_content_scoring.{key}'] = value
-                elif key == 'score_threshold':
-                    overrides['content_filtering.score_threshold'] = value
-                # Note: max_input_tokens not used by ContentScorer, skip it
-
-            override_config = OverrideWebConfig(base_config, overrides)
-            return ContentScorer(web_config=override_config)
-        else:
-            return ContentScorer()
+        """Create ContentScorer with database configuration"""
+        # ContentScorer will automatically read from WebConfigManager internally
+        # No need for complex overrides since we're using database-first approach
+        return ContentScorer()
 
     def _verify_dependencies(self):
         """Verify required dependencies"""
@@ -298,15 +263,7 @@ class ScoringRunner:
             # Log scores with qualification status
             self.logger.info("📊 Topic Scores:")
             qualifying_topics = []
-            threshold = 0.65  # Default threshold
-
-            # Try to get threshold from web config
-            try:
-                from src.config.web_config import WebConfigManager
-                web_config = WebConfigManager()
-                threshold = float(web_config.get_setting('content_filtering', 'score_threshold', 0.65))
-            except Exception:
-                pass
+            threshold = self.score_threshold
 
             for topic, score in scoring_result.scores.items():
                 status = "✅ QUALIFIES" if score >= threshold else "   "

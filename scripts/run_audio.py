@@ -52,35 +52,29 @@ class AudioProcessor_Runner:
         self.episode_repo = get_episode_repo()
         self._db_connections = [self.episode_repo]  # Track for cleanup
 
+        # Initialize database configuration reader
+        from src.config.web_config import WebConfigReader
+        self.config_reader = WebConfigReader()
+
+        # Get settings from database
+        self.audio_config = self.config_reader.get_audio_processing_config()
+
         # Verify dependencies
         self._verify_dependencies()
 
-        # Initialize Web UI config for audio settings - minimize database usage
-        chunk_minutes = 3
-        try:
-            from src.config.web_config import WebConfigManager
-            # Use a single config lookup and close immediately
-            web_config = WebConfigManager()
-            try:
-                chunk_minutes = int(web_config.get_setting('audio_processing', 'chunk_duration_minutes', 3))
-            except Exception:
-                pass
-            # Explicitly cleanup web config connection
-            try:
-                web_config.close()
-            except (AttributeError, Exception):
-                pass
-            del web_config  # Explicit cleanup
-        except Exception:
-            pass
-
-        self.audio_processor = AudioProcessor(chunk_duration_minutes=chunk_minutes)
+        self.audio_processor = AudioProcessor(chunk_duration_minutes=self.audio_config['chunk_duration_minutes'])
 
         # Initialize OpenAI Whisper transcriber
         self.transcriber = None
         if self.has_openai_whisper:
             from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
-            self.transcriber = create_openai_whisper_transcriber(chunk_duration_minutes=chunk_minutes)
+            self.transcriber = create_openai_whisper_transcriber(chunk_duration_minutes=self.audio_config['chunk_duration_minutes'])
+
+        self.logger.info("Audio processing initialized")
+        self.logger.info(f"Database settings - Chunk duration: {self.audio_config['chunk_duration_minutes']}min, "
+                        f"Max chunks per episode: {self.audio_config['max_chunks_per_episode']}, "
+                        f"Transcribe all chunks: {self.audio_config['transcribe_all_chunks']}, "
+                        f"STT model: {self.audio_config['stt_model']}")
 
         self.pipeline_logger.log_phase_start("Audio download and transcription processing")
 

@@ -72,6 +72,13 @@ class TTSRunner:
         self.limit = limit
         self.verbose = verbose
 
+        # Initialize database configuration reader
+        from src.config.web_config import WebConfigReader
+        self.config_reader = WebConfigReader()
+
+        # Get settings from database
+        self.tts_config = self.config_reader.get_ai_tts_config()
+
         # Initialize repositories and components
         self.digest_repo = get_digest_repo()
         self.complete_audio_processor = CompleteAudioProcessor()
@@ -80,6 +87,8 @@ class TTSRunner:
         self._verify_dependencies()
 
         self.logger.info("TTS audio generation initialized")
+        self.logger.info(f"Database settings - Model: {self.tts_config['model']}, "
+                        f"Max characters: {self.tts_config['max_characters']}")
 
     def _verify_dependencies(self):
         """Verify required dependencies"""

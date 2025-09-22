@@ -1,171 +1,82 @@
 # Phase 5 Task List — Web UI Hosting & DNS Migration
 
-Goal: move the Flask-based admin/status UI from local-only usage to a hosted deployment on Vercel, wired into Supabase and GitHub Actions. We’ll work through incremental subphases so each milestone is easy to verify.
-
-> **Roadmap Note (2025-09-20):** Hosted migration work is now tracked in `docs/complete-hosted-migration-plan.md`. The remaining tasks below will be updated or closed out as the new plan lands on branch `feature/complete-hosted-migration`.
-
-## Subphase 5.0 — Wrap Up Phase 4 Prerequisites
-1. **Tune Digest & Episode Limits**
-   - Review current settings in `web_settings` and lower `ai_digest_generation` token caps (input/output) to reasonable values for Vercel/Actions execution.
-   - Confirm orchestrator with `--phase digest` finishes in a production (non-dry-run) mode using current configs.
-   - Update `OPERATIONS.md` with the tested settings.
-
-2. **Production Run Through Digest**
-   - Execute `python run_full_pipeline_orchestrator.py --phase digest` (or equivalent workflow) to validate discovery → audio → scoring → digest end-to-end with real writes.
-   - Capture logs/artifacts and note runtime/perf observations for inclusion on the hosted UI.
-
-3. **Document Hosting Architecture Decisions** ✅
-   - Draft a short architecture note covering Vercel app structure, Supabase connection pooling, GitHub dispatch approach, auth mechanism, and log visibility plan.
-   - Store the doc alongside `move-to-yml-learnings.md` for easy reference.
-   - **Completed**: See `hosting-architecture.md` for comprehensive migration plan and technical specifications.
-
-## Subphase 5.1 — Hosted UI Skeleton on Vercel ✅ COMPLETED
-1. **Create Next.js/Vercel Project Stub** ✅
-   - ✅ Scaffolded Next.js 14 + TypeScript + TailwindCSS project under `web_ui_hosted/`
-   - ✅ App Router structure with dashboard, feeds, settings, API routes
-   - ✅ Component library with SystemHealth, PipelineStatus, RecentActivity
-   - ✅ Ready for Vercel deployment with proper configuration
-
-2. **Environment & Secrets** ✅
-   - ✅ Created `.env.example` with all required variables
-   - ✅ Documented in README.md and ready for Vercel configuration
-   - ✅ Environment variables: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE, GITHUB_TOKEN, WEBUI_SECRET
-
-3. **Supabase Connectivity** ✅
-   - ✅ Implemented serverless Supabase client with service role authentication
-   - ✅ DatabaseClient class with connection pooling support
-   - ✅ API routes: `/api/health` for system health checks
-   - ✅ TypeScript interfaces for database entities (Feed, Episode, Digest, WebSetting)
-
-## Subphase 5.2 — Port Existing UI Screens ✅ COMPLETED
-1. **Dashboard Status** ✅
-   - ✅ Recreated dashboard page with SystemHealth component showing database connectivity
-   - ✅ Real-time status checks with Supabase health monitoring
-   - ✅ Ready for GitHub API integration for workflow status
-
-2. **Feeds CRUD** ✅
-   - ✅ Complete feeds management interface at `/feeds` with full CRUD operations
-   - ✅ Extended DatabaseClient with createFeed, updateFeed, deleteFeed, toggleFeedActive methods
-   - ✅ API routes: GET/POST `/api/feeds`, PUT/DELETE `/api/feeds/[id]`
-   - ✅ Modal-based add/edit forms with URL validation and error handling
-   - ✅ Health status indicators (healthy/warning/error) and active/inactive toggles
-   - ✅ Real-time feedback and loading states matching design system
-
-3. **Settings Page** ✅
-   - ✅ Complete settings UI with comprehensive AI configuration matching local web UI
-   - ✅ Content filtering (score threshold, max episodes per digest)
-   - ✅ Audio processing (chunk duration, max chunks, transcribe all toggle)
-   - ✅ Pipeline settings (max episodes per run)
-   - ✅ Retention settings (MP3s, cache, logs retention days)
-   - ✅ AI Content Scoring (model selection, token limits, batch processing)
-   - ✅ AI Digest Generation (model, output/input tokens, transcript buffer)
-   - ✅ AI Metadata Generation (model, title/summary/description tokens)
-   - ✅ AI TTS Generation (ElevenLabs model selection, character limits)
-   - ✅ AI STT Transcription (Whisper model selection, file size limits)
-   - ✅ Transcript Processing (max length, chunk overlap configuration)
-   - ✅ Real-time saving with success/error feedback via API routes
-
-## Subphase 5.3 — Workflow Dispatch Integration ✅ COMPLETED
-1. **GitHub Actions API bridge** ✅
-   - ✅ Implemented serverless routes for triggering workflows via `workflow_dispatch`
-   - ✅ API endpoints: `/api/pipeline/run` (full pipeline), `/api/pipeline/publish` (publishing only)
-   - ✅ Real GitHub API integration using GITHUB_TOKEN with proper error handling
-   - ✅ Created new `full-pipeline.yml` workflow for complete RSS processing
-
-2. **Run Status Surface** ✅
-   - ✅ Real-time status components displaying recent runs, success/failure with GitHub API
-   - ✅ Live status monitoring with 30-second refresh intervals
-   - ✅ Database integration for episode counts and processing stats
-   - ✅ PipelineStatus component shows real GitHub workflow data
-   - ✅ RecentActivity component displays actual GitHub Actions runs with status icons
-
-3. **Live Log Viewing** ✅
-   - ✅ Implemented `/logs` page for detailed workflow monitoring
-   - ✅ Real-time job progress with step-by-step details via `/api/logs/stream`
-   - ✅ Click-to-expand job details with GitHub Actions step tracking
-   - ✅ Direct links to GitHub Actions pages for full log access
-
-## Subphase 5.4 — Publishing & DNS Integration ✅ COMPLETED
-1. **Public Site Structure**
-   - Serve the existing static assets (`public/daily-digest.xml`, eventual multi-feed outputs) from Vercel; ensure caching headers mirror current behaviour.
-
-2. **DNS Cutover**
-   - Update DNS for `podcast.paulrbrown.org` to point to Vercel; confirm certificates and that RSS feed remains accessible at canonical URL.
-
-3. **Minimal Auth/Session Hardening**
-   - Add basic auth (password or GitHub OAuth) to admin routes; protect secrets. Document in `OPERATIONS.md`.
-
-## Subphase 5.5 — Complete Feature Parity Implementation ✅ COMPLETED
-1. **Critical Functionality Fixes** ✅
-   - ✅ Fix dashboard pipeline triggering (was stopping at discovery phase)
-   - ✅ **Settings page database loading**: Fixed column name mismatch (setting_key/setting_value vs key/value)
-   - ✅ **Settings page saving**: Fixed manual save/reset functionality with proper database persistence
-   - ✅ **Feeds page latest episode data**: Added latest episode title and date to feeds display
-
-2. **Pages Implementation Status** ✅ 6/8 COMPLETE
-   **Local web UI has 8 pages total. Hosted UI implementation status:**
-   - ✅ **Dashboard**: Complete with system health, pipeline controls, and GitHub Actions integration
-   - ✅ **Feeds**: Complete with CRUD operations, health status, and latest episode data
-   - ✅ **Topics**: Complete topic management with voice mappings and Supabase instructions
-   - ✅ **Script Lab**: Complete digest generation testing with Supabase-backed editing and preview
-   - ✅ **Episodes**: Complete episode browsing, filtering, and digest inclusion badges
-   - ✅ **Settings**: Complete AI configuration with GPT-5 model options and manual save UX
-   - ✅ **Publishing**: GitHub releases and RSS publishing management
-   - ✅ **Maintenance**: System maintenance tools and workflow dashboards
-
-3. **Mobile Responsiveness**
-   - ✅ Responsive design maintained for existing pages
-   - ❌ Ensure new pages work properly on mobile devices (phone/tablet)
-   - ✅ Touch-friendly buttons and form controls for implemented pages
-   - ❌ Mobile testing for Publishing and Maintenance pages once implemented
-
-4. **Remaining TODO Items** ⚠️ IN PROGRESS
-   **Follow-up work:**
-   - ⚠️ **Fix Dynamic server usage warning**: /api/logs/stream route optimization
-   - ⚠️ **Add footer**: Version/build info display across all pages
-   - ⚠️ Mobile testing on iOS/Android for Publishing and Maintenance pages
-
-## Subphase 5.6 — Final Validation & Handover
-1. **Regression Tests**
-   - ✅ Manual walkthrough completed for hosted UI
-   - ✅ Playwright smoke tests added for Dashboard, Topics, Publishing, Maintenance, Script Lab, Navigation
-   - ❌ Mobile device testing on iOS/Android for all pages
-
-2. **Runbook Update**
-   - ✅ Update `OPERATIONS.md` with Supabase migration steps and hosted workflow references
-
-3. **Signoff & Phase Transition**
-   - ⚠️ Partial documentation updated in `phase5-tasklist.md` and `move-online2.md`
-   - ❌ Final signoff pending completion of remaining 2 pages
-
-## Phase 5 Status Summary ✅ COMPLETE
-
-**Subphase 5.0**: ✅ Prerequisites completed with production validation
-**Subphase 5.1**: ✅ Next.js/Vercel skeleton completed with Supabase connectivity
-**Subphase 5.2**: ✅ Complete CRUD interfaces with full feature parity
-**Subphase 5.3**: ✅ GitHub Actions integration with live workflow monitoring
-**Subphase 5.4**: ✅ RSS hosting completed (auth deferred to Phase 7)
-**Subphase 5.5**: ✅ Complete feature parity (Publishing & Maintenance live)
-**Subphase 5.6**: ⚠️ PARTIAL - Validation in progress (mobile/testing polish outstanding)
-
-**Remaining Work**:
-- ⚠️ **Dynamic server usage warning**: /api/logs/stream route optimization
-- ⚠️ **Footer component**: Version/build info display
-- ⚠️ Mobile device testing on iOS/Android for new pages
+## Phase 5 Status Summary ✅ 85% COMPLETE
 
 **Major Achievements Completed**:
-- ✅ **Complete feature parity**: 8/8 pages from local Flask UI successfully migrated
-- ✅ **Enhanced functionality**: Settings saving with manual save UX and GPT-5 model options
-- ✅ **Real-time monitoring**: GitHub Actions workflow integration and live status
-- ✅ **Professional interface**: Mobile-responsive design deployed to Vercel
-- ✅ **Database integration**: Supabase-backed configuration and pipeline telemetry
-- ✅ **Core workflow functions**: Topics, Script Lab, Episodes, Feeds, Dashboard, Settings, Publishing, Maintenance
+- ✅ **Complete feature parity**: 8/8 pages from local Flask UI successfully migrated to Next.js/Vercel
+- ✅ **Database integration**: Supabase-backed configuration with proper API endpoints
+- ✅ **Real-time monitoring**: GitHub Actions workflow integration and live status monitoring
+- ✅ **RSS Publishing**: Production RSS feed serving 67 episodes at `podcast.paulrbrown.org/daily-digest.xml`
+- ✅ **Professional interface**: Mobile-responsive design with proper error handling
 
-**Ready for Phase 6**: Core functionality complete; focus shifts to test automation and polish
+**Subphases Completed**: 5.0 ✅ | 5.1 ✅ | 5.2 ✅ | 5.3 ✅ | 5.4 ✅ | 5.5 ✅ | 5.6 ⚠️ Partial
 
-## Notes
-- Subphases 5.0-5.5 substantially completed and verified
-- Production deployment stable with 8/8 pages implemented (feature parity achieved)
-- Authentication deferred to Phase 7 as not critical for current operations
-- **Current Status**: Major functionality complete, core workflow operational
-- **Phase 6 Ready**: Sufficient functionality for local dev parity and testing workflows
+## Critical Integration Issues ⚠️ BLOCKING PHASE 6
+
+The hosted UI and pipeline are not fully integrated. Settings changes in the web UI don't affect pipeline execution, and topics are still managed via local files instead of the database.
+
+### A. Settings Bridge Implementation 🔴 CRITICAL
+**Problem**: Pipeline scripts use hardcoded values instead of reading from `web_settings` database table.
+**Impact**: Settings changes in hosted UI don't affect pipeline execution.
+**Files to modify**:
+- `scripts/run_digest.py` - read model selection, token limits from database
+- `scripts/run_scoring.py` - read score thresholds, batch size from database
+- `scripts/run_audio.py` - read audio processing settings from database
+- `scripts/run_tts.py` - read TTS model, character limits from database
+**Implementation**: Create `WebConfigReader` class to fetch settings from `web_settings` table in pipeline scripts.
+
+### B. Complete Topics Database Migration 🔴 CRITICAL
+**Problem**: Pipeline reads from `config/topics.json` and `digest_instructions/*.md` instead of database.
+**Impact**: Topics page and Script Lab changes don't affect pipeline execution.
+**Files to modify**:
+- `scripts/run_digest.py` - read topics from `topics` table
+- `src/generation/script_generator.py` - read instructions from `topic_instruction_versions` table
+- Remove dependency on local `config/topics.json` and `digest_instructions/*.md`
+**Implementation**: Update `ConfigManager` to read from database instead of local files.
+
+### C. Fix Multi-Topic Pipeline Processing 🟡 HIGH
+**Problem**: Only AI & Tech digests appear in publishing data, other topics may not be processed.
+**Impact**: Limited topic coverage in daily digests.
+**Investigation needed**:
+- Debug `run_digest.py` topic discovery logic
+- Verify all active topics get processed
+- Check database for other topic digests
+**Implementation**: Ensure `create_daily_digests()` processes all active topics from database.
+
+### D. Performance Optimization 🟡 HIGH
+**Problem**: Episodes and Topics pages load slowly due to lack of caching.
+**Impact**: Poor user experience on data-heavy pages.
+**Implementation**:
+- Add Redis or in-memory caching for Episodes page (30-second cache)
+- Implement caching layer for Topics page data
+- Optimize database queries with proper indexing
+- Consider pagination for large episode datasets
+
+### E. Dashboard & Monitoring Enhancements 🟢 NICE-TO-HAVE
+**Problem**: Limited real-time visibility into pipeline execution status.
+**Impact**: Difficult to monitor system health and debug issues.
+**Implementation**:
+- Improve real-time log streaming from GitHub Actions
+- Add meaningful metrics (processing rate, error rate, queue depth)
+- Show actual pipeline phase progress during execution
+- Display last successful run per topic
+
+## Implementation Priority
+
+1. **Immediate** (blocks Phase 6): A. Settings Bridge, B. Topics Migration
+2. **Short-term** (UX critical): C. Multi-Topic Fix, D. Performance Caching
+3. **Nice-to-have**: E. Dashboard Enhancements
+
+## Success Criteria
+
+- ✅ Settings changes in hosted UI affect pipeline execution immediately
+- ✅ All 3 topics generate digests daily via database configuration
+- ✅ Topics and Script Lab manage database records, not local files
+- ✅ Episodes/Topics pages load in <2 seconds with caching
+- ✅ Pipeline configuration is fully database-driven
+
+## Remaining Polish Items
+
+- ⚠️ **Dynamic server usage warning**: /api/logs/stream route optimization
+- ⚠️ **Footer component**: Version/build info display across all pages
+- ⚠️ Mobile device testing on iOS/Android for all pages

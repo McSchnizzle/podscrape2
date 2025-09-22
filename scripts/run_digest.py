@@ -53,9 +53,16 @@ class DigestRunner:
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
 
-        # Initialize script generator
+        # Initialize database configuration reader
+        from src.config.web_config import WebConfigReader, WebConfigManager
+        self.config_reader = WebConfigReader()
+
+        # Get settings from database
+        self.digest_config = self.config_reader.get_ai_digest_config()
+        self.pipeline_config = self.config_reader.get_pipeline_config()
+
+        # Initialize script generator with web config
         try:
-            from src.config.web_config import WebConfigManager
             self.web_config = WebConfigManager()
         except Exception:
             self.web_config = None
@@ -73,6 +80,10 @@ class DigestRunner:
         self._verify_dependencies()
 
         self.logger.info("Digest generation initialized")
+        self.logger.info(f"Database settings - Model: {self.digest_config['model']}, "
+                        f"Max output tokens: {self.digest_config['max_output_tokens']}, "
+                        f"Max input tokens: {self.digest_config['max_input_tokens']}, "
+                        f"Max episodes per digest: {self.pipeline_config['max_episodes_per_digest']}")
 
     def _verify_dependencies(self):
         """Verify required dependencies"""
