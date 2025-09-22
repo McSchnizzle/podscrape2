@@ -585,19 +585,7 @@ class PipelineOrchestrator:
 
         self._finalize_pipeline_run('success', summary)
 
-        # Run retention cleanup using WebConfig settings
-        if self.retention_manager:
-            try:
-                self.logger.info("🧹 Running retention cleanup...")
-                cleanup_stats = self.retention_manager.cleanup_all(dry_run=self.dry_run)
-                if cleanup_stats.files_deleted > 0 or cleanup_stats.github_releases_deleted > 0:
-                    self.logger.info(f"   Cleaned up {cleanup_stats.files_deleted} files, {cleanup_stats.github_releases_deleted} GitHub releases")
-                    self.logger.info(f"   Freed {cleanup_stats.bytes_freed / (1024*1024):.1f} MB")
-                else:
-                    self.logger.info("   No files needed cleanup")
-            except Exception as e:
-                self.logger.warning(f"⚠️  Retention cleanup failed: {e}")
-
+        # Note: Retention cleanup now happens at beginning of discovery phase
         self.logger.info(f"\n📋 Log File: {self.log_file}")
         self.logger.info("🚀 Pipeline orchestration completed successfully!")
 

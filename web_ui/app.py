@@ -722,8 +722,18 @@ def create_app():
                 web_config.set_setting('pipeline', 'max_episodes_per_run', max_run_eps)
             except Exception as e:
                 errors.append(f'max_episodes_per_run: {e}')
+            try:
+                discovery_lookback = int(request.form.get('discovery_lookback_days', current['pipeline'].get('discovery_lookback_days', 7)))
+                web_config.set_setting('pipeline', 'discovery_lookback_days', discovery_lookback)
+            except Exception as e:
+                errors.append(f'discovery_lookback_days: {e}')
             # Retention settings
             try:
+                # New database retention settings
+                web_config.set_setting('retention', 'episode_retention_days', int(request.form.get('ret_episodes', current['retention'].get('episode_retention_days', 14))))
+                web_config.set_setting('retention', 'digest_retention_days', int(request.form.get('ret_digests', current['retention'].get('digest_retention_days', 14))))
+
+                # Legacy/existing retention settings
                 web_config.set_setting('retention', 'local_mp3_days', int(request.form.get('ret_local_mp3', current['retention'].get('local_mp3_days', 7))))
                 web_config.set_setting('retention', 'audio_cache_days', int(request.form.get('ret_audio_cache', current['retention'].get('audio_cache_days', 3))))
                 web_config.set_setting('retention', 'audio_chunks_days', int(request.form.get('ret_audio_chunks', current['retention'].get('audio_chunks_days', 1))))

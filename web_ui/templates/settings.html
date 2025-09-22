@@ -37,26 +37,44 @@
       <h3 class="font-semibold mb-2">Pipeline</h3>
       <label class="block text-sm">Max episodes per full run (1–20)</label>
       <input name="max_episodes_per_run" type="number" min="1" max="20" class="border rounded w-full p-2" value="{{ current.pipeline.max_episodes_per_run }}">
+
+      <label class="block text-sm mt-3">Discovery lookback days (1–30)</label>
+      <input name="discovery_lookback_days" type="number" min="1" max="30" class="border rounded w-full p-2" value="{{ current.pipeline.discovery_lookback_days if current.pipeline.discovery_lookback_days else 7 }}" id="discovery_lookback_days">
+      <p class="text-xs text-gray-500 mt-1">How far back to search for new episodes</p>
     </div>
   </div>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div>
       <h3 class="font-semibold mb-2">Retention (days)</h3>
-      <label class="block text-sm">Local MP3 files</label>
-      <input name="ret_local_mp3" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.local_mp3_days if current.retention else 7 }}">
-      <label class="block text-sm mt-3">Audio cache</label>
-      <input name="ret_audio_cache" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_cache_days if current.retention else 3 }}">
-      <label class="block text-sm mt-3">Audio chunks</label>
-      <input name="ret_audio_chunks" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_chunks_days if current.retention else 1 }}">
+      <label class="block text-sm">Episodes database records</label>
+      <input name="ret_episodes" type="number" min="7" max="365" class="border rounded w-full p-2" value="{{ current.retention.episode_retention_days if current.retention.episode_retention_days else 14 }}" id="episode_retention_days">
+      <p class="text-xs text-gray-500 mt-1">Must be greater than discovery lookback days</p>
+
+      <label class="block text-sm mt-3">Digests database records</label>
+      <input name="ret_digests" type="number" min="7" max="365" class="border rounded w-full p-2" value="{{ current.retention.digest_retention_days if current.retention.digest_retention_days else 14 }}">
+
+      <label class="block text-sm mt-3">Local MP3 files (legacy)</label>
+      <input name="ret_local_mp3" type="number" min="0" max="365" class="border rounded w-full p-2 opacity-50" value="{{ current.retention.local_mp3_days if current.retention else 7 }}" readonly>
+      <p class="text-xs text-gray-400 mt-1">Managed by audio phase cleanup</p>
     </div>
     <div>
       <h3 class="font-semibold mb-2">&nbsp;</h3>
       <label class="block text-sm">Logs</label>
       <input name="ret_logs" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.logs_days if current.retention else 30 }}">
+
       <label class="block text-sm mt-3">Scripts</label>
       <input name="ret_scripts" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.scripts_days if current.retention else 14 }}">
+
       <label class="block text-sm mt-3">GitHub releases</label>
       <input name="ret_github_releases" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.github_releases_days if current.retention else 14 }}">
+
+      <div class="mt-3 opacity-50">
+        <label class="block text-sm">Audio cache (legacy)</label>
+        <input name="ret_audio_cache" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_cache_days if current.retention else 3 }}" readonly>
+        <label class="block text-sm mt-2">Audio chunks (legacy)</label>
+        <input name="ret_audio_chunks" type="number" min="0" max="365" class="border rounded w-full p-2" value="{{ current.retention.audio_chunks_days if current.retention else 1 }}" readonly>
+        <p class="text-xs text-gray-400 mt-1">Managed by audio phase cleanup</p>
+      </div>
     </div>
   </div>
 
@@ -278,6 +296,34 @@ document.addEventListener('DOMContentLoaded', function() {
             validateInputLimit(this);
         });
     });
+
+    // Add validation for retention vs lookback days
+    const discoveryLookbackInput = document.getElementById('discovery_lookback_days');
+    const episodeRetentionInput = document.getElementById('episode_retention_days');
+
+    function validateRetentionSettings() {
+        const lookbackDays = parseInt(discoveryLookbackInput.value) || 0;
+        const retentionDays = parseInt(episodeRetentionInput.value) || 0;
+
+        if (lookbackDays >= retentionDays) {
+            // Auto-adjust retention to be lookback + 1 (minimum buffer)
+            const newRetentionDays = lookbackDays + 1;
+            episodeRetentionInput.value = newRetentionDays;
+            episodeRetentionInput.style.borderColor = '#f59e0b'; // amber
+            showTooltip(episodeRetentionInput, `Auto-adjusted to ${newRetentionDays} (must be > ${lookbackDays})`);
+        } else {
+            episodeRetentionInput.style.borderColor = '#10b981'; // green
+            clearTooltip(episodeRetentionInput);
+        }
+    }
+
+    if (discoveryLookbackInput && episodeRetentionInput) {
+        discoveryLookbackInput.addEventListener('input', validateRetentionSettings);
+        episodeRetentionInput.addEventListener('input', validateRetentionSettings);
+
+        // Validate on page load
+        validateRetentionSettings();
+    }
 
     function updateLimitsForSelector(selector) {
         const selectedOption = selector.options[selector.selectedIndex];

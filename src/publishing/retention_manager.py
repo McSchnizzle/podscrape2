@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from ..utils.logging_config import get_logger
 from ..utils.error_handling import PodcastError
 from .github_publisher import GitHubPublisher, create_github_publisher
+from ..database.models import DatabaseManager
+from ..database.sqlalchemy_models import Episode as EpisodeModel, Digest as DigestModel
 
 logger = get_logger(__name__)
 
@@ -34,8 +36,10 @@ class CleanupStats:
     directories_deleted: int = 0
     bytes_freed: int = 0
     github_releases_deleted: int = 0
+    episodes_deleted: int = 0
+    digests_deleted: int = 0
     errors: List[str] = None
-    
+
     def __post_init__(self):
         if self.errors is None:
             self.errors = []
@@ -47,54 +51,39 @@ class RetentionManager:
     
     def __init__(self, retention_policies: List[RetentionPolicy] = None,
                  github_publisher: GitHubPublisher = None,
-                 github_release_days: int = None):
+                 github_release_days: int = None,
+                 database_manager: DatabaseManager = None):
         """
         Initialize retention manager
-        
+
         Args:
             retention_policies: List of retention policies to apply
             github_publisher: GitHub publisher for release cleanup (optional)
+            database_manager: Database manager for episode/digest cleanup (optional)
         """
         self.retention_policies = retention_policies or self._get_default_policies()
         self.github_publisher = github_publisher or create_github_publisher()
         self.github_release_retention_days = github_release_days or 14
-        
+        self.database_manager = database_manager
+
         logger.info(f"Retention Manager initialized with {len(self.retention_policies)} policies")
     
     def _get_default_policies(self) -> List[RetentionPolicy]:
         """Get default retention policies for the project"""
         project_root = Path(__file__).parent.parent.parent
-        
+
         return [
             RetentionPolicy(
-                name="Local MP3 Files",
-                path_pattern=str(project_root / "data" / "completed-tts"),
-                retention_days=7,
-                file_pattern="*.mp3"
-            ),
-            RetentionPolicy(
-                name="Audio Cache",
-                path_pattern=str(project_root / "data" / "audio_cache"),
-                retention_days=3,
-                file_pattern="*.mp3"
-            ),
-            RetentionPolicy(
-                name="Audio Chunks",
-                path_pattern=str(project_root / "data" / "audio_chunks"),
-                retention_days=1,
-                file_pattern="*.mp3"
-            ),
-            RetentionPolicy(
                 name="Old Logs",
-                path_pattern=str(project_root / "data" / "logs"),
+                path_pattern=str(project_root / "logs"),
                 retention_days=30,
                 file_pattern="*.log"
             ),
             RetentionPolicy(
-                name="Old Scripts",
-                path_pattern=str(project_root / "data" / "scripts"),
-                retention_days=14,
-                file_pattern="*.md"
+                name="Legacy Transcript Files",
+                path_pattern=str(project_root / "data" / "transcripts"),
+                retention_days=1,
+                file_pattern="*.txt"
             )
         ]
     
@@ -112,11 +101,15 @@ class RetentionManager:
         stats = CleanupStats()
         
         try:
+            # Run database cleanup first (episodes and digests)
+            database_stats = self._cleanup_database_records(dry_run)
+            self._merge_stats(stats, database_stats)
+
             # Run local file cleanup
             for policy in self.retention_policies:
                 policy_stats = self._cleanup_local_files(policy, dry_run)
                 self._merge_stats(stats, policy_stats)
-            
+
             # Run GitHub cleanup
             if self.github_publisher:
                 github_stats = self._cleanup_github_releases(dry_run, retention_days=self.github_release_retention_days)
@@ -125,9 +118,11 @@ class RetentionManager:
             # Summary
             if dry_run:
                 logger.info(f"Dry run complete - would delete {stats.files_deleted} files, "
+                           f"{stats.episodes_deleted} episodes, {stats.digests_deleted} digests, "
                            f"free {self._format_bytes(stats.bytes_freed)}")
             else:
                 logger.info(f"Cleanup complete - deleted {stats.files_deleted} files, "
+                           f"{stats.episodes_deleted} episodes, {stats.digests_deleted} digests, "
                            f"freed {self._format_bytes(stats.bytes_freed)}")
             
             return stats
@@ -137,7 +132,86 @@ class RetentionManager:
             logger.error(error_msg)
             stats.errors.append(error_msg)
             return stats
-    
+
+    def _cleanup_database_records(self, dry_run: bool = False) -> CleanupStats:
+        """Clean up old episodes and digests from database"""
+        stats = CleanupStats()
+
+        if not self.database_manager:
+            # Try to create database manager if not provided
+            try:
+                self.database_manager = DatabaseManager()
+            except Exception as e:
+                logger.warning(f"No database manager available for cleanup: {e}")
+                return stats
+
+        try:
+            # Get retention settings from WebConfig
+            from ..config.web_config import WebConfigManager
+            wc = WebConfigManager()
+            episode_retention_days = int(wc.get_setting('retention', 'episode_retention_days', 14))
+            digest_retention_days = int(wc.get_setting('retention', 'digest_retention_days', 14))
+        except Exception as e:
+            logger.warning(f"Could not load retention settings, using defaults: {e}")
+            episode_retention_days = 14
+            digest_retention_days = 14
+
+        episode_cutoff = datetime.now() - timedelta(days=episode_retention_days)
+        digest_cutoff = datetime.now() - timedelta(days=digest_retention_days)
+
+        logger.info(f"Cleaning up database records - episodes older than {episode_retention_days} days, "
+                   f"digests older than {digest_retention_days} days")
+
+        try:
+            with self.database_manager.get_session() as session:
+                try:
+                    # Count episodes to be deleted
+                    episodes_query = session.query(EpisodeModel).filter(
+                        EpisodeModel.updated_at < episode_cutoff
+                    )
+                    episodes_count = episodes_query.count()
+
+                    # Count digests to be deleted
+                    digests_query = session.query(DigestModel).filter(
+                        DigestModel.generated_at < digest_cutoff
+                    )
+                    digests_count = digests_query.count()
+
+                    if dry_run:
+                        logger.info(f"Would delete {episodes_count} episodes, {digests_count} digests")
+                        stats.episodes_deleted = episodes_count
+                        stats.digests_deleted = digests_count
+                    else:
+                        # Delete episodes
+                        if episodes_count > 0:
+                            episodes_deleted = episodes_query.delete(synchronize_session=False)
+                            stats.episodes_deleted = episodes_deleted
+                            logger.info(f"Deleted {episodes_deleted} old episodes")
+
+                        # Delete digests
+                        if digests_count > 0:
+                            digests_deleted = digests_query.delete(synchronize_session=False)
+                            stats.digests_deleted = digests_deleted
+                            logger.info(f"Deleted {digests_deleted} old digests")
+
+                        # Commit the transaction
+                        session.commit()
+
+                    return stats
+
+                except Exception as e:
+                    session.rollback()
+                    error_msg = f"Database cleanup failed: {e}"
+                    logger.error(error_msg)
+                    stats.errors.append(error_msg)
+                    return stats
+
+        except Exception as e:
+            error_msg = f"Failed to connect to database: {e}"
+            logger.error(error_msg)
+            stats.errors.append(error_msg)
+            return stats
+
     def _cleanup_local_files(self, policy: RetentionPolicy, dry_run: bool) -> CleanupStats:
         """Clean up local files based on retention policy"""
         stats = CleanupStats()
@@ -281,6 +355,8 @@ class RetentionManager:
         main_stats.directories_deleted += additional_stats.directories_deleted
         main_stats.bytes_freed += additional_stats.bytes_freed
         main_stats.github_releases_deleted += additional_stats.github_releases_deleted
+        main_stats.episodes_deleted += additional_stats.episodes_deleted
+        main_stats.digests_deleted += additional_stats.digests_deleted
         main_stats.errors.extend(additional_stats.errors)
     
     def _format_bytes(self, bytes_count: int) -> str:
@@ -403,7 +479,8 @@ class RetentionManager:
 
 
 def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
-                           github_publisher: GitHubPublisher = None) -> RetentionManager:
+                           github_publisher: GitHubPublisher = None,
+                           database_manager: DatabaseManager = None) -> RetentionManager:
     """Factory function to create retention manager with WebConfig overrides if available"""
     # Try to pull retention days from WebConfig
     github_days = 14
@@ -413,7 +490,7 @@ def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
         github_days = int(wc.get_setting('retention', 'github_releases_days', 14))
         # Override local policies if none provided
         if retention_policies is None:
-            rm = RetentionManager(None, github_publisher, github_days)
+            rm = RetentionManager(None, github_publisher, github_days, database_manager)
             # Update default policies' days from web settings
             for p in rm.retention_policies:
                 key = None
@@ -435,7 +512,7 @@ def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
             return rm
     except Exception:
         pass
-    return RetentionManager(retention_policies, github_publisher, github_days)
+    return RetentionManager(retention_policies, github_publisher, github_days, database_manager)
 
 
 # CLI testing functionality
@@ -484,7 +561,8 @@ if __name__ == "__main__":
                 stats = retention_manager.cleanup_specific_date(cleanup_date, args.dry_run)
                 
                 action = "Would delete" if args.dry_run else "Deleted"
-                print(f"✅ {action} {stats.files_deleted} files, {stats.github_releases_deleted} GitHub releases")
+                print(f"✅ {action} {stats.files_deleted} files, {stats.episodes_deleted} episodes, "
+                      f"{stats.digests_deleted} digests, {stats.github_releases_deleted} GitHub releases")
                 
                 if stats.errors:
                     print(f"⚠️  Errors encountered: {len(stats.errors)}")
@@ -502,6 +580,8 @@ if __name__ == "__main__":
             print(f"✅ Cleanup complete:")
             print(f"   Files: {action.lower()} {stats.files_deleted}")
             print(f"   Directories: {action.lower()} {stats.directories_deleted}")
+            print(f"   Episodes: {action.lower()} {stats.episodes_deleted}")
+            print(f"   Digests: {action.lower()} {stats.digests_deleted}")
             print(f"   GitHub releases: {action.lower()} {stats.github_releases_deleted}")
             print(f"   Space freed: {retention_manager._format_bytes(stats.bytes_freed)}")
             
