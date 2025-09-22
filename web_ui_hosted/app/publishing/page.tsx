@@ -81,6 +81,7 @@ export default function PublishingPage() {
     }
   }
 
+  // Format dates in Pacific timezone (PST/PDT)
   const formatDate = (value?: string) => {
     if (!value) return '—'
     const parsed = new Date(value)
