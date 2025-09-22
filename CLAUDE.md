@@ -117,6 +117,16 @@ python3 reset_latest_episode.py
 
 # Transcribe specific episode
 python3 transcribe_episode.py <episode_guid>
+
+# Row Level Security (RLS) Management
+python3 -m alembic upgrade head  # Apply all RLS migrations
+python3 -m alembic current       # Check current migration status
+
+# RLS Troubleshooting - if database access fails
+# 1. Verify service role credentials in environment
+# 2. Check that DATABASE_URL uses service role (postgres user)
+# 3. Confirm SUPABASE_SERVICE_ROLE is set for web UI
+# 4. All operations should use service role which bypasses RLS
 ```
 
 ## Critical Development Guidelines
@@ -215,6 +225,46 @@ The system uses PostgreSQL (Supabase) for production:
 - **Legacy**: SQLite support maintained in `src/database/models.py`
 - **Migration**: Completed migration to Supabase with automatic connection pooling
 - **Backup**: Professional daily backups with 7+ day retention via Supabase
+- **Security**: Full Row Level Security (RLS) enabled on ALL tables following Supabase best practices
+
+#### Row Level Security (RLS) Implementation
+**CRITICAL**: All tables in the public schema have RLS enabled per Supabase security requirements.
+
+**RLS Status (ALL ENABLED)**:
+- ✅ `episodes` - RLS enabled with service_role + authenticated policies
+- ✅ `feeds` - RLS enabled with service_role + authenticated policies
+- ✅ `digests` - RLS enabled with service_role + authenticated policies
+- ✅ `web_settings` - RLS enabled with service_role + authenticated policies
+- ✅ `topics` - RLS enabled with service_role + authenticated policies
+- ✅ `topic_instruction_versions` - RLS enabled with service_role + authenticated policies
+- ✅ `digest_episode_links` - RLS enabled with service_role + authenticated policies
+- ✅ `pipeline_runs` - RLS enabled with service_role + authenticated policies
+- ✅ `alembic_version` - RLS enabled with service_role policy only
+
+**RLS Policies**:
+- **service_role_policy**: Full CRUD access for backend operations and migrations
+- **authenticated_read_policy**: Read-only access for web UI (where applicable)
+
+**Database Connection Requirements**:
+- **Python Backend**: Uses `postgres` user (service role) via `DATABASE_URL`/`SUPABASE_PASSWORD`
+- **Next.js Web UI**: Uses `SUPABASE_SERVICE_ROLE` key for admin operations
+- **Alembic Migrations**: Uses service role credentials, bypasses RLS automatically
+
+**Adding New Tables**: Always include RLS enablement in migration files:
+```sql
+-- In your Alembic migration upgrade() function:
+op.execute("ALTER TABLE your_new_table ENABLE ROW LEVEL SECURITY;")
+op.execute('''
+    CREATE POLICY "service_role_policy" ON your_new_table
+    FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+''')
+op.execute('''
+    CREATE POLICY "authenticated_read_policy" ON your_new_table
+    FOR SELECT TO authenticated
+    USING (true);
+''')
+```
 
 ### API Dependencies
 - **OpenAI**: GPT-5-mini for scoring, GPT-5 for script generation
