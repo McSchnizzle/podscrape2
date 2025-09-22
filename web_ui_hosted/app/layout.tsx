@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Navigation } from '@/components/Navigation'
+import Footer from '@/components/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -27,13 +28,7 @@ export default function RootLayout({
           </main>
 
           {/* Footer */}
-          <footer className="bg-white border-t border-gray-200">
-            <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-              <p className="text-sm text-gray-500 text-center">
-                Powered by Next.js + Supabase + GitHub Actions
-              </p>
-            </div>
-          </footer>
+          <Footer />
         </div>
       </body>
     </html>
