@@ -358,8 +358,8 @@ class AudioProcessor_Runner:
                 f.write(f"# Characters: {total_chars:,}\n\n")
                 f.write(combined_transcript)
 
-            # Update database
-            self.episode_repo.update_transcript(episode_guid, str(transcript_path), total_words)
+            # Update database with both file path and content
+            self.episode_repo.update_transcript(episode_guid, str(transcript_path), total_words, combined_transcript)
 
             # Cleanup audio files
             self._cleanup_audio_files(episode_guid, chunk_paths)

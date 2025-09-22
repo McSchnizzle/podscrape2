@@ -19,7 +19,11 @@ from config.env import require_database_url
 config = context.config
 
 # Set the DATABASE_URL from environment
-config.set_main_option("sqlalchemy.url", require_database_url())
+# URL encode the database URL to handle special characters in passwords
+db_url = require_database_url()
+# Replace % with %% to escape ConfigParser interpolation
+escaped_url = db_url.replace('%', '%%')
+config.set_main_option("sqlalchemy.url", escaped_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

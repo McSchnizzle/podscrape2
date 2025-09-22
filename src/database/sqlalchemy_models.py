@@ -59,6 +59,7 @@ class Episode(Base):
     audio_path = Column(String(4096))
     audio_downloaded_at = Column(DateTime(timezone=False))
     transcript_path = Column(String(4096))
+    transcript_content = Column(Text)
     transcript_generated_at = Column(DateTime(timezone=False))
     transcript_word_count = Column(Integer)
     chunk_count = Column(Integer, nullable=False, default=0)

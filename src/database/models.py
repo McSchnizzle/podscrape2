@@ -57,6 +57,7 @@ class Episode:
     audio_path: Optional[str] = None
     audio_downloaded_at: Optional[datetime] = None
     transcript_path: Optional[str] = None
+    transcript_content: Optional[str] = None
     transcript_generated_at: Optional[datetime] = None
     transcript_word_count: Optional[int] = None
     chunk_count: int = 0
@@ -349,6 +350,7 @@ class EpisodeRepository:
                     audio_path=episode.audio_path,
                     audio_downloaded_at=episode.audio_downloaded_at,
                     transcript_path=episode.transcript_path,
+                    transcript_content=episode.transcript_content,
                     transcript_generated_at=episode.transcript_generated_at,
                     transcript_word_count=episode.transcript_word_count,
                     chunk_count=episode.chunk_count,
@@ -451,7 +453,7 @@ class EpisodeRepository:
                 logger.error(f"Failed to update audio download for episode {episode_guid}: {e}")
                 raise
 
-    def update_transcript(self, episode_guid: str, transcript_path: str, word_count: int):
+    def update_transcript(self, episode_guid: str, transcript_path: str, word_count: int, transcript_content: Optional[str] = None):
         """Update transcript information"""
         with self.db.get_session() as session:
             try:
@@ -463,6 +465,8 @@ class EpisodeRepository:
                     episode_model.transcript_word_count = word_count
                     episode_model.status = 'transcribed'
                     episode_model.updated_at = datetime.now(UTC)
+                    if transcript_content is not None:
+                        episode_model.transcript_content = transcript_content
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -631,6 +635,7 @@ class EpisodeRepository:
             audio_path=model.audio_path,
             audio_downloaded_at=model.audio_downloaded_at,
             transcript_path=model.transcript_path,
+            transcript_content=model.transcript_content,
             transcript_generated_at=model.transcript_generated_at,
             transcript_word_count=model.transcript_word_count,
             chunk_count=model.chunk_count,

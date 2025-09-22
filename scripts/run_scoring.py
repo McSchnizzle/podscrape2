@@ -194,7 +194,13 @@ class ScoringRunner:
                     })
                     continue
 
-                if not db_episode.transcript_path or not Path(db_episode.transcript_path).exists():
+                # Check transcript availability (database content or file)
+                has_transcript = (
+                    (db_episode.transcript_content and db_episode.transcript_content.strip()) or
+                    (db_episode.transcript_path and Path(db_episode.transcript_path).exists())
+                )
+
+                if not has_transcript:
                     self.logger.error(f"No transcript found for episode {episode_guid}")
                     failed_episodes.append({
                         'guid': episode_guid,
@@ -239,9 +245,14 @@ class ScoringRunner:
         """Score a single episode"""
 
         try:
-            # Read transcript
-            with open(db_episode.transcript_path, 'r', encoding='utf-8') as f:
-                transcript = f.read()
+            # Read transcript (prefer database content over file)
+            if db_episode.transcript_content and db_episode.transcript_content.strip():
+                transcript = db_episode.transcript_content
+                self.logger.info("📄 Using transcript from database")
+            else:
+                self.logger.info("📁 Reading transcript from file (fallback)")
+                with open(db_episode.transcript_path, 'r', encoding='utf-8') as f:
+                    transcript = f.read()
 
             self.logger.info(f"Transcript: {len(transcript):,} characters")
 

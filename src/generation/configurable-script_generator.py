@@ -196,9 +196,17 @@ class ScriptGenerator:
         # Prepare episode transcripts
         transcripts = []
         for episode in episodes:
-            if episode.transcript_path and Path(episode.transcript_path).exists():
+            # Read transcript (prefer database content over file)
+            transcript = None
+            if episode.transcript_content and episode.transcript_content.strip():
+                transcript = episode.transcript_content
+                logger.debug(f"Using transcript from database for episode: {episode.title}")
+            elif episode.transcript_path and Path(episode.transcript_path).exists():
+                logger.debug(f"Reading transcript from file (fallback) for episode: {episode.title}")
                 with open(episode.transcript_path, 'r', encoding='utf-8') as f:
                     transcript = f.read()
+
+            if transcript:
                 transcripts.append({
                     'title': episode.title,
                     'published_date': episode.published_date.strftime('%Y-%m-%d'),
@@ -479,9 +487,17 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Prepare episode transcripts
         transcripts = []
         for episode in episodes:
-            if episode.transcript_path and Path(episode.transcript_path).exists():
+            # Read transcript (prefer database content over file)
+            transcript = None
+            if episode.transcript_content and episode.transcript_content.strip():
+                transcript = episode.transcript_content
+                logger.debug(f"Using transcript from database for episode: {episode.title}")
+            elif episode.transcript_path and Path(episode.transcript_path).exists():
+                logger.debug(f"Reading transcript from file (fallback) for episode: {episode.title}")
                 with open(episode.transcript_path, 'r', encoding='utf-8') as f:
                     transcript = f.read()
+
+            if transcript:
                 transcripts.append({
                     'title': episode.title,
                     'published_date': episode.published_date.strftime('%Y-%m-%d'),
