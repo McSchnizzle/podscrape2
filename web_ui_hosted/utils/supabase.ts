@@ -589,7 +589,31 @@ export class DatabaseClient {
         .limit(limit)
 
       if (error) throw error
-      return data || []
+
+      // Enrich digests with episode information
+      const enrichedDigests = await Promise.all((data || []).map(async (digest) => {
+        if (digest.episode_ids && digest.episode_ids.length > 0) {
+          const { data: episodes, error: episodeError } = await supabase
+            .from('episodes')
+            .select('id, title')
+            .in('id', digest.episode_ids)
+
+          if (!episodeError && episodes) {
+            return {
+              ...digest,
+              episodes: episodes.map(ep => ep.title.length > 60 ? ep.title.substring(0, 60) + '...' : ep.title),
+              episode_count: episodes.length
+            }
+          }
+        }
+        return {
+          ...digest,
+          episodes: [],
+          episode_count: 0
+        }
+      }))
+
+      return enrichedDigests
     } catch (error) {
       console.error('Failed to load digests:', error)
       return []

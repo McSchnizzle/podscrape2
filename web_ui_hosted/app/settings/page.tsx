@@ -226,11 +226,61 @@ export default function SettingsPage() {
                   max="30"
                   className="input"
                   value={getSetting('pipeline', 'discovery_lookback_days', 7)}
-                  onChange={(e) => updateLocalSetting('pipeline', 'discovery_lookback_days', parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const newValue = parseInt(e.target.value)
+                    updateLocalSetting('pipeline', 'discovery_lookback_days', newValue)
+                    // Auto-adjust retention if needed
+                    const currentRetention = getSetting('pipeline', 'episode_retention_days', 14)
+                    if (newValue >= currentRetention) {
+                      updateLocalSetting('pipeline', 'episode_retention_days', newValue + 1)
+                    }
+                  }}
                   disabled={saving}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Number of days to look back when discovering new episodes
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Episode Retention Days
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  className="input"
+                  value={getSetting('pipeline', 'episode_retention_days', 14)}
+                  onChange={(e) => {
+                    const newValue = parseInt(e.target.value)
+                    const lookbackDays = getSetting('pipeline', 'discovery_lookback_days', 7)
+                    if (newValue <= lookbackDays) {
+                      alert(`Episode retention days must be greater than discovery lookback days (${lookbackDays})`)
+                      return
+                    }
+                    updateLocalSetting('pipeline', 'episode_retention_days', newValue)
+                  }}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Delete episodes older than this many days (must be greater than discovery lookback)
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Digest Retention Days
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  className="input"
+                  value={getSetting('pipeline', 'digest_retention_days', 14)}
+                  onChange={(e) => updateLocalSetting('pipeline', 'digest_retention_days', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Delete digests older than this many days
                 </p>
               </div>
             </div>

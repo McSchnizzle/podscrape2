@@ -7,6 +7,7 @@ interface DigestRecord {
   topic: string
   digest_date?: string
   episode_count?: number
+  episodes?: string[]
   mp3_path?: string
   mp3_duration_seconds?: number
   mp3_title?: string
@@ -158,46 +159,42 @@ export default function PublishingPage() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
+                  <th className="text-left px-3 py-2 font-medium text-gray-700">Date</th>
                   <th className="text-left px-3 py-2 font-medium text-gray-700">Topic</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Digest Date</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Episodes</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Audio</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Published</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">GitHub</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-700">Episodes Included</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-700">Duration</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-700">Asset</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {digests.map((digest) => (
                   <tr key={digest.id} className="border-b hover:bg-gray-50">
+                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{formatDate(digest.digest_date || digest.created_at)}</td>
                     <td className="px-3 py-2 font-medium text-gray-800">{digest.topic}</td>
-                    <td className="px-3 py-2 text-gray-600">{formatDate(digest.digest_date || digest.created_at)}</td>
-                    <td className="px-3 py-2 text-gray-600">{digest.episode_count ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-600">
-                      {digest.mp3_path ? (
-                        <div className="flex flex-col">
-                          <span className="truncate" title={digest.mp3_path}>{digest.mp3_path}</span>
-                          <span className="text-xs text-gray-500">{formatDuration(digest.mp3_duration_seconds)}</span>
+                    <td className="px-3 py-2 max-w-md">
+                      {digest.episodes && digest.episodes.length > 0 ? (
+                        <div className="text-xs text-gray-700">
+                          <div className="mb-1"><strong>{digest.episode_count} episodes:</strong></div>
+                          {digest.episodes.map((episode, idx) => (
+                            <div key={idx} className="mb-1">• {episode}</div>
+                          ))}
                         </div>
-                      ) : '—'}
-                    </td>
-                    <td className="px-3 py-2">
-                      {digest.published_at ? (
-                        <span className="text-success-600">{formatDate(digest.published_at)}</span>
                       ) : (
-                        <span className="text-gray-500">Pending</span>
+                        <span className="text-gray-500 text-xs">No episodes</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{formatDuration(digest.mp3_duration_seconds)}</td>
+                    <td className="px-3 py-2">
+                      {digest.mp3_path ? (
+                        <span className="text-green-700">Present</span>
+                      ) : (
+                        <span className="text-red-700">Missing</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      {digest.github_url ? (
-                        <a
-                          href={digest.github_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-700"
-                        >
-                          View Release
-                        </a>
-                      ) : '—'}
+                      <button className="text-blue-700 text-xs mr-2">Publish/Ensure</button>
+                      <button className="text-red-700 text-xs">Unpublish</button>
                     </td>
                   </tr>
                 ))}

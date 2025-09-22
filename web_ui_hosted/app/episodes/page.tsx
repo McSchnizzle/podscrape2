@@ -238,7 +238,14 @@ export default function EpisodesPage() {
                     <td className="py-2 pr-4 text-gray-700">
                       {episode.included.length > 0 ? (
                         <span className="font-mono text-xs">
-                          {episode.included[0].topic} — {episode.included[0].date}
+                          {/* Show most recent digest for multi-digest episodes */}
+                          {(() => {
+                            const sortedInclusions = [...episode.included].sort((a, b) =>
+                              new Date(b.date).getTime() - new Date(a.date).getTime()
+                            )
+                            const mostRecent = sortedInclusions[0]
+                            return `${mostRecent.topic} — ${mostRecent.date}`
+                          })()}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-500">—</span>
