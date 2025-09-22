@@ -232,12 +232,10 @@ jobs:
 
           echo "Running RSS publishing..."
           python scripts/run_publishing.py --verbose
-          cp data/rss/daily-digest.xml data/rss/test-feed.xml
-          cp public/daily-digest.xml public/test-feed.xml
+          cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
 
           git add data/completed-tts/current/*.mp3 \
-            data/rss/daily-digest.xml data/rss/test-feed.xml \
-            public/daily-digest.xml public/test-feed.xml
+            web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
           if git diff --cached --quiet; then
             echo "No repository changes to commit after publishing."
             exit 0

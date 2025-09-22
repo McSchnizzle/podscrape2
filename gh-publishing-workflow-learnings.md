@@ -107,3 +107,121 @@
 - **Publisher**: `scripts/publish_release_assets.py` (GitHub Release creation)
 - **Core Logic**: `src/publishing/github_publisher.py` (GitHubPublisher.create_daily_release)
 - **Database**: PostgreSQL via Supabase (digest publishing status)
+
+## RSS Publishing Path Issue - September 2025
+
+### Root Cause: RSS Generated to Wrong Directory Location
+
+**Problem Pattern**: Pipeline runs successfully, GitHub Releases created with MP3s, database shows PUBLISHED status, but RSS feed at podcast.paulrbrown.org/daily-digest.xml remains outdated and missing new episodes.
+
+**Investigation Discovery**:
+- RSS was being correctly generated but saved to wrong directories
+- Publishing script wrote to `./public/daily-digest.xml` and `./data/rss/daily-digest.xml`
+- Vercel deployment serves from `web_ui_hosted/public/` directory only
+- Live RSS feed remained outdated (September 20) despite successful September 22 pipeline runs
+
+**Core Issue**: Path resolution mismatch between local development expectations and Vercel deployment requirements.
+
+### Evidence of the Problem
+
+**Git Status Issues**:
+- Both RSS files had unresolved merge conflict markers from previous rebase
+- Repository was stuck in rebase state: `git status` showed "rebase in progress"
+- GitHub Actions couldn't commit changes due to conflicted state
+
+**Wrong Directory Usage**:
+```python
+# scripts/run_publishing.py - INCORRECT paths
+rss_file = Path("data") / "rss" / "daily-digest.xml"          # Wrong location
+public_file = Path("public") / "daily-digest.xml"             # Wrong location
+```
+
+**Expected vs Actual**:
+- Expected: `web_ui_hosted/public/daily-digest.xml` (served by Vercel)
+- Actual: `./public/daily-digest.xml` (not deployed)
+
+### Fixes Applied
+
+**1. Fixed RSS File Paths in run_publishing.py**:
+```python
+# Lines 278, 286, 345-346, 359 - CORRECTED paths
+rss_file = Path("web_ui_hosted") / "public" / "daily-digest.xml"    # Correct location
+# Removed unnecessary data/rss path entirely
+```
+
+**2. Updated GitHub Workflow Paths**:
+```yaml
+# .github/workflows/validated-full-pipeline.yml
+# OLD (wrong):
+cp data/rss/daily-digest.xml data/rss/test-feed.xml
+git add data/completed-tts/current/*.mp3 data/rss/daily-digest.xml public/daily-digest.xml
+
+# NEW (correct):
+cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
+git add data/completed-tts/current/*.mp3 web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
+```
+
+**3. Cleaned Up Git State**:
+```bash
+git rebase --abort                    # Clear conflicted rebase state
+rm -rf ./public ./data/rss           # Delete unnecessary legacy directories
+```
+
+**4. Regenerated RSS Correctly**:
+- Local publishing run generated RSS with all 73 digests including 4 September 22 episodes
+- RSS saved to correct location: `web_ui_hosted/public/daily-digest.xml`
+- Successful Vercel deployment updated live feed
+
+### Verification Results
+
+**Before Fix**:
+- Live RSS at podcast.paulrbrown.org/daily-digest.xml showed 69 episodes (through Sept 20)
+- Local `web_ui_hosted/public/daily-digest.xml` was outdated
+- Four September 22 episodes missing from feed despite successful GitHub Releases
+
+**After Fix**:
+- Live RSS updated to show all current episodes including September 22
+- Correct file location ensures future pipeline runs will update live feed
+- GitHub Actions workflow references correct paths for commits
+
+### Key Learnings
+
+**Critical Path Understanding**:
+- **ONLY** `web_ui_hosted/public/` directory matters for Vercel deployment
+- Legacy `./public/` and `./data/rss/` directories are unnecessary and confusing
+- RSS generation logic was perfect - only file paths were wrong
+
+**Development vs Deployment Environment**:
+- Local development may work with relative paths like `./public/`
+- Vercel static deployment requires specific directory structure
+- Always verify deployment paths match where files are actually generated
+
+**Git State Management**:
+- Conflicted rebase states block GitHub Actions commits silently
+- Always check `git status` before assuming successful pipeline runs
+- RSS files with merge conflict markers indicate broader git issues
+
+**Testing Strategy**:
+- Verify live RSS feed after local publishing runs
+- Check file modification timestamps to confirm updates
+- Test both generation logic AND file path correctness
+
+### Prevention for Future Development
+
+**Path Validation Checklist**:
+1. Verify all file writes go to `web_ui_hosted/public/` for Vercel files
+2. Test local publishing runs update live RSS feed immediately
+3. Check GitHub Actions workflow references match script file paths
+4. Confirm git state is clean before pipeline runs
+5. Validate RSS content AND location after changes
+
+**File Location Standards**:
+- **RSS Feed**: `web_ui_hosted/public/daily-digest.xml` (served by Vercel)
+- **Test Feed**: `web_ui_hosted/public/test-feed.xml` (for validation)
+- **Avoid**: Any other `public/` or `data/rss/` directories
+
+### Updated File References
+- **Publishing Script**: `scripts/run_publishing.py` (lines 278, 286, 345-346, 359)
+- **GitHub Workflow**: `.github/workflows/validated-full-pipeline.yml` (lines 235, 237-238)
+- **Deployed RSS**: `web_ui_hosted/public/daily-digest.xml` (Vercel serving location)
+- **Live Feed**: https://podcast.paulrbrown.org/daily-digest.xml

@@ -279,19 +279,16 @@ class PublishingPipelineRunner:
             rss_content = self.rss_generator.generate_rss_feed(episodes)
             
             # Save RSS feed locally
-            rss_file = Path("data") / "rss" / "daily-digest.xml"
+            rss_file = Path("web_ui_hosted") / "public" / "daily-digest.xml"
             rss_file.parent.mkdir(parents=True, exist_ok=True)
             
             with open(rss_file, 'w', encoding='utf-8') as f:
                 f.write(rss_content)
             
             self.logger.info(f"✅ RSS feed generated: {rss_file}")
-            # Also write to public for Vercel auto-deploy
-            public_file = Path("public") / "daily-digest.xml"
-            public_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(public_file, 'w', encoding='utf-8') as f:
-                f.write(rss_content)
-            self.logger.info(f"✅ Wrote public RSS: {public_file}")
+            # RSS file is already saved to the correct location (web_ui_hosted/public/)
+            # This is the only location that matters for Vercel deployment
+            self.logger.info(f"✅ RSS saved to Vercel deployment location: {rss_file}")
             return rss_content
             
         except Exception as e:
@@ -344,10 +341,9 @@ class PublishingPipelineRunner:
                 self.logger.info("DRY RUN: Would commit RSS feed")
                 return True
 
-            # Save RSS content to public/daily-digest.xml and data/rss/daily-digest.xml
+            # Save RSS content to web_ui_hosted/public/daily-digest.xml (the only location that matters)
             rss_paths = [
-                Path("public/daily-digest.xml"),
-                Path("data/rss/daily-digest.xml")
+                Path("web_ui_hosted/public/daily-digest.xml")
             ]
 
             for rss_path in rss_paths:
@@ -360,7 +356,7 @@ class PublishingPipelineRunner:
             import subprocess
 
             # Add the RSS files
-            result = subprocess.run(['git', 'add', 'public/daily-digest.xml', 'data/rss/daily-digest.xml'],
+            result = subprocess.run(['git', 'add', 'web_ui_hosted/public/daily-digest.xml'],
                                   capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 self.logger.error(f"Git add failed: {result.stderr}")
