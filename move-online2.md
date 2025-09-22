@@ -142,7 +142,43 @@ Acceptance criteria
 - Dev can run single phases locally in minutes without incurring cloud costs.
 - UI tests green locally and in CI.
 
-## Phase 6.5 — Analytics & Metrics Dashboard
+## Phase 6.5 — Database Retention and Cleanup System ⚠️ IN PROGRESS
+
+**Goal**: Implement automated database cleanup to prevent database bloat and manage episode/digest lifecycle.
+
+### **Implementation Status**:
+- ✅ **WebConfig Settings**: Added `episode_retention_days` (default 14) and `digest_retention_days` (default 14) to replace obsolete file-based retention settings
+- ✅ **Retention Strategy Research**:
+  - Episodes deleted by `updated_at` field (gets updated during processing phases)
+  - Digests deleted by `generated_at` field
+  - Legacy transcript files cleaned up (now stored in database `transcript_content` column)
+- 🔄 **RetentionManager Updates**:
+  - ✅ Removed obsolete policies (local MP3s, audio cache/chunks - handled by audio phase)
+  - ✅ Updated CleanupStats to track database deletions
+  - 🔄 Adding `_cleanup_database_records()` method for episode and digest cleanup
+- ⏳ **Discovery Integration**: Move retention cleanup from end-of-pipeline to beginning of discovery phase
+- ⏳ **Settings UI Validation**: Auto-adjust retention days if `discovery_lookback_days >= episode_retention_days`
+
+### **Technical Implementation**:
+- **Database Cleanup**: Delete episodes where `updated_at < (now - retention_days)` and digests where `generated_at < (now - retention_days)`
+- **Pipeline Integration**: Retention runs first in discovery phase so old records don't interfere with processing
+- **Validation Logic**: Ensure `discovery_lookback_days < episode_retention_days` with automatic adjustment in UI
+- **File Cleanup**: Clean up legacy transcript files while preserving database-stored transcripts
+
+### **Remaining Work**:
+- [ ] Complete `_cleanup_database_records()` implementation with database imports and deletion logic
+- [ ] Update `_merge_stats()` to handle new episode/digest deletion counts
+- [ ] Move retention execution from end-of-pipeline to beginning of discovery phase
+- [ ] Add settings UI validation and auto-adjustment logic
+- [ ] Test integration with existing retention policies (logs, GitHub releases)
+
+Acceptance criteria
+- Database automatically cleans up old episodes and digests based on configurable retention periods
+- Discovery lookback period validation prevents rediscovering recently deleted episodes
+- Legacy transcript files cleaned up while preserving database-stored content
+- Retention cleanup runs efficiently at start of discovery phase
+
+## Phase 6.6 — Analytics & Metrics Dashboard
 
 - [ ] **Analytics Page in Web UI**: Create comprehensive analytics dashboard for feed processing pipeline
   - **Feed Performance Metrics**: Episodes processed, success rates, relevance rates by feed

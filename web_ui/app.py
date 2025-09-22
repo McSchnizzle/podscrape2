@@ -835,6 +835,23 @@ def create_app():
                     'mp3_duration_seconds': digest.mp3_duration_seconds,
                     'github_url': digest.github_url
                 }
+
+                # Get episodes included in this digest
+                episode_titles = []
+                if digest.episode_ids:
+                    for episode_id in digest.episode_ids:
+                        try:
+                            episode = episode_repo.get_by_id(episode_id)
+                            if episode:
+                                # Truncate long titles for display
+                                title = episode.title[:60] + '...' if len(episode.title) > 60 else episode.title
+                                episode_titles.append(title)
+                        except Exception:
+                            continue
+
+                d['episodes'] = episode_titles
+                d['episode_count'] = len(episode_titles)
+
                 fn = Path(d['mp3_path']).name if d['mp3_path'] else None
                 d['mp3_file'] = fn
                 d['asset_present'] = None
@@ -1438,7 +1455,20 @@ def create_app():
             for digest in all_relevant_digests:
                 if digest.episode_ids:
                     for eid in digest.episode_ids:
-                        incl_map.setdefault(eid, []).append({ 'topic': digest.topic, 'date': str(digest.digest_date) })
+                        # For each episode, track all digest associations with generated_at timestamp
+                        digest_info = {
+                            'topic': digest.topic,
+                            'date': str(digest.digest_date),
+                            'generated_at': digest.generated_at
+                        }
+                        incl_map.setdefault(eid, []).append(digest_info)
+
+            # For episodes in multiple digests, keep only the most recent one
+            for eid, digests in incl_map.items():
+                if len(digests) > 1:
+                    # Sort by generated_at and keep only the most recent
+                    digests.sort(key=lambda x: x['generated_at'], reverse=True)
+                    incl_map[eid] = [digests[0]]  # Keep only the most recent
             items = []
             # Get feed cache for efficiency
             feed_cache = {}
