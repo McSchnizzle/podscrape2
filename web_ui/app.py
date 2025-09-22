@@ -1414,10 +1414,28 @@ def create_app():
             elif sort_by == 'scored_at':
                 episodes.sort(key=lambda x: x.scored_at or datetime.min, reverse=reverse)
 
-            # Build digest inclusion map (recent 14 days)
+            # Build digest inclusion map
+            # Load recent digests (14 days) + all digests containing episodes with status 'digested'
             recent_digests = digest_repo.get_recent_digests(days=14)
+
+            # Also get digests for any episodes that are marked as 'digested' but might be from older digests
+            digested_episode_ids = [ep.id for ep in episodes if ep.status == 'digested']
+            all_digests_for_digested = []
+
+            if digested_episode_ids:
+                # Get all digests (not just recent ones) to find older digest relationships
+                all_digests = digest_repo.get_recent_digests(days=90)  # Look back 90 days max
+                for digest in all_digests:
+                    if digest.episode_ids:
+                        # Check if this digest contains any of our digested episodes
+                        if any(eid in digest.episode_ids for eid in digested_episode_ids):
+                            all_digests_for_digested.append(digest)
+
+            # Combine recent digests with digests containing digested episodes (deduplicated)
+            all_relevant_digests = recent_digests + [d for d in all_digests_for_digested if d not in recent_digests]
+
             incl_map = {}
-            for digest in recent_digests:
+            for digest in all_relevant_digests:
                 if digest.episode_ids:
                     for eid in digest.episode_ids:
                         incl_map.setdefault(eid, []).append({ 'topic': digest.topic, 'date': str(digest.digest_date) })
