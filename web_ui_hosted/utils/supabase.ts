@@ -235,10 +235,23 @@ export class DatabaseClient {
     change_note?: string
     created_by?: string
   }): Promise<TopicInstructionVersionRecord> {
+    const { data: latest, error: latestError } = await supabase
+      .from('topic_instruction_versions')
+      .select('version')
+      .eq('topic_id', params.topic_id)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latestError) throw latestError
+
+    const nextVersion = (latest?.version ?? 0) + 1
+
     const { data, error } = await supabase
       .from('topic_instruction_versions')
       .insert({
         topic_id: params.topic_id,
+        version: nextVersion,
         instructions_md: params.instructions_md,
         change_note: params.change_note,
         created_by: params.created_by
