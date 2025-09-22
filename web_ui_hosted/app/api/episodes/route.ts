@@ -1,29 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DatabaseClient } from "@/utils/supabase";
+import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q') || '';
-    const status = searchParams.get('status') || '';
-    const sortBy = searchParams.get('sortBy') || 'scored_at';
-    const sortDir = searchParams.get('sortDir') || 'desc';
-    const limit = parseInt(searchParams.get('limit') || '100');
-
+// Cached function to fetch episodes data
+const getCachedEpisodes = unstable_cache(
+  async (q: string, status: string, sortBy: string, sortDir: string, limit: number) => {
     const db = new DatabaseClient();
-
-    // Test database connection first
-    const healthCheck = await db.getSystemHealth();
-    console.log('Database health check:', healthCheck);
-
-    if (healthCheck.database === 'error') {
-      return NextResponse.json({
-        error: 'Database connection failed',
-        detail: healthCheck.error
-      }, { status: 500 });
-    }
 
     // Get episodes with filters
     const episodes = await db.getEpisodes({
@@ -34,9 +18,6 @@ export async function GET(request: NextRequest) {
       limit
     });
 
-    console.log(`Found ${episodes.length} episodes with filters:`, { q, status, sortBy, sortDir, limit });
-
-    // Get recent digests to build inclusion map
     // Process episodes for display
     const processedEpisodes = episodes.map(ep => {
       // Create score labels
@@ -63,10 +44,35 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    return {
       episodes: processedEpisodes,
       total: processedEpisodes.length
-    });
+    };
+  },
+  ['episodes'],
+  {
+    revalidate: 30, // Cache for 30 seconds
+    tags: ['episodes-data']
+  }
+);
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get('q') || '';
+    const status = searchParams.get('status') || '';
+    const sortBy = searchParams.get('sortBy') || 'scored_at';
+    const sortDir = searchParams.get('sortDir') || 'desc';
+    const limit = parseInt(searchParams.get('limit') || '100');
+
+    console.log(`Episodes API request with filters:`, { q, status, sortBy, sortDir, limit });
+
+    // Use cached function for better performance
+    const result = await getCachedEpisodes(q, status, sortBy, sortDir, limit);
+
+    console.log(`Returning ${result.episodes.length} episodes (cached)`);
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Episodes API error:', error);
     return NextResponse.json({ error: 'Failed to fetch episodes' }, { status: 500 });

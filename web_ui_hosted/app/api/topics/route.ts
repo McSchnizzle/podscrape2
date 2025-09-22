@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { unstable_cache, revalidateTag } from 'next/cache'
 
 function slugify(input: string): string {
   return input.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'topic'
 }
 
-export async function GET() {
-  try {
+// Cached function to fetch topics data
+const getCachedTopics = unstable_cache(
+  async () => {
     const db = new DatabaseClient()
     const topics = await db.getTopics()
 
@@ -25,7 +27,7 @@ export async function GET() {
       source: 'supabase'
     }))
 
-    return NextResponse.json({
+    return {
       topics: response,
       settings: {
         score_threshold: 0.65,
@@ -37,10 +39,28 @@ export async function GET() {
           use_speaker_boost: true
         }
       }
-    })
+    }
+  },
+  ['topics'],
+  {
+    revalidate: 30, // Cache for 30 seconds
+    tags: ['topics-data']
+  }
+);
+
+export async function GET() {
+  try {
+    console.log('Topics API request');
+
+    // Use cached function for better performance
+    const result = await getCachedTopics();
+
+    console.log(`Returning ${result.topics.length} topics (cached)`);
+
+    return NextResponse.json(result);
   } catch (error) {
-    console.error('Topics API error:', error)
-    return NextResponse.json({ error: 'Failed to load topics' }, { status: 500 })
+    console.error('Topics API error:', error);
+    return NextResponse.json({ error: 'Failed to load topics' }, { status: 500 });
   }
 }
 
@@ -85,6 +105,10 @@ export async function POST(request: NextRequest) {
     // Delete topics that were removed
     const toDelete = existing.filter(t => !seenSlugs.has(t.slug))
     await Promise.all(toDelete.map(t => db.deleteTopic(t.id)))
+
+    // Invalidate cache after topics are updated
+    revalidateTag('topics-data')
+    console.log('Topics cache invalidated after update')
 
     return NextResponse.json({ success: true })
   } catch (error) {
