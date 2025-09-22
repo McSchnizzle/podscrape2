@@ -102,8 +102,15 @@ export default function SettingsPage() {
     setMessage(null)
   }
 
-  const getSetting = (category: string, key: string, defaultValue: any = '') => {
-    return settings[category]?.[key] ?? defaultValue
+  const getSetting = (category: string, key: string, defaultValue: any = null) => {
+    const value = settings[category]?.[key]
+    if (value === undefined || value === null) {
+      if (defaultValue === null) {
+        throw new Error(`Database setting ${category}.${key} not found and no fallback allowed`)
+      }
+      return defaultValue
+    }
+    return value
   }
 
   if (loading) {
@@ -218,8 +225,8 @@ export default function SettingsPage() {
                   min="1"
                   max="30"
                   className="input"
-                  value={getSetting('pipeline', 'days_back', 7)}
-                  onChange={(e) => updateLocalSetting('pipeline', 'days_back', parseInt(e.target.value))}
+                  value={getSetting('pipeline', 'discovery_lookback_days', 7)}
+                  onChange={(e) => updateLocalSetting('pipeline', 'discovery_lookback_days', parseInt(e.target.value))}
                   disabled={saving}
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -280,43 +287,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Transcript Processing */}
-          <div className="card">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Transcript Processing</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Transcript Length
-                </label>
-                <input
-                  type="number"
-                  min="1000"
-                  max="50000"
-                  className="input"
-                  value={getSetting('transcript_processing', 'max_transcript_length', 15000)}
-                  onChange={(e) => updateLocalSetting('transcript_processing', 'max_transcript_length', parseInt(e.target.value))}
-                  disabled={saving}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Maximum characters per transcript for processing
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Chunk Overlap (seconds)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="60"
-                  className="input"
-                  value={getSetting('transcript_processing', 'chunk_overlap_seconds', 10)}
-                  onChange={(e) => updateLocalSetting('transcript_processing', 'chunk_overlap_seconds', parseInt(e.target.value))}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* AI Configuration */}
@@ -334,7 +304,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_content_scoring', 'model', 'gpt-4o-mini')}
+                    value={getSetting('ai_content_scoring', 'model', null)}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -401,7 +371,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_digest_generation', 'model', 'gpt-4o')}
+                    value={getSetting('ai_digest_generation', 'model', null)}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -472,7 +442,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'model', 'gpt-4o-mini')}
+                    value={getSetting('ai_metadata_generation', 'model', null)}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >

@@ -54,7 +54,7 @@ class PipelineOrchestrator:
         self.phase_stop = phase_stop
         self.dry_run = dry_run
         self.limit = limit if limit is not None else self._get_web_setting('pipeline', 'max_episodes_per_run', 3)
-        self.days_back = days_back if days_back != 7 else self._get_web_setting('pipeline', 'days_back_default', 7)
+        self.days_back = days_back if days_back != 7 else self._get_web_setting('pipeline', 'discovery_lookback_days', 7)
         self.episode_guid = episode_guid
         self.verbose = verbose
 
