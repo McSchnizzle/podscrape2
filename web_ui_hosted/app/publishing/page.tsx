@@ -84,7 +84,16 @@ export default function PublishingPage() {
   const formatDate = (value?: string) => {
     if (!value) return '—'
     const parsed = new Date(value)
-    return isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
+    return isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    })
   }
 
   const formatDuration = (seconds?: number) => {
