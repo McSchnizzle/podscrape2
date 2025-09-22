@@ -76,11 +76,10 @@ python3 scripts/run_tts.py          # Audio generation
 python3 scripts/run_publishing.py   # GitHub + RSS + Vercel
 ```
 
-### Web UI (Optional)
+### Web UI (Next.js)
 ```bash
-# Start local web interface on 127.0.0.1:5001 (or custom PORT)
-bash scripts/run_web_ui.sh
-PORT=5002 bash scripts/run_web_ui.sh  # Custom port
+# Start Next.js web interface (default: localhost:3000)
+cd web_ui_hosted && npm run dev
 
 # UI tests (requires UI running)
 cd ui-tests && npm install && npx playwright install && npx playwright test
@@ -195,8 +194,8 @@ logs/           # Pipeline execution logs
 rss/            # Generated RSS feed (daily-digest.xml)
 ```
 
-### Web UI (`web_ui/`)
-Flask application providing local configuration interface:
+### Web UI (`web_ui_hosted/`)
+Next.js application providing hosted configuration interface:
 - Settings management (score thresholds, audio processing options)
 - Feed management (add/edit RSS feeds, health checking)
 - Topic configuration (voice IDs, instruction files)

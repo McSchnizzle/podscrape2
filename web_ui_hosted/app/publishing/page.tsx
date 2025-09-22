@@ -16,6 +16,7 @@ interface DigestRecord {
   github_url?: string
   created_at: string
   updated_at: string
+  generated_at?: string
 }
 
 interface PipelineRunRecord {
@@ -170,7 +171,7 @@ export default function PublishingPage() {
               <tbody>
                 {digests.map((digest) => (
                   <tr key={digest.id} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{formatDate(digest.digest_date || digest.created_at)}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{formatDate(digest.generated_at || digest.digest_date)}</td>
                     <td className="px-3 py-2 font-medium text-gray-800">{digest.topic}</td>
                     <td className="px-3 py-2 max-w-md">
                       {digest.episodes && digest.episodes.length > 0 ? (

@@ -4,47 +4,94 @@ RSS Timestamp Utilities
 Provides functions to generate unique publication timestamps for same-day episodes
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional
 import hashlib
+import re
+from pathlib import Path
 
-# Topic-based time offsets to ensure unique timestamps
-# Maps topic names to hour offsets from midnight UTC
-TOPIC_TIME_OFFSETS = {
-    "AI and Technology": 10,  # 10:00 AM UTC
-    "Social Movements and Community Organizing": 14,  # 2:00 PM UTC
-    "Psychedelics and Spirituality": 16,  # 4:00 PM UTC
-}
+# Pacific timezone offset
+PACIFIC_TZ = timezone(timedelta(hours=-8))  # PST/PDT - simplified for now
 
-def generate_unique_pubdate(digest_date: str, topic: str, creation_time: datetime = None) -> datetime:
+def extract_timestamp_from_mp3_path(mp3_path: str) -> Optional[datetime]:
     """
-    Generate unique publication timestamp for RSS episodes
+    Extract timestamp from MP3 filename format: {topic}_{YYYYMMDD}_{HHMMSS}.mp3
+
+    Args:
+        mp3_path: Path to the MP3 file
+
+    Returns:
+        datetime object in Pacific timezone if found, None otherwise
+    """
+    if not mp3_path:
+        return None
+
+    filename = Path(mp3_path).stem  # Get filename without extension
+
+    # Pattern: {topic}_{YYYYMMDD}_{HHMMSS}
+    pattern = r'_(\d{8})_(\d{6})$'
+    match = re.search(pattern, filename)
+
+    if not match:
+        return None
+
+    date_str, time_str = match.groups()
+
+    try:
+        # Parse YYYYMMDD and HHMMSS
+        year = int(date_str[:4])
+        month = int(date_str[4:6])
+        day = int(date_str[6:8])
+        hour = int(time_str[:2])
+        minute = int(time_str[2:4])
+        second = int(time_str[4:6])
+
+        # Create datetime in Pacific timezone
+        return datetime(year, month, day, hour, minute, second, tzinfo=PACIFIC_TZ)
+
+    except (ValueError, IndexError):
+        return None
+
+def generate_unique_pubdate(digest_date: str, topic: str, creation_time: datetime = None, mp3_path: str = None) -> datetime:
+    """
+    Generate unique publication timestamp for RSS episodes using actual MP3 creation time
 
     Args:
         digest_date: Date string in YYYY-MM-DD format
         topic: Topic name for the digest
         creation_time: Optional creation time for fallback uniqueness
+        mp3_path: Path to MP3 file to extract actual creation timestamp
 
     Returns:
-        Unique datetime with timezone info
+        Unique datetime with timezone info in Pacific timezone
     """
-    # Parse base date
+    # First, try to extract timestamp from MP3 filename
+    if mp3_path:
+        mp3_timestamp = extract_timestamp_from_mp3_path(mp3_path)
+        if mp3_timestamp:
+            return mp3_timestamp
+
+    # Fallback: Use creation_time if provided
+    if creation_time:
+        # Ensure it has Pacific timezone
+        if creation_time.tzinfo is None:
+            creation_time = creation_time.replace(tzinfo=PACIFIC_TZ)
+        return creation_time
+
+    # Final fallback: Use topic-based time offsets (legacy behavior)
     base_date = datetime.fromisoformat(digest_date)
 
-    # Get topic-specific hour offset
-    hour_offset = TOPIC_TIME_OFFSETS.get(topic, 12)  # Default to noon
+    # Topic-based time offsets in Pacific timezone for uniqueness
+    topic_offsets = {
+        "AI and Technology": 9,  # 9:00 AM Pacific
+        "Social Movements and Community Organizing": 12,  # 12:00 PM Pacific
+        "Psychedelics and Spirituality": 15,  # 3:00 PM Pacific
+    }
 
-    # Create base publication time
-    pub_datetime = base_date.replace(hour=hour_offset, minute=0, second=0, microsecond=0)
+    hour_offset = topic_offsets.get(topic, 11)  # Default to 11:00 AM Pacific
 
-    # If creation_time is provided, add minute offset based on creation time
-    # This provides additional uniqueness for topics published close together
-    if creation_time:
-        # Use hash of topic + creation time to generate consistent minute offset
-        hash_input = f"{topic}:{creation_time.isoformat()}"
-        hash_digest = hashlib.md5(hash_input.encode()).hexdigest()
-        minute_offset = int(hash_digest[:2], 16) % 60  # 0-59 minutes
-        pub_datetime = pub_datetime.replace(minute=minute_offset)
+    # Create base publication time in Pacific timezone
+    pub_datetime = base_date.replace(hour=hour_offset, minute=0, second=0, microsecond=0, tzinfo=PACIFIC_TZ)
 
     return pub_datetime
 

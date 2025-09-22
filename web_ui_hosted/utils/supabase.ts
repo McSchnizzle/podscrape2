@@ -56,6 +56,7 @@ export interface Digest {
   digest_date?: string
   created_at: string
   updated_at: string
+  generated_at?: string
 }
 
 export interface TopicRecord {

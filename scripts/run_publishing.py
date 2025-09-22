@@ -268,7 +268,7 @@ class PublishingPipelineRunner:
                     title=digest['mp3_title'] or f"{digest['topic']} - {digest['digest_date']}",
                     description=digest['mp3_summary'] or f"Daily digest for {digest['topic']}",
                     audio_url=mp3_url,
-                    pub_date=generate_unique_pubdate(digest['digest_date'], digest['topic'], digest['created_at']),
+                    pub_date=generate_unique_pubdate(digest['digest_date'], digest['topic'], digest['created_at'], mp3_path=digest['mp3_path']),
                     duration_seconds=digest['mp3_duration_seconds'] or 0,
                     file_size=Path(digest['mp3_path']).stat().st_size if Path(digest['mp3_path']).exists() else 0,
                     guid=guid

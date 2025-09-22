@@ -27,7 +27,7 @@ RSS Feeds → Episode Discovery → Audio Download/Chunking → OpenAI Whisper T
 - **AI Processing**: GPT-5-mini scoring and GPT-5 script generation
 - **Audio/TTS**: ElevenLabs with per-topic voice configuration
 - **Publishing**: GitHub Releases (MP3 assets) + Vercel (RSS feed)
-- **Web UI**: Optional Flask app on 127.0.0.1:5001 for management and monitoring
+- **Web UI**: Next.js app hosted at podcast.paulrbrown.org for management and monitoring
 
 ## 📁 Project Structure
 
@@ -41,7 +41,7 @@ podscrape2/
 │   ├── generation/        # Script generation
 │   ├── audio/             # TTS and audio processing
 │   └── publishing/        # GitHub and RSS publishing
-├── web_ui/                # Optional Flask Web UI (port 5001)
+├── web_ui_hosted/         # Next.js Web UI (hosted on Vercel)
 ├── ui-tests/              # Playwright end-to-end tests for the Web UI
 ├── scripts/                # Production phase scripts
 │   ├── run_discovery.py   # RSS feed discovery
@@ -111,8 +111,8 @@ podscrape2/
 5. **Add RSS Feeds**
    ```bash
    # Via Web UI (recommended)
-   bash scripts/run_web_ui.sh
-   # Navigate to Feeds section
+   # Navigate to https://podcast.paulrbrown.org/feeds
+   # Or run locally: cd web_ui_hosted && npm run dev
 
    # Or via database directly
    # Add feeds to PostgreSQL feeds table
@@ -141,8 +141,9 @@ WHISPER_MODEL=base                               # OpenAI Whisper model size
 
 #### Feed Management
 ```bash
-# Start Web UI for feed management (recommended)
-bash scripts/run_web_ui.sh
+# Use Web UI for feed management (recommended)
+# Visit https://podcast.paulrbrown.org/feeds
+# Or run locally: cd web_ui_hosted && npm run dev
 
 # Or check feeds programmatically
 python3 scripts/run_discovery.py --dry-run --verbose
@@ -201,9 +202,9 @@ python src/channels/manage.py health
 python src/database/status.py
 ```
 
-## 🖥️ Web UI (Optional)
+## 🖥️ Web UI (Hosted)
 
-The local Web UI runs on 127.0.0.1:5001 and provides:
+The Next.js Web UI is hosted at https://podcast.paulrbrown.org and provides:
 
 - **Settings**: DB‑backed controls for:
   - content_filtering.score_threshold
@@ -224,9 +225,9 @@ The local Web UI runs on 127.0.0.1:5001 and provides:
   - Live Status: auto‑starts log streaming with phase badges
   - System Health: ffmpeg, gh CLI + auth, parakeet‑mlx, API keys
 
-Run the UI:
+Run the UI locally:
 ```bash
-bash scripts/run_web_ui.sh         # PORT=5002 to override
+cd web_ui_hosted && npm run dev    # Usually starts on localhost:3000
 ```
 
 Web UI tests (with UI running):
