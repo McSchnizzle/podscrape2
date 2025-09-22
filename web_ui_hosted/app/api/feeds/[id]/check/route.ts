@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { revalidateTag } from 'next/cache'
 
 export async function POST(
   request: NextRequest,
@@ -15,6 +16,10 @@ export async function POST(
 
     // Update the feed's last_checked timestamp to indicate a manual check was performed
     const updatedFeed = await db.checkFeed(id)
+
+    // Invalidate feeds cache after checking feed
+    revalidateTag('feeds-data')
+    console.log(`Feeds cache invalidated after checking feed ${id}`)
 
     return NextResponse.json({
       success: true,

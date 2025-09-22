@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { revalidateTag } from 'next/cache'
 
 const db = new DatabaseClient()
 
@@ -41,6 +42,11 @@ export async function PUT(
     }
 
     const feed = await db.updateFeed(id, updates)
+
+    // Invalidate feeds cache after updating feed
+    revalidateTag('feeds-data')
+    console.log(`Feeds cache invalidated after updating feed ${id}`)
+
     return NextResponse.json({ feed })
   } catch (error) {
     console.error('Failed to update feed:', error)
@@ -65,6 +71,11 @@ export async function DELETE(
     }
 
     await db.deleteFeed(id)
+
+    // Invalidate feeds cache after deleting feed
+    revalidateTag('feeds-data')
+    console.log(`Feeds cache invalidated after deleting feed ${id}`)
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Failed to delete feed:', error)

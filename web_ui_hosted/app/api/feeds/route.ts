@@ -1,14 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { unstable_cache, revalidateTag } from 'next/cache'
 
 const db = new DatabaseClient()
 
+// Cached function to fetch feeds data
+const getCachedFeeds = unstable_cache(
+  async () => {
+    const db = new DatabaseClient()
+    const feeds = await db.getFeeds()
+
+    console.log(`Feeds cache: Fetched ${feeds.length} feeds from database`)
+
+    return { feeds }
+  },
+  ['feeds'],
+  {
+    revalidate: 30, // Cache for 30 seconds
+    tags: ['feeds-data']
+  }
+)
+
 export async function GET() {
   try {
-    console.log('API: Starting to fetch feeds...')
-    const feeds = await db.getFeeds()
-    console.log(`API: Successfully fetched ${feeds.length} feeds`)
-    return NextResponse.json({ feeds })
+    console.log('Feeds API: GET request')
+
+    // Use cached function for better performance
+    const result = await getCachedFeeds()
+
+    console.log(`Feeds API: Returning ${result.feeds.length} feeds (cached)`)
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Failed to fetch feeds:', error)
     console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
@@ -44,6 +66,11 @@ export async function POST(request: NextRequest) {
     }
 
     const feed = await db.createFeed(feed_url, title)
+
+    // Invalidate feeds cache after creating new feed
+    revalidateTag('feeds-data')
+    console.log('Feeds cache invalidated after creating new feed')
+
     return NextResponse.json({ feed })
   } catch (error) {
     console.error('Failed to create feed:', error)
