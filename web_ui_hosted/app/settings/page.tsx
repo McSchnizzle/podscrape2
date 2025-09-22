@@ -229,58 +229,16 @@ export default function SettingsPage() {
                   onChange={(e) => {
                     const newValue = parseInt(e.target.value)
                     updateLocalSetting('pipeline', 'discovery_lookback_days', newValue)
-                    // Auto-adjust retention if needed
-                    const currentRetention = getSetting('pipeline', 'episode_retention_days', 14)
+                    // Auto-adjust episode retention if needed
+                    const currentRetention = getSetting('retention', 'episode_retention_days', 14)
                     if (newValue >= currentRetention) {
-                      updateLocalSetting('pipeline', 'episode_retention_days', newValue + 1)
+                      updateLocalSetting('retention', 'episode_retention_days', newValue + 1)
                     }
                   }}
                   disabled={saving}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Number of days to look back when discovering new episodes
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Episode Retention Days
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="90"
-                  className="input"
-                  value={getSetting('pipeline', 'episode_retention_days', 14)}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value)
-                    const lookbackDays = getSetting('pipeline', 'discovery_lookback_days', 7)
-                    if (newValue <= lookbackDays) {
-                      alert(`Episode retention days must be greater than discovery lookback days (${lookbackDays})`)
-                      return
-                    }
-                    updateLocalSetting('pipeline', 'episode_retention_days', newValue)
-                  }}
-                  disabled={saving}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Delete episodes older than this many days (must be greater than discovery lookback)
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Digest Retention Days
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="90"
-                  className="input"
-                  value={getSetting('pipeline', 'digest_retention_days', 14)}
-                  onChange={(e) => updateLocalSetting('pipeline', 'digest_retention_days', parseInt(e.target.value))}
-                  disabled={saving}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Delete digests older than this many days
                 </p>
               </div>
             </div>
@@ -626,48 +584,112 @@ export default function SettingsPage() {
             {/* Retention Settings */}
             <div className="card">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Database Retention */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Local MP3s (days)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="90"
-                    className="input"
-                    value={getSetting('retention', 'local_mp3_days', 7)}
-                    onChange={(e) => updateLocalSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
-                    disabled={saving}
-                  />
+                  <h4 className="text-md font-medium text-gray-800 mb-3">Database Cleanup</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Episode Retention (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        className="input"
+                        value={getSetting('retention', 'episode_retention_days', 14)}
+                        onChange={(e) => {
+                          const newValue = parseInt(e.target.value)
+                          const lookbackDays = getSetting('pipeline', 'discovery_lookback_days', 7)
+                          if (newValue <= lookbackDays) {
+                            alert(`Episode retention days must be greater than discovery lookback days (${lookbackDays})`)
+                            return
+                          }
+                          updateLocalSetting('retention', 'episode_retention_days', newValue)
+                        }}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete episodes from database older than this many days (must be greater than discovery lookback)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Digest Retention (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        className="input"
+                        value={getSetting('retention', 'digest_retention_days', 14)}
+                        onChange={(e) => updateLocalSetting('retention', 'digest_retention_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete digests from database older than this many days
+                      </p>
+                    </div>
+                  </div>
                 </div>
+
+                {/* File/Cache Retention */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Audio Cache (days)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="30"
-                    className="input"
-                    value={getSetting('retention', 'audio_cache_days', 3)}
-                    onChange={(e) => updateLocalSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
-                    disabled={saving}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Logs (days)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    className="input"
-                    value={getSetting('retention', 'logs_days', 30)}
-                    onChange={(e) => updateLocalSetting('retention', 'logs_days', parseInt(e.target.value))}
-                    disabled={saving}
-                  />
+                  <h4 className="text-md font-medium text-gray-800 mb-3">File & Cache Cleanup</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Local MP3s (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        className="input"
+                        value={getSetting('retention', 'local_mp3_days', 7)}
+                        onChange={(e) => updateLocalSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete local MP3 files older than this many days
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Audio Cache (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        className="input"
+                        value={getSetting('retention', 'audio_cache_days', 3)}
+                        onChange={(e) => updateLocalSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete cached audio files older than this many days
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Logs (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        className="input"
+                        value={getSetting('retention', 'logs_days', 30)}
+                        onChange={(e) => updateLocalSetting('retention', 'logs_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete log files older than this many days
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
