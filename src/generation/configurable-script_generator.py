@@ -196,15 +196,13 @@ class ScriptGenerator:
         # Prepare episode transcripts
         transcripts = []
         for episode in episodes:
-            # Read transcript (prefer database content over file)
-            transcript = None
-            if episode.transcript_content and episode.transcript_content.strip():
-                transcript = episode.transcript_content
-                logger.debug(f"Using transcript from database for episode: {episode.title}")
-            elif episode.transcript_path and Path(episode.transcript_path).exists():
-                logger.debug(f"Reading transcript from file (fallback) for episode: {episode.title}")
-                with open(episode.transcript_path, 'r', encoding='utf-8') as f:
-                    transcript = f.read()
+            # Read transcript content from database (REQUIRED - no file fallbacks)
+            if not episode.transcript_content or not episode.transcript_content.strip():
+                logger.error(f"No transcript content in database for episode: {episode.title}")
+                raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database - system requires database content")
+
+            transcript = episode.transcript_content
+            logger.debug(f"Using transcript from database for episode: {episode.title}")
 
             if transcript:
                 transcripts.append({
@@ -487,15 +485,13 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Prepare episode transcripts
         transcripts = []
         for episode in episodes:
-            # Read transcript (prefer database content over file)
-            transcript = None
-            if episode.transcript_content and episode.transcript_content.strip():
-                transcript = episode.transcript_content
-                logger.debug(f"Using transcript from database for episode: {episode.title}")
-            elif episode.transcript_path and Path(episode.transcript_path).exists():
-                logger.debug(f"Reading transcript from file (fallback) for episode: {episode.title}")
-                with open(episode.transcript_path, 'r', encoding='utf-8') as f:
-                    transcript = f.read()
+            # Read transcript content from database (REQUIRED - no file fallbacks)
+            if not episode.transcript_content or not episode.transcript_content.strip():
+                logger.error(f"No transcript content in database for episode: {episode.title}")
+                raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database - system requires database content")
+
+            transcript = episode.transcript_content
+            logger.debug(f"Using transcript from database for episode: {episode.title}")
 
             if transcript:
                 transcripts.append({
