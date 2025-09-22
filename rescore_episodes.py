@@ -59,19 +59,22 @@ def rescore_all_episodes():
         logger.info(f"\\nRe-scoring episode {episode_id}: {title[:50]}...")
         
         try:
-            # Check if transcript file exists
-            transcript_file = Path(transcript_path)
-            if not transcript_file.exists():
-                logger.warning(f"Transcript file not found: {transcript_path}")
+            # Read transcript content (prefer database content over file)
+            transcript_content = None
+            if episode.transcript_content and episode.transcript_content.strip():
+                transcript_content = episode.transcript_content
+                logger.debug(f"Using transcript from database for episode: {title}")
+            elif transcript_path and Path(transcript_path).exists():
+                logger.debug(f"Reading transcript from file (fallback) for episode: {title}")
+                with open(transcript_path, 'r', encoding='utf-8') as f:
+                    transcript_content = f.read()
+            else:
+                logger.warning(f"No transcript content available (database or file) for episode: {title}")
                 failed_rescores += 1
                 continue
             
-            # Read transcript content
-            with open(transcript_file, 'r', encoding='utf-8') as f:
-                transcript_content = f.read()
-            
             if not transcript_content.strip():
-                logger.warning(f"Empty transcript file: {transcript_path}")
+                logger.warning(f"Empty transcript content for episode: {title}")
                 failed_rescores += 1
                 continue
             
