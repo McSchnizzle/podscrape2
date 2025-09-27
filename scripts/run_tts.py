@@ -148,7 +148,7 @@ class TTSRunner:
             }
 
         # Apply limit
-        if self.limit:
+        if self.limit is not None:
             digests = digests[:self.limit]
 
         self.logger.info(f"Generating audio for {len(digests)} digests")

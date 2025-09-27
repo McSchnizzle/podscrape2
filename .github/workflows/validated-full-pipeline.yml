@@ -243,6 +243,7 @@ jobs:
 
           COMMIT_MSG="Add TTS audio files - $(date -u +'%Y-%m-%d %H:%M:%S')"
           git commit -m "$COMMIT_MSG"
+          git pull --rebase "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
 
       - name: Collect TTS logs and MP3 files

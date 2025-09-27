@@ -89,8 +89,8 @@ class VoiceManager:
             
         except Exception as e:
             logger.error(f"Failed to fetch available voices: {e}")
-            # Set empty list as fallback
-            self._available_voices = []
+            # Set None to allow retry on next call instead of caching failure
+            self._available_voices = None
     
     def get_recommended_voices_for_topics(self) -> Dict[str, str]:
         """Get recommended voice mappings for each topic based on voice characteristics"""

@@ -376,17 +376,27 @@ class PublishingPipelineRunner:
                     self.logger.error(f"Git commit failed: {result.stderr}")
                     return False
 
-            # Push to main using GITHUB_TOKEN
+            # Pull latest changes to handle race conditions
             github_token = os.getenv('GITHUB_TOKEN')
             github_repo = os.getenv('GITHUB_REPOSITORY')
 
             if github_token and github_repo:
                 # Use HTTPS with token authentication
                 remote_url = f"https://x-access-token:{github_token}@github.com/{github_repo}.git"
+
+                # Pull with rebase first
+                pull_result = subprocess.run(['git', 'pull', '--rebase', remote_url, 'main'],
+                                           capture_output=True, text=True, timeout=60)
+                if pull_result.returncode != 0:
+                    self.logger.warning(f"Git pull --rebase had issues: {pull_result.stderr}")
+
+                # Then push
                 result = subprocess.run(['git', 'push', remote_url, 'main'],
                                       capture_output=True, text=True, timeout=60)
             else:
                 # Fallback to default remote
+                subprocess.run(['git', 'pull', '--rebase', 'origin', 'main'],
+                             capture_output=True, text=True, timeout=60)
                 result = subprocess.run(['git', 'push', 'origin', 'main'],
                                       capture_output=True, text=True, timeout=60)
 

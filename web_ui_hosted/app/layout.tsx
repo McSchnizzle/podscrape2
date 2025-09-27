@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Navigation } from '@/components/Navigation'
+import { AuthProvider } from '@/components/AuthProvider'
+import { AuthGuard } from '@/components/AuthGuard'
 import Footer from '@/components/Footer'
 import './globals.css'
 
@@ -16,20 +18,22 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-50 min-h-screen">
-        <div className="min-h-screen flex flex-col">
-          {/* Navigation */}
-          <Navigation />
+        <AuthProvider>
+          <AuthGuard>
+            {/* Navigation - only shown for authenticated users */}
+            <Navigation />
 
-          {/* Main content */}
-          <main className="flex-1">
-            <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-              {children}
-            </div>
-          </main>
+            {/* Main content */}
+            <main className="flex-1">
+              <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                {children}
+              </div>
+            </main>
 
-          {/* Footer */}
-          <Footer />
-        </div>
+            {/* Footer - only shown for authenticated users */}
+            <Footer />
+          </AuthGuard>
+        </AuthProvider>
       </body>
     </html>
   )

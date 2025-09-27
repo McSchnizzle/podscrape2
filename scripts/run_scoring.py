@@ -151,7 +151,7 @@ class ScoringRunner:
             }
 
         # Apply limit
-        if self.limit:
+        if self.limit is not None:
             episodes = episodes[:self.limit]
 
         self.logger.info(f"Scoring {len(episodes)} episodes")

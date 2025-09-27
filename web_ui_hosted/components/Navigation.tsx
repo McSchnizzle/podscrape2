@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth } from './AuthProvider'
 
 export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { user, signOut } = useAuth()
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -42,10 +44,20 @@ export function Navigation() {
               </a>
             </div>
           </div>
-          <div className="flex items-center">
-            <span className="hidden sm:block text-sm text-gray-500">
-              Hosted Admin Interface
-            </span>
+          <div className="flex items-center space-x-4">
+            {user && (
+              <div className="flex items-center space-x-3">
+                <span className="hidden sm:block text-sm text-gray-500">
+                  {user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="text-sm text-gray-500 hover:text-red-600 px-3 py-1 rounded border border-gray-300 hover:border-red-300"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

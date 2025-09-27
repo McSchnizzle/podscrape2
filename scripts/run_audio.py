@@ -166,7 +166,7 @@ class AudioProcessor_Runner:
             }
 
         # Apply limit
-        if self.limit:
+        if self.limit is not None:
             episodes = episodes[:self.limit]
 
         self.logger.info(f"Processing {len(episodes)} episodes")

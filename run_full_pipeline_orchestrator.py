@@ -187,6 +187,7 @@ class PipelineOrchestrator:
             # For production: audio processing of multi-hour podcasts cannot have arbitrary time limits
             stdout_lines = []
             json_output = None
+            json_buffer = []  # For accumulating multi-line JSON
 
             while True:
                 line = process.stdout.readline()
@@ -197,21 +198,26 @@ class PipelineOrchestrator:
                     line = line.rstrip()
                     stdout_lines.append(line)
 
-                    # Try to parse as JSON (for final output)
-                    if line.startswith('{') and line.endswith('}'):
+                    # Check if this might be part of JSON output
+                    if line.strip().startswith('{') or line.strip().startswith('[') or json_buffer:
+                        json_buffer.append(line)
+                        # Try to parse accumulated JSON
+                        json_text = '\n'.join(json_buffer)
                         try:
-                            json_output = json.loads(line)
+                            json_output = json.loads(json_text)
+                            # Successfully parsed, clear buffer
+                            json_buffer = []
+                            self.logger.debug(f"Captured complete JSON output: {json_text[:100]}...")
                         except json.JSONDecodeError:
+                            # Not complete yet, continue accumulating
+                            # But don't let buffer grow too large (prevent memory issues)
+                            if len(json_buffer) > 50:
+                                json_buffer = []
                             pass
 
                     # Stream progress to log (filter out JSON output lines)
-                    if not (line.startswith('{') and line.endswith('}')):
-                        # Only show logs from script, not JSON output
-                        if any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG']):
-                            self.logger.info(f"  {line}")
-                    else:
-                        # This is likely JSON output - don't log it but ensure we capture it
-                        self.logger.debug(f"Captured potential JSON output: {line[:100]}...")
+                    elif any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG']):
+                        self.logger.info(f"  {line}")
 
             # Wait for process to complete
             return_code = process.wait()
@@ -222,9 +228,13 @@ class PipelineOrchestrator:
                     self.logger.info(f"✅ Phase completed successfully")
                     return json_output
                 else:
-                    # Try to find JSON in the last few lines
-                    for line in reversed(stdout_lines[-10:]):
-                        if line.startswith('{') and line.endswith('}'):
+                    # Try to find JSON in the output - look for complete JSON objects
+                    self.logger.debug("No JSON captured during streaming, attempting to parse from output")
+
+                    # Try single lines first
+                    for line in reversed(stdout_lines[-20:]):
+                        if (line.strip().startswith('{') and line.strip().endswith('}')) or \
+                           (line.strip().startswith('[') and line.strip().endswith(']')):
                             try:
                                 json_output = json.loads(line)
                                 self.logger.info(f"✅ Phase completed successfully")
@@ -232,18 +242,42 @@ class PipelineOrchestrator:
                             except json.JSONDecodeError:
                                 continue
 
+                    # Try multi-line JSON by combining consecutive lines
+                    for i in range(max(0, len(stdout_lines) - 20), len(stdout_lines)):
+                        for j in range(i + 1, min(i + 10, len(stdout_lines) + 1)):
+                            combined = '\n'.join(stdout_lines[i:j])
+                            if combined.strip().startswith(('{', '[')):
+                                try:
+                                    json_output = json.loads(combined)
+                                    self.logger.info(f"✅ Phase completed successfully")
+                                    return json_output
+                                except json.JSONDecodeError:
+                                    continue
+
                     self.logger.error(f"No valid JSON output found from {script_name}")
                     return {'success': False, 'error': 'No valid JSON output'}
             else:
                 self.logger.error(f"❌ Phase failed with exit code {return_code}")
-                # Look for error JSON in output
-                for line in reversed(stdout_lines[-10:]):
-                    if line.startswith('{') and line.endswith('}'):
+                # Look for error JSON in output using same robust parsing
+                for line in reversed(stdout_lines[-20:]):
+                    if (line.strip().startswith('{') and line.strip().endswith('}')) or \
+                       (line.strip().startswith('[') and line.strip().endswith(']')):
                         try:
                             error_data = json.loads(line)
                             return error_data
                         except json.JSONDecodeError:
                             continue
+
+                # Try multi-line error JSON
+                for i in range(max(0, len(stdout_lines) - 20), len(stdout_lines)):
+                    for j in range(i + 1, min(i + 5, len(stdout_lines) + 1)):
+                        combined = '\n'.join(stdout_lines[i:j])
+                        if combined.strip().startswith(('{', '[')):
+                            try:
+                                error_data = json.loads(combined)
+                                return error_data
+                            except json.JSONDecodeError:
+                                continue
 
                 return {'success': False, 'error': f'Script failed with exit code {return_code}'}
 

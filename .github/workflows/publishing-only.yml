@@ -107,12 +107,10 @@ jobs:
           python scripts/run_publishing.py --verbose
 
           echo "=== Copying RSS files ==="
-          cp data/rss/daily-digest.xml data/rss/test-feed.xml
-          cp public/daily-digest.xml public/test-feed.xml
+          cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
 
           echo "=== Checking for changes to commit ==="
-          git add data/rss/daily-digest.xml data/rss/test-feed.xml \
-            public/daily-digest.xml public/test-feed.xml
+          git add web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
 
           if git diff --cached --quiet; then
             echo "No repository changes to commit after publishing."
@@ -120,6 +118,9 @@ jobs:
             echo "=== Committing RSS feed updates ==="
             COMMIT_MSG="Update RSS feeds with existing releases - $(date -u +'%Y-%m-%d %H:%M:%S')"
             git commit -m "$COMMIT_MSG"
+
+            echo "=== Pulling latest changes ==="
+            git pull --rebase "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
 
             echo "=== Pushing changes ==="
             git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
