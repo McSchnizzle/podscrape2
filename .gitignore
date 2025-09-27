@@ -4,6 +4,11 @@
 .env.production
 .env.staging
 
+# OAuth credentials files
+google_client_id_*.json
+*client_secret*.json
+*credentials*.json
+
 # Database files
 data/database/*.db
 data/database/*.db-journal

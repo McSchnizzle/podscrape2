@@ -1,17 +1,32 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE!
+// Lazy initialization to avoid build-time errors
+let supabaseClient: any = null
 
-if (!supabaseUrl || !supabaseServiceRole) {
-  throw new Error('Missing Supabase environment variables')
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    const supabaseUrl = process.env.SUPABASE_URL!
+    const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE!
+
+    if (!supabaseUrl || !supabaseServiceRole) {
+      throw new Error('Missing Supabase environment variables')
+    }
+
+    supabaseClient = createClient(supabaseUrl, supabaseServiceRole, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  }
+  return supabaseClient
 }
 
-// Create Supabase client with service role for admin operations
-export const supabase = createClient(supabaseUrl, supabaseServiceRole, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+// Export getter function instead of direct client
+export const supabase = new Proxy({} as any, {
+  get: (target, prop) => {
+    const client = getSupabaseClient()
+    return client[prop]
   }
 })
 
