@@ -226,6 +226,187 @@ This ensures configuration issues are found and fixed immediately, not discovere
 
 **System Status**: Production-ready with comprehensive data protection, validation, and fail-fast configuration principles fully implemented.
 
+## Session 6 - Additional Bug Fixes and Optimizations
+
+### Critical Bugs (Priority 1) - NOT STARTED ❌
+
+#### 1. Database Transaction Connection Bug
+- **File**: `src/utils/error_handling.py:271-272`
+- **Issue**: Unbound `conn` variable in `database_transaction` context manager
+- **Evidence**: `conn` only defined inside `with db_manager.get_connection()` block, but rollback tries to access it in exception handler
+- **Fix**: Initialize `conn = None` before try block and check `if conn:` before rollback
+- **Status**: ❌ Not fixed
+
+#### 2. Limit Check Ignores Zero
+- **Files**: `scripts/run_tts.py:151`, `scripts/run_scoring.py:154`, `scripts/run_audio.py:169`
+- **Issue**: `if self.limit:` condition treats `--limit 0` as falsy, processing all items instead of none
+- **Evidence**: Zero is falsy in Python, so `--limit 0` doesn't slice the list
+- **Fix**: Change to `if self.limit is not None:` before slicing
+- **Status**: ❌ Not fixed
+
+#### 3. Voice Fetch Failure Cached Permanently
+- **File**: `src/audio/voice_manager.py:90-93`
+- **Issue**: Failed voice fetches set `_available_voices = []` permanently until refresh
+- **Evidence**: Network errors cause empty list to be cached, preventing future fetches
+- **Fix**: Set `_available_voices = None` on failure or implement retry mechanism
+- **Status**: ❌ Not fixed
+
+#### 4. Global Logger Access Vulnerability
+- **File**: `src/utils/error_handling.py:236`
+- **Issue**: `logger = globals()['logger']` throws KeyError if 'logger' not in scope
+- **Evidence**: Unsafe globals() access without error handling
+- **Fix**: Use `logger = logging.getLogger(__name__)` instead
+- **Status**: ❌ Not fixed
+
+#### 5. File Encoding Inconsistency
+- **File**: `tests/test_phase1.py:270`
+- **Issue**: File opened without encoding while most files use UTF-8
+- **Evidence**: Missing `encoding='utf-8'` parameter inconsistent with codebase
+- **Fix**: Add `encoding='utf-8'` to all file operations
+- **Status**: ❌ Not fixed
+
+#### 6. Missing Subprocess Exception Handling
+- **Files**: Multiple files using `subprocess.run()`
+- **Issue**: Inconsistent handling of `FileNotFoundError` when external tools missing
+- **Evidence**: Some subprocess calls lack proper exception handling
+- **Fix**: Add FileNotFoundError handling with clear error messages
+- **Status**: ❌ Not fixed
+
+#### 7. Resource Leak in Audio Processing
+- **File**: `src/podcast/audio_processor.py:509`
+- **Issue**: Session only closed in destructor, not in exception paths
+- **Evidence**: Missing cleanup in try/finally blocks
+- **Fix**: Add explicit resource cleanup or use context managers
+- **Status**: ❌ Not fixed
+
+### High-Impact Optimizations (Priority 2) - NOT STARTED ❌
+
+#### 1. Parallelize TTS Audio Generation
+- **File**: `scripts/run_tts.py` (TTSRunner.generate_audio)
+- **Issue**: Sequential audio generation creates bottleneck
+- **Evidence**: Processes digests one-by-one instead of parallel
+- **Fix**: Use `concurrent.futures.ThreadPoolExecutor` respecting API rate limits
+- **Expected Gain**: 40-70% time reduction for multiple digests
+- **Status**: ❌ Not implemented
+
+#### 2. Leverage Voice Characteristics in Recommendations
+- **File**: `src/audio/voice_manager.py:112-133`
+- **Issue**: Computes voice gender lists but ignores them, assigns first 4 voices
+- **Evidence**: Male/female/neutral categorization unused in topic mapping
+- **Fix**: Map topics to appropriate voice gender categories, persist in topics.json
+- **Expected Gain**: Better voice-topic matching, configurable per topic
+- **Status**: ❌ Not implemented
+
+#### 3. Cache Configuration Data
+- **File**: `src/config/config_manager.py:41-55`
+- **Issue**: Repeated JSON parsing on every configuration access
+- **Evidence**: `_load_topics_config()` called by multiple methods repeatedly
+- **Fix**: Cache with file modification time checks and invalidation
+- **Expected Gain**: Eliminate repeated disk I/O, faster configuration access
+- **Status**: ❌ Not implemented
+
+#### 4. Eliminate Repeated JSON Parsing
+- **Files**: `ConfigManager` methods like `get_score_threshold()`, `get_voice_settings()`
+- **Issue**: Each call reloads and parses JSON file
+- **Evidence**: No caching between method calls
+- **Fix**: Implement proper caching with file modification checks
+- **Expected Gain**: Reduced latency and file system load
+- **Status**: ❌ Not implemented
+
+#### 5. Batch API Requests
+- **Files**: Audio generation, voice fetching, content scoring loops
+- **Issue**: Individual API calls in loops instead of batching
+- **Evidence**: Sequential requests instead of parallel/batch processing
+- **Fix**: Implement request batching or connection pooling
+- **Expected Gain**: Reduced API overhead and improved throughput
+- **Status**: ❌ Not implemented
+
+#### 6. Remove Synchronous Sleep Calls
+- **Files**: `src/audio/audio_generator.py:119,273` and others
+- **Issue**: `time.sleep()` calls block entire process
+- **Evidence**: Synchronous sleeps for rate limiting
+- **Fix**: Replace with async/await patterns or token bucket rate limiting
+- **Expected Gain**: Better resource utilization and responsiveness
+- **Status**: ❌ Not implemented
+
+### Medium-Impact Optimizations (Priority 3) - NOT STARTED ❌
+
+#### 1. Optimize Subprocess Calls
+- **File**: Audio processing with ffmpeg
+- **Issue**: Separate ffmpeg process for each audio chunk
+- **Evidence**: No process reuse or batching
+- **Fix**: Use single ffmpeg process with streaming or batch operations
+- **Expected Gain**: Reduced process overhead
+- **Status**: ❌ Not implemented
+
+#### 2. Database Connection Optimization
+- **Files**: SQLAlchemy usage throughout codebase
+- **Issue**: No evidence of connection pooling or prepared statements
+- **Evidence**: Standard SQLAlchemy usage without optimization
+- **Fix**: Implement connection pooling and compiled statement caching
+- **Expected Gain**: Better database performance and resource usage
+- **Status**: ❌ Not implemented
+
+#### 3. Memory Optimization for Large Transcripts
+- **Files**: Transcript processing code
+- **Issue**: Large files read entirely into memory
+- **Evidence**: Whole file processing instead of streaming
+- **Fix**: Implement streaming processing for large files
+- **Expected Gain**: Reduced memory footprint for large transcripts
+- **Status**: ❌ Not implemented
+
+### Architecture Improvements (Priority 4) - NOT STARTED ❌
+
+#### 1. Async/Await Adoption
+- **Scope**: Entire codebase
+- **Issue**: Synchronous code for I/O-bound operations
+- **Evidence**: No async patterns found in codebase
+- **Fix**: Migrate I/O operations to async/await patterns
+- **Expected Gain**: Better concurrency and resource utilization
+- **Status**: ❌ Not implemented
+
+#### 2. Connection Pooling Implementation
+- **Scope**: Database and HTTP connections
+- **Issue**: No connection reuse optimization
+- **Evidence**: Standard connection patterns without pooling
+- **Fix**: Implement connection pools for database and HTTP clients
+- **Expected Gain**: Reduced connection overhead
+- **Status**: ❌ Not implemented
+
+#### 3. Memory-Efficient Streaming
+- **Scope**: Large file processing
+- **Issue**: Memory usage scales with file size
+- **Evidence**: Whole-file processing patterns
+- **Fix**: Implement streaming for large file operations
+- **Expected Gain**: Constant memory usage regardless of file size
+- **Status**: ❌ Not implemented
+
+## Progress Tracking
+
+- **Session 1**: ✅ COMPLETE (4/4 critical production issues resolved)
+- **Session 2**: ✅ COMPLETE (3/3 high-priority testing infrastructure issues resolved)
+- **Session 3**: ✅ COMPLETE (3/3 medium-priority code quality & reliability issues resolved)
+- **Session 4**: ✅ COMPLETE (4/4 testing improvements & documentation tasks resolved)
+- **Session 5**: ✅ COMPLETE (3/3 test consolidation and cleanup tasks resolved)
+- **Session 6**: ❌ NOT STARTED (18 additional bug fixes and optimizations identified)
+
+### Session 6 Summary
+- **Total Issues**: 18
+- **Critical Bugs**: 7
+- **High-Impact Optimizations**: 6
+- **Medium-Impact Optimizations**: 3
+- **Architecture Improvements**: 3
+
+### Status Overview
+- ✅ **Completed**: 0
+- 🔄 **In Progress**: 0
+- ❌ **Not Started**: 18
+
+### Next Steps for Session 6
+1. Address critical bugs first (Priority 1)
+2. Implement high-impact optimizations (Priority 2)
+3. Consider architecture improvements for long-term maintainability
+
 ## Validation Commands
 
 After each session, run these commands to validate fixes:
@@ -243,3 +424,8 @@ python3 src/publishing/rss_generator.py --validate public/daily-digest.xml
 # Web UI phase indicator test (manual)
 # - Start pipeline and watch live status indicators update through all phases
 ```
+
+---
+
+*Last Updated: 2025-01-26*
+*Session 6 added from independent code review analysis*
