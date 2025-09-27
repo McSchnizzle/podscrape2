@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DatabaseClient } from "@/utils/supabase";
+import { DatabaseClient, Episode } from "@/utils/supabase";
 import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ const getCachedEpisodes = unstable_cache(
     });
 
     // Process episodes for display
-    const processedEpisodes = episodes.map(ep => {
+    const processedEpisodes = episodes.map((ep: Episode & { feeds?: { title: string } }) => {
       // Create score labels
       const scores = ep.scores || {};
       const scoreLabels = Object.entries(scores)
