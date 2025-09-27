@@ -235,7 +235,7 @@ This ensures configuration issues are found and fixed immediately, not discovere
 - **Issue**: Unbound `conn` variable in `database_transaction` context manager
 - **Evidence**: `conn` only defined inside `with db_manager.get_connection()` block, but rollback tries to access it in exception handler
 - **Fix**: Initialize `conn = None` before try block and check `if conn:` before rollback
-- **Status**: ❌ Not fixed
+- **Status**: ✅ **FIXED** - Added `conn = None` initialization and `if conn:` check before rollback
 
 #### 2. Limit Check Ignores Zero
 - **Files**: `scripts/run_tts.py:151`, `scripts/run_scoring.py:154`, `scripts/run_audio.py:169`

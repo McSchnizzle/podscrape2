@@ -252,27 +252,29 @@ def safe_operation(operation_name: str, logger: logging.Logger = None,
 def database_transaction(db_manager, operation_name: str):
     """
     Context manager for database transactions with proper error handling.
-    
+
     Args:
         db_manager: Database manager instance
         operation_name: Name of the operation for logging
     """
     logger.info(f"Starting database transaction: {operation_name}")
-    
+
+    conn = None
     try:
         with db_manager.get_connection() as conn:
             conn.execute("BEGIN TRANSACTION")
             yield conn
             conn.commit()
             logger.info(f"Database transaction committed: {operation_name}")
-            
+
     except Exception as e:
         logger.error(f"Database transaction failed: {operation_name} - {e}", exc_info=True)
-        try:
-            conn.rollback()
-            logger.info(f"Database transaction rolled back: {operation_name}")
-        except:
-            logger.error(f"Failed to rollback transaction: {operation_name}")
+        if conn:
+            try:
+                conn.rollback()
+                logger.info(f"Database transaction rolled back: {operation_name}")
+            except:
+                logger.error(f"Failed to rollback transaction: {operation_name}")
         raise DatabaseError(f"Transaction failed for {operation_name}: {e}") from e
 
 # Error recovery utilities
