@@ -1,21 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables for auth')
-}
+import { createClient } from '@/utils/supabase/client'
 
 // Create client-side Supabase client for authentication
-export const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
-  }
-})
+export const supabaseAuth = createClient()
 
 // Allowed email for authentication
 const ALLOWED_EMAIL = 'brownpr0@gmail.com'
