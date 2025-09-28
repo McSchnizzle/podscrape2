@@ -528,7 +528,7 @@ export class DatabaseClient {
 
         if (!linkError && linkData) {
           digestLinks = linkData as DigestEpisodeLinkRecord[]
-          const digestIds = Array.from(new Set(digestLinks.map(link => link.digest_id)))
+          const digestIds = Array.from(new Set(digestLinks.map((link: DigestEpisodeLinkRecord) => link.digest_id)))
           if (digestIds.length > 0) {
             const { data: digestData, error: digestError } = await supabase
               .from('digests')
@@ -536,7 +536,7 @@ export class DatabaseClient {
               .in('id', digestIds)
 
             if (!digestError && digestData) {
-              digestData.forEach(d => {
+              digestData.forEach((d: Digest) => {
                 digestsMap[d.id] = d
               })
             }
@@ -546,7 +546,7 @@ export class DatabaseClient {
 
       // Get feed titles for episodes (since we can't join due to missing FK constraint)
       if (episodes.length > 0) {
-        const feedIds = Array.from(new Set(episodes.map(ep => ep.feed_id).filter(Boolean)))
+        const feedIds = Array.from(new Set(episodes.map((ep: Episode) => ep.feed_id).filter(Boolean)))
         if (feedIds.length > 0) {
           const { data: feeds, error: feedsError } = await supabase
             .from('feeds')
@@ -554,8 +554,8 @@ export class DatabaseClient {
             .in('id', feedIds)
 
           if (!feedsError && feeds) {
-            const feedMap = Object.fromEntries(feeds.map(f => [f.id, f.title]))
-            episodes = episodes.map(ep => ({
+            const feedMap = Object.fromEntries(feeds.map((f: Feed) => [f.id, f.title]))
+            episodes = episodes.map((ep: Episode) => ({
               ...ep,
               feeds: ep.feed_id ? { title: feedMap[ep.feed_id] || 'Unknown Feed' } : null
             }))
@@ -566,14 +566,14 @@ export class DatabaseClient {
       // Apply text search on the frontend for simplicity
       if (q) {
         const searchTerm = q.toLowerCase()
-        episodes = episodes.filter(ep =>
+        episodes = episodes.filter((ep: Episode & { feeds?: { title: string } }) =>
           ep.title?.toLowerCase().includes(searchTerm) ||
           ep.feeds?.title?.toLowerCase().includes(searchTerm)
         )
       }
 
       const inclusionMap: Record<number, Array<{ topic: string; date: string }>> = {}
-      digestLinks.forEach(link => {
+      digestLinks.forEach((link: DigestEpisodeLinkRecord) => {
         const digest = digestsMap[link.digest_id]
         if (!digest) return
         if (!inclusionMap[link.episode_id]) {
@@ -585,7 +585,7 @@ export class DatabaseClient {
         })
       })
 
-      return episodes.map(ep => ({
+      return episodes.map((ep: Episode) => ({
         ...ep,
         inclusion: inclusionMap[ep.id] || []
       }))
@@ -607,7 +607,7 @@ export class DatabaseClient {
       if (error) throw error
 
       // Enrich digests with episode information
-      const enrichedDigests = await Promise.all((data || []).map(async (digest) => {
+      const enrichedDigests = await Promise.all((data || []).map(async (digest: Digest) => {
         if (digest.episode_ids && digest.episode_ids.length > 0) {
           const { data: episodes, error: episodeError } = await supabase
             .from('episodes')
@@ -617,7 +617,7 @@ export class DatabaseClient {
           if (!episodeError && episodes) {
             return {
               ...digest,
-              episodes: episodes.map(ep => ep.title.length > 60 ? ep.title.substring(0, 60) + '...' : ep.title),
+              episodes: episodes.map((ep: Episode) => ep.title.length > 60 ? ep.title.substring(0, 60) + '...' : ep.title),
               episode_count: episodes.length
             }
           }
