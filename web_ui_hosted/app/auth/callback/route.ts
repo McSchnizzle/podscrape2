@@ -9,22 +9,26 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     // Return HTML that will handle client-side PKCE exchange
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
     return new NextResponse(
       `<!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
           <title>Authentication complete</title>
-          <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-          <script>
+          <script type="module">
+            import { createClient } from 'https://cdn.skypack.dev/@supabase/supabase-js@2'
+
             async function handleAuth() {
               try {
                 console.log('Handling client-side auth exchange');
 
                 // Initialize Supabase client
-                const supabase = window.supabase.createClient(
-                  '${process.env.NEXT_PUBLIC_SUPABASE_URL}',
-                  '${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}',
+                const supabase = createClient(
+                  '${supabaseUrl}',
+                  '${supabaseAnonKey}',
                   {
                     auth: {
                       flowType: 'pkce'
