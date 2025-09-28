@@ -516,7 +516,7 @@ export class DatabaseClient {
 
       let episodes = data || []
 
-      const episodeIds = episodes.map(ep => ep.id).filter(Boolean)
+      const episodeIds = episodes.map((ep: Episode) => ep.id).filter(Boolean)
       let digestLinks: DigestEpisodeLinkRecord[] = []
       let digestsMap: Record<number, any> = {}
 
