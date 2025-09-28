@@ -40,17 +40,22 @@ export function isAuthorizedUser(email?: string | null): boolean {
 
 // Validate current user authorization
 export async function validateUserAuth() {
-  const { session } = await getSession()
+  console.log('validateUserAuth: Starting validation...')
+  const { session, error } = await getSession()
+  console.log('validateUserAuth: Session result:', { hasSession: !!session, error, email: session?.user?.email })
 
   if (!session?.user?.email) {
+    console.log('validateUserAuth: No active session')
     return { authorized: false, reason: 'No active session' }
   }
 
   if (!isAuthorizedUser(session.user.email)) {
+    console.log('validateUserAuth: Unauthorized email:', session.user.email)
     // Sign out unauthorized users immediately
     await signOut()
     return { authorized: false, reason: 'Unauthorized email address' }
   }
 
+  console.log('validateUserAuth: User authorized:', session.user.email)
   return { authorized: true, user: session.user }
 }

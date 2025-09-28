@@ -40,14 +40,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const checkAuth = async () => {
       try {
+        console.log('AuthProvider: Starting auth check...')
         const { authorized, user: validatedUser, reason } = await validateUserAuth()
+        console.log('AuthProvider: Auth result:', { authorized, hasUser: !!validatedUser, reason })
 
         if (!mounted) return
 
         if (authorized && validatedUser) {
+          console.log('AuthProvider: Setting user and clearing loading')
           setUser(validatedUser)
           setLoading(false)
         } else {
+          console.log('AuthProvider: No valid user, redirecting to login')
           setUser(null)
           setLoading(false)
 
