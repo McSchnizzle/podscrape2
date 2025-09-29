@@ -48,7 +48,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       totalCount: health.feeds_count || 0,
-      sampleEpisodes: episodes.slice(0, 3).map(ep => ({
+      sampleEpisodes: episodes.slice(0, 3).map((ep: any) => ({
         id: ep.id,
         title: ep.title,
         status: ep.status,
