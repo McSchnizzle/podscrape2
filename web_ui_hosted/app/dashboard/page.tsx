@@ -69,9 +69,7 @@ export default function DashboardPage() {
       </div>
 
       {/* System Health */}
-      <Suspense fallback={<div className="card animate-pulse h-32" />}>
-        <SystemHealth />
-      </Suspense>
+      <SystemHealth />
 
       {/* Pipeline Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -16,7 +16,15 @@ function getSupabaseClient() {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
-        detectSessionInUrl: false
+        detectSessionInUrl: false,
+        flowType: 'implicit',
+        debug: false
+      },
+      // Additional settings to minimize auth client creation
+      global: {
+        headers: {
+          'x-my-custom-header': 'database-only-client'
+        }
       }
     })
   }
