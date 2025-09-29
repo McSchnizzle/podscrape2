@@ -96,19 +96,15 @@ class DigestRunner:
 
         self.logger.info("✓ OpenAI API key verified")
 
-    def generate_digests(self, episodes_data=None, target_date=None):
-        """Generate digests from scoring phase or all qualifying episodes"""
+    def generate_digests(self, target_date=None):
+        """Generate digests from database (database-first approach)"""
 
         self.pipeline_logger.log_phase_start("Digest Script Generation Phase")
 
         if target_date is None:
             target_date = date.today()
 
-        # Validate input format (though we don't use episodes_data anymore with create_daily_digests)
-        if episodes_data is not None:
-            self.logger.warning("episodes_data parameter is ignored when using create_daily_digests - it discovers topics automatically")
-
-        self.logger.info("Generating daily digests for all active topics (automatic topic discovery)")
+        self.logger.info("Generating daily digests for all active topics (database-first approach)")
 
         # Handle dry run mode
         if self.dry_run:
@@ -125,8 +121,10 @@ class DigestRunner:
         try:
             digests = self.script_generator.create_daily_digests(target_date)
 
-            # Log details for each generated digest
+            # Log details for each generated digest and mark episodes as digested
             generated_digests = []
+            all_episode_ids = []
+
             for digest in digests:
                 self.logger.info(f"   ✅ Generated digest: {digest.topic}")
                 self.logger.info(f"      Words: {digest.script_word_count:,}")
@@ -140,7 +138,22 @@ class DigestRunner:
                         preview = content[:200] + "..." if len(content) > 200 else content
                         self.logger.info(f"      Preview: {preview}")
 
+                # Collect episode IDs for marking as digested
+                if hasattr(digest, 'episode_ids') and digest.episode_ids:
+                    # Get episode GUIDs from episode IDs
+                    episode_guids = []
+                    for episode_id in digest.episode_ids:
+                        episode = self.episode_repo.get_by_id(episode_id)
+                        if episode:
+                            episode_guids.append(episode.episode_guid)
+                    all_episode_ids.extend(episode_guids)
+
                 generated_digests.append(self._digest_to_dict(digest))
+
+            # Mark all episodes used in digests as 'digested'
+            if all_episode_ids and not self.dry_run:
+                self.logger.info(f"📝 Marking {len(all_episode_ids)} episodes as digested")
+                self.episode_repo.mark_episodes_as_digested(all_episode_ids)
 
             # Log completion
             self.pipeline_logger.log_phase_complete(
@@ -186,7 +199,7 @@ class DigestRunner:
 
 def main():
     parser = argparse.ArgumentParser(description='Digest Generation Phase')
-    parser.add_argument('input', nargs='?', help='Input JSON file from scoring phase (optional)')
+    parser.add_argument('input', nargs='?', help='(DEPRECATED - ignored) Input JSON file from scoring phase')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be generated')
     parser.add_argument('--limit', type=int, help='Limit number of digests')
     parser.add_argument('--date', help='Target date (YYYY-MM-DD, default: today)')
@@ -212,31 +225,11 @@ def main():
             except ValueError:
                 raise ValueError(f"Invalid date format: {args.date} (expected YYYY-MM-DD)")
 
-        # Handle input
-        episodes_data = None
+        # DEPRECATED: JSON input is no longer used - digest phase reads directly from database
         if args.input:
-            if args.input.endswith('.json') or '/' in args.input:
-                # JSON file input
-                episodes_data = args.input
-            else:
-                raise ValueError(f"Invalid input format: {args.input}")
-        else:
-            # Fix: Only read from stdin if it's actually a terminal (interactive mode)
-            # When run as subprocess from Web UI, stdin might not be properly set up
-            if not sys.stdin.isatty() and hasattr(sys.stdin, 'readable') and sys.stdin.readable():
-                # Read from stdin if available, but with timeout to prevent hanging
-                try:
-                    import select
-                    # Check if data is available on stdin without blocking
-                    if select.select([sys.stdin], [], [], 0.1)[0]:  # 100ms timeout
-                        stdin_content = sys.stdin.read().strip()
-                        if stdin_content:
-                            episodes_data = json.loads(stdin_content)
-                except (json.JSONDecodeError, EOFError, ImportError, OSError):
-                    # No valid JSON input from stdin, proceed with None
-                    pass
+            runner.logger.warning(f"JSON input '{args.input}' is deprecated and ignored - digest phase reads directly from database")
 
-        result = runner.generate_digests(episodes_data, target_date)
+        result = runner.generate_digests(target_date=target_date)
 
         # Output JSON
         if args.output:

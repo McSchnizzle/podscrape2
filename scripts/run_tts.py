@@ -103,51 +103,25 @@ class TTSRunner:
         else:
             self.logger.info("✓ ElevenLabs API key configured")
 
-    def generate_audio(self, digests_data):
-        """Generate TTS audio from digest phase or direct digest data"""
+    def generate_audio(self):
+        """Generate TTS audio from database (database-first approach)"""
 
         self.pipeline_logger.log_phase_start("TTS Audio Generation Phase")
 
-        if isinstance(digests_data, str):
-            # Load from JSON file
-            with open(digests_data, 'r') as f:
-                data = json.load(f)
-            if not data.get('success', False):
-                return {
-                    'success': False,
-                    'error': f"Digest phase failed: {data.get('error', 'Unknown error')}",
-                    'audio_generated': 0,
-                    'audio_results': []
-                }
-            digests = data.get('digests', [])
-        elif isinstance(digests_data, dict):
-            # Direct JSON data
-            if not digests_data.get('success', False):
-                return {
-                    'success': False,
-                    'error': f"Digest phase failed: {digests_data.get('error', 'Unknown error')}",
-                    'audio_generated': 0,
-                    'audio_results': []
-                }
-            digests = digests_data.get('digests', [])
-        elif isinstance(digests_data, list):
-            # Direct list of digest IDs or digest objects
-            digests = digests_data
-        else:
-            return {
-                'success': False,
-                'error': "Invalid input format - expected JSON file path, dict, or list",
-                'audio_generated': 0,
-                'audio_results': []
-            }
+        # Get digests that need TTS processing (have script but no MP3)
+        self.logger.info("🔍 Finding digests pending TTS processing...")
+        digests = self.digest_repo.get_digests_pending_tts()
 
         if not digests:
+            self.logger.info("📄 No digests found pending TTS processing")
             return {
                 'success': True,
                 'audio_generated': 0,
                 'audio_results': [],
-                'message': "No digests to process for audio generation"
+                'message': "No digests pending TTS processing"
             }
+
+        self.logger.info(f"📄 Found {len(digests)} digests pending TTS processing")
 
         # Apply limit
         if self.limit is not None:
@@ -409,7 +383,7 @@ class TTSRunner:
 
 def main():
     parser = argparse.ArgumentParser(description='TTS Audio Generation Phase')
-    parser.add_argument('input', nargs='?', help='Input JSON file from digest phase, digest ID, or digest IDs (comma-separated)')
+    parser.add_argument('input', nargs='?', help='(DEPRECATED - ignored) Input JSON file from digest phase or digest IDs')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be generated')
     parser.add_argument('--limit', type=int, help='Limit number of digests')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
@@ -426,26 +400,11 @@ def main():
             verbose=args.verbose
         )
 
-        # Handle input
+        # DEPRECATED: JSON input is no longer used - TTS phase reads directly from database
         if args.input:
-            if args.input.endswith('.json') or '/' in args.input:
-                # JSON file input
-                digests_data = args.input
-            elif ',' in args.input:
-                # Comma-separated digest IDs
-                ids = [int(id_str.strip()) for id_str in args.input.split(',')]
-                digests_data = ids
-            else:
-                # Single digest ID
-                try:
-                    digests_data = [int(args.input)]
-                except ValueError:
-                    raise ValueError(f"Invalid digest ID: {args.input}")
-        else:
-            # Read from stdin
-            digests_data = json.load(sys.stdin)
+            runner.logger.warning(f"JSON input '{args.input}' is deprecated and ignored - TTS phase reads directly from database")
 
-        result = runner.generate_audio(digests_data)
+        result = runner.generate_audio()
 
         # Serialize result for JSON output (handles datetime and dataclass objects)
         json_safe_result = serialize_for_json(result)

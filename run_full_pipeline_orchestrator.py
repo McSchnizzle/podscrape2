@@ -473,37 +473,9 @@ class PipelineOrchestrator:
                 self.logger.info("Stopping after audio phase as requested")
                 return self._log_success(start_time, episodes_found, [], [], [])
 
-            # Phase 3: Content Scoring
+            # Phase 3: Digest Generation
             self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 3: CONTENT SCORING")
-            self.logger.info("="*80)
-
-            self._record_phase_event('scoring', 'starting', {
-                'episodes_in': episodes_processed
-            })
-
-            scoring_result = self.run_phase_script('scripts/run_scoring.py', audio_result)
-
-            if not scoring_result.get('success'):
-                self.logger.error(f"Scoring phase failed: {scoring_result.get('error')}")
-                self._record_phase_event('scoring', 'failed', {
-                    'error': scoring_result.get('error')
-                })
-                return self._log_failure(start_time, "Scoring phase failed")
-
-            episodes_scored = scoring_result.get('episodes_scored', 0)
-            self.logger.info(f"📊 Episodes scored: {episodes_scored}")
-            self._record_phase_event('scoring', 'completed', {
-                'episodes_scored': episodes_scored
-            })
-
-            if self.phase_stop == 'scoring':
-                self.logger.info("Stopping after scoring phase as requested")
-                return self._log_success(start_time, episodes_found, scoring_result.get('episodes', []), [], [])
-
-            # Phase 4: Digest Generation
-            self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 4: DIGEST GENERATION")
+            self.logger.info("PHASE 3: DIGEST GENERATION")
             self.logger.info("="*80)
 
             self._record_phase_event('digest', 'starting', {
@@ -527,18 +499,18 @@ class PipelineOrchestrator:
 
             if self.phase_stop == 'digest':
                 self.logger.info("Stopping after digest phase as requested")
-                return self._log_success(start_time, episodes_found, scoring_result.get('episodes', []), digest_result.get('digests', []), [])
+                return self._log_success(start_time, episodes_found, [], digest_result.get('digests', []), [])
 
-            # Phase 5: TTS Audio Generation
+            # Phase 4: TTS Audio Generation
             self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 5: TTS AUDIO GENERATION")
+            self.logger.info("PHASE 4: TTS AUDIO GENERATION")
             self.logger.info("="*80)
 
             self._record_phase_event('tts', 'starting', {
                 'digests_in': digests_generated
             })
 
-            tts_result = self.run_phase_script('scripts/run_tts.py', digest_result)
+            tts_result = self.run_phase_script('scripts/run_tts.py')
 
             if not tts_result.get('success'):
                 self.logger.warning(f"TTS phase failed: {tts_result.get('error')}")
@@ -559,14 +531,14 @@ class PipelineOrchestrator:
                 return self._log_success(
                     start_time,
                     episodes_found,
-                    scoring_result.get('episodes', []),
+                    [],
                     digest_result.get('digests', []),
                     tts_result.get('audio_results', []) if tts_result.get('success') else []
                 )
 
-            # Phase 6: Publishing
+            # Phase 5: Publishing
             self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 6: PUBLISHING")
+            self.logger.info("PHASE 5: PUBLISHING")
             self.logger.info("="*80)
 
             self._record_phase_event('publishing', 'starting', None)
@@ -586,7 +558,7 @@ class PipelineOrchestrator:
             return self._log_success(
                 start_time,
                 episodes_found,
-                scoring_result.get('episodes', []),
+                [],
                 digest_result.get('digests', []),
                 tts_result.get('audio_results', []) if tts_result.get('success') else []
             )
@@ -642,7 +614,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline (orchestrator)')
     parser.add_argument('--log', help='Log file path', default=None)
     parser.add_argument('--phase', help='Stop after phase',
-                       choices=['discovery','audio','scoring','digest','tts'], default=None)
+                       choices=['discovery','audio','digest','tts'], default=None)
 
     # Enhanced Phase 1 CLI flags
     parser.add_argument('--dry-run', action='store_true',

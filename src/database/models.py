@@ -438,6 +438,22 @@ class EpisodeRepository:
                 logger.error(f"Failed to update episode status {episode_guid}: {e}")
                 raise
 
+    def mark_episodes_as_digested(self, episode_guids: List[str]):
+        """Mark multiple episodes as digested"""
+        with self.db.get_session() as session:
+            try:
+                session.query(EpisodeModel)\
+                    .filter(EpisodeModel.episode_guid.in_(episode_guids))\
+                    .update({
+                        EpisodeModel.status: 'digested',
+                        EpisodeModel.updated_at: datetime.now(UTC)
+                    }, synchronize_session=False)
+                session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to mark episodes as digested: {e}")
+                raise
+
     def update_audio_download(self, episode_guid: str, audio_path: str):
         """Update audio download information"""
         with self.db.get_session() as session:
@@ -822,6 +838,25 @@ class DigestRepository:
         # In the new schema, we don't track RSS publication separately
         # Return empty list since we'll handle RSS generation differently
         return []
+
+    def get_digests_pending_tts(self) -> List[Digest]:
+        """Get digests that have scripts but no MP3 files (pending TTS)"""
+        with self.db.get_session() as session:
+            digest_models = session.query(DigestModel)\
+                .filter(DigestModel.script_path.isnot(None))\
+                .filter(DigestModel.mp3_path.is_(None))\
+                .order_by(DigestModel.digest_date.asc())\
+                .all()
+            return [self._model_to_digest(model) for model in digest_models]
+
+    def get_digests_completed(self) -> List[Digest]:
+        """Get digests that have MP3 files (completed TTS)"""
+        with self.db.get_session() as session:
+            digest_models = session.query(DigestModel)\
+                .filter(DigestModel.mp3_path.isnot(None))\
+                .order_by(DigestModel.digest_date.desc())\
+                .all()
+            return [self._model_to_digest(model) for model in digest_models]
 
     def _model_to_digest(self, model: DigestModel) -> Digest:
         """Convert SQLAlchemy model to dataclass"""
