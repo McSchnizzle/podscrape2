@@ -27,10 +27,22 @@ export async function signOut() {
   return { error }
 }
 
-// Get current session
+// Get current session with timeout
 export async function getSession() {
-  const { data: { session }, error } = await supabaseAuth.auth.getSession()
-  return { session, error }
+  const sessionPromise = supabaseAuth.auth.getSession()
+
+  // Add timeout to prevent hanging
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Session timeout')), 5000)
+  })
+
+  try {
+    const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any
+    return { session, error }
+  } catch (error) {
+    console.error('Session retrieval failed:', error)
+    return { session: null, error: error as Error }
+  }
 }
 
 // Check if user is authorized (brownpr0@gmail.com only)
