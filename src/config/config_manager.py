@@ -23,7 +23,12 @@ class ConfigManager:
             self.config_dir = project_root / config_dir
         else:
             self.config_dir = Path(config_dir)
+
+        # Configuration caching with file modification tracking
         self._topics_config = None
+        self._topics_config_mtime = None
+        self._topics_config_path = self.config_dir / "topics.json"
+
         # Optional WebConfigManager injection
         self.web_config = web_config
         # Optional database-backed topic repository
@@ -37,23 +42,45 @@ class ConfigManager:
                 self.topic_repo = None
         
     def _load_topics_config(self) -> Dict[str, Any]:
-        """Load topics configuration from JSON file"""
-        if self._topics_config is None:
-            topics_path = self.config_dir / "topics.json"
-            
-            if not topics_path.exists():
-                raise FileNotFoundError(f"Topics config not found: {topics_path}")
-            
-            try:
-                with open(topics_path, 'r', encoding='utf-8') as f:
+        """Load topics configuration from JSON file with smart caching"""
+        # Check if file exists
+        if not self._topics_config_path.exists():
+            raise FileNotFoundError(f"Topics config not found: {self._topics_config_path}")
+
+        try:
+            # Get current file modification time
+            current_mtime = self._topics_config_path.stat().st_mtime
+
+            # Load or reload if cache is empty or file has been modified
+            if (self._topics_config is None or
+                self._topics_config_mtime != current_mtime):
+
+                with open(self._topics_config_path, 'r', encoding='utf-8') as f:
                     self._topics_config = json.load(f)
-                logger.info(f"Loaded topics configuration from {topics_path}")
-            except Exception as e:
-                logger.error(f"Failed to load topics config: {e}")
-                raise
-        
+
+                # Check if this was initial load or refresh
+                is_initial_load = self._topics_config_mtime is None
+                self._topics_config_mtime = current_mtime
+
+                if is_initial_load:
+                    logger.info(f"Loaded topics configuration from {self._topics_config_path}")
+                else:
+                    logger.info(f"Refreshed topics configuration (file modified) from {self._topics_config_path}")
+            else:
+                logger.debug(f"Using cached topics configuration")
+
+        except Exception as e:
+            logger.error(f"Failed to load topics config: {e}")
+            raise
+
         return self._topics_config
-    
+
+    def invalidate_cache(self):
+        """Manually invalidate all cached configuration data"""
+        self._topics_config = None
+        self._topics_config_mtime = None
+        logger.info("Configuration cache invalidated")
+
     def get_topics(self) -> List[Dict[str, Any]]:
         """Get list of active topics."""
         db_topics = self._get_database_topics(active_only=True)

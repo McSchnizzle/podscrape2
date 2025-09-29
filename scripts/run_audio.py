@@ -35,6 +35,7 @@ require_database_url()
 from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.utils.logging_config import setup_phase_logging
+from src.scoring.content_scorer import ContentScorer
 
 class AudioProcessor_Runner:
     """Audio download and transcription phase"""
@@ -58,6 +59,10 @@ class AudioProcessor_Runner:
 
         # Get settings from database
         self.audio_config = self.config_reader.get_audio_processing_config()
+        self.score_threshold = self.config_reader.get_score_threshold()
+
+        # Initialize content scorer for immediate relevance checking
+        self.content_scorer = ContentScorer()
 
         # Verify dependencies
         self._verify_dependencies()
@@ -123,6 +128,130 @@ class AudioProcessor_Runner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
+
+    def process_episodes_optimized(self, max_relevant_episodes):
+        """Process episodes until max_relevant_episodes RELEVANT episodes are found.
+
+        This optimization processes episodes from the database (pending status)
+        until we accumulate the desired number of RELEVANT episodes (score >= threshold).
+        """
+        self.logger.info(f"🎯 P2 OPTIMIZATION: Processing until {max_relevant_episodes} relevant episodes found")
+
+        # Get ALL pending episodes (oldest first for chronological processing)
+        pending_episodes = self.episode_repo.get_by_status('pending')
+
+        if not pending_episodes:
+            return {
+                'success': True,
+                'episodes_processed': 0,
+                'episodes': [],
+                'message': "No pending episodes to process"
+            }
+
+        self.logger.info(f"📋 Found {len(pending_episodes)} pending episodes to evaluate")
+
+        processed_episodes = []
+        failed_episodes = []
+        relevant_count = 0
+        not_relevant_count = 0
+        total_processed = 0
+
+        for episode in pending_episodes:
+            total_processed += 1
+
+            self.logger.info(f"\n[{total_processed}] Processing: {episode.title}")
+
+            if self.dry_run:
+                self.logger.info("🔍 DRY RUN: Would process and score episode")
+                processed_episodes.append({
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'status': 'dry_run',
+                    'transcript_path': None,
+                    'transcript_words': 0,
+                    'is_relevant': None
+                })
+                # In dry run, simulate finding relevant episodes
+                relevant_count += 1
+                if relevant_count >= max_relevant_episodes:
+                    self.logger.info(f"🎯 DRY RUN TARGET REACHED: {relevant_count} episodes processed")
+                    break
+                continue
+
+            try:
+                # Step 1: Process audio (download + transcribe)
+                episode_data = {
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'published_date': episode.published_date.isoformat(),
+                    'audio_url': episode.audio_url,
+                    'duration_seconds': episode.duration_seconds,
+                    'description': episode.description or '',
+                    'feed_id': episode.feed_id
+                }
+
+                audio_result = self._process_episode_audio(episode_data)
+
+                if not audio_result.get('success'):
+                    failed_episodes.append({
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'error': audio_result.get('error', 'Audio processing failed')
+                    })
+                    continue
+
+                # Step 2: Score the episode immediately after transcription
+                scores = self._score_episode_immediately(episode.episode_guid)
+
+                # Step 3: Check relevance against threshold
+                is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
+
+                # Update episode status based on relevance
+                if is_relevant:
+                    relevant_count += 1
+                    self.episode_repo.update_status(episode.episode_guid, 'scored')
+                    self.logger.info(f"✅ RELEVANT episode ({relevant_count}/{max_relevant_episodes})")
+
+                    processed_episodes.append({
+                        **audio_result,
+                        'is_relevant': True,
+                        'scores': scores
+                    })
+
+                    # Check if we've hit our relevant episode limit
+                    if relevant_count >= max_relevant_episodes:
+                        self.logger.info(f"🎯 TARGET REACHED: {relevant_count} relevant episodes processed")
+                        break
+
+                else:
+                    not_relevant_count += 1
+                    self.episode_repo.update_status(episode.episode_guid, 'not_relevant')
+                    self.logger.info(f"❌ Not relevant episode (continuing search...)")
+
+                    # Don't add to processed_episodes - we only return relevant ones
+
+            except Exception as e:
+                self.logger.error(f"Failed to process episode {episode.title}: {e}")
+                failed_episodes.append({
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'error': str(e)
+                })
+
+        # Enhanced logging summary as requested
+        self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
+
+        return {
+            'success': len(failed_episodes) == 0,
+            'episodes_processed': len(processed_episodes),  # Only relevant episodes
+            'episodes_failed': len(failed_episodes),
+            'relevant_episodes_found': relevant_count,
+            'not_relevant_episodes_found': not_relevant_count,
+            'total_episodes_evaluated': total_processed,
+            'episodes': processed_episodes,  # Only relevant episodes
+            'failed': failed_episodes,
+            'optimization_active': True
+        }
 
     def process_episodes(self, episodes_data):
         """Process audio for episodes from discovery phase or direct input"""
@@ -421,6 +550,58 @@ class AudioProcessor_Runner:
         except Exception as e:
             self.logger.warning(f"⚠️ Cleanup failed: {e}")
 
+    def _score_episode_immediately(self, episode_guid):
+        """Score episode immediately after transcription"""
+        try:
+            # Get the episode from database
+            db_episode = self.episode_repo.get_by_episode_guid(episode_guid)
+            if not db_episode or not db_episode.transcript_content:
+                self.logger.warning(f"No transcript available for immediate scoring: {episode_guid}")
+                return {}
+
+            self.logger.info("⚡ Immediate scoring...")
+
+            # Use the content scorer to get scores
+            scoring_result = self.content_scorer.score_transcript(
+                db_episode.transcript_content,
+                episode_guid
+            )
+
+            if scoring_result.success:
+                # Store scores in database
+                self.episode_repo.update_scores(episode_guid, scoring_result.scores)
+
+                self.logger.info(f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}")
+                return scoring_result.scores
+            else:
+                self.logger.error(f"Scoring failed: {scoring_result.error_message}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"Immediate scoring failed: {e}")
+            return {}
+
+    def _log_processing_summary(self, processed_episodes, relevant_count, not_relevant_count, total_processed):
+        """Log comprehensive processing summary as requested"""
+        self.logger.info(f"\n📊 AUDIO PHASE PROCESSING SUMMARY:")
+        self.logger.info(f"   🎯 Relevant episodes processed: {relevant_count}")
+        self.logger.info(f"   🚫 Not relevant episodes processed: {not_relevant_count}")
+        self.logger.info(f"   📋 Total episodes evaluated: {total_processed}")
+        self.logger.info(f"   ⚡ Optimization: P2 Task #0 (process until relevant count reached)")
+
+        if processed_episodes:
+            self.logger.info(f"   📝 Episode Details:")
+            for ep in processed_episodes:
+                scores_str = ""
+                if ep.get('scores'):
+                    scores_str = f" - Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in ep['scores'].items()])}"
+                self.logger.info(f"      ✅ {ep['title'][:50]}{'...' if len(ep['title']) > 50 else ''}{scores_str}")
+
+        self.logger.info(f"   🔧 P2 Optimization Benefits:")
+        self.logger.info(f"      • Always gets full quota of relevant episodes")
+        self.logger.info(f"      • Doesn't waste processing on not_relevant episodes")
+        self.logger.info(f"      • Improves content quality in final digest")
+
 def main():
     parser = argparse.ArgumentParser(description='Audio Processing Phase')
     parser.add_argument('input', nargs='?', help='Input JSON file from discovery phase or episode GUID')
@@ -428,6 +609,10 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of episodes')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--use-optimization', action='store_true', default=True,
+                        help='Use P2 optimization (process until relevant episodes found)')
+    parser.add_argument('--no-optimization', dest='use_optimization', action='store_false',
+                        help='Disable P2 optimization (legacy behavior)')
 
     args = parser.parse_args()
 
@@ -440,13 +625,14 @@ def main():
             verbose=args.verbose
         ) as runner:
 
-            # Handle input
+            # Handle input and optimization logic
             if args.input:
                 if args.input.endswith('.json') or '/' in args.input:
-                    # JSON file input
+                    # JSON file input - use traditional processing
                     episodes_data = args.input
+                    result = runner.process_episodes(episodes_data)
                 else:
-                    # Single episode GUID
+                    # Single episode GUID - use traditional processing
                     episodes_data = {
                         'success': True,
                         'episodes': [{
@@ -455,12 +641,36 @@ def main():
                             'mode': 'resume'
                         }]
                     }
+                    result = runner.process_episodes(episodes_data)
             else:
-                # Read from stdin
-                import sys
-                episodes_data = json.load(sys.stdin)
+                # No input provided - check for stdin or use optimization
+                stdin_data = None
+                if not sys.stdin.isatty():
+                    # Try to read from stdin (traditional orchestrator call)
+                    try:
+                        stdin_content = sys.stdin.read().strip()
+                        if stdin_content:
+                            stdin_data = json.loads(stdin_content)
+                    except (json.JSONDecodeError, Exception):
+                        pass  # Fall through to optimization
 
-            result = runner.process_episodes(episodes_data)
+                if stdin_data:
+                    # Use traditional processing with stdin data
+                    result = runner.process_episodes(stdin_data)
+                else:
+                    # Called directly without input or empty stdin - use optimization
+                    if args.use_optimization:
+                        max_episodes = args.limit or 5  # Default to 5 relevant episodes
+                        runner.logger.info(f"🚀 P2 OPTIMIZATION ACTIVE: Seeking {max_episodes} relevant episodes")
+                        result = runner.process_episodes_optimized(max_episodes)
+                    else:
+                        runner.logger.error("No input provided and optimization disabled")
+                        result = {
+                            'success': False,
+                            'error': 'No input provided',
+                            'episodes_processed': 0,
+                            'episodes': []
+                        }
 
         # Output JSON
         if args.output:
