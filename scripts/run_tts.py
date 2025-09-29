@@ -110,9 +110,9 @@ class TTSRunner:
 
         # Get digests that need TTS processing (have script but no MP3)
         self.logger.info("🔍 Finding digests pending TTS processing...")
-        digests = self.digest_repo.get_digests_pending_tts()
+        all_pending_digests = self.digest_repo.get_digests_pending_tts()
 
-        if not digests:
+        if not all_pending_digests:
             self.logger.info("📄 No digests found pending TTS processing")
             return {
                 'success': True,
@@ -121,7 +121,27 @@ class TTSRunner:
                 'message': "No digests pending TTS processing"
             }
 
-        self.logger.info(f"📄 Found {len(digests)} digests pending TTS processing")
+        # Deduplicate: Only process newest digest per topic (TTS should never create >1 digest per topic per day)
+        digests_by_topic = {}
+        for digest in all_pending_digests:
+            topic = digest.topic
+            if topic not in digests_by_topic:
+                digests_by_topic[topic] = digest
+            else:
+                # Keep the newer digest (higher ID indicates more recent creation)
+                if digest.id > digests_by_topic[topic].id:
+                    self.logger.debug(f"Replacing older {topic} digest (ID: {digests_by_topic[topic].id}) with newer (ID: {digest.id})")
+                    digests_by_topic[topic] = digest
+                else:
+                    self.logger.debug(f"Skipping older {topic} digest (ID: {digest.id}), keeping newer (ID: {digests_by_topic[topic].id})")
+
+        # Process only the newest digest per topic
+        digests = list(digests_by_topic.values())
+
+        duplicates_skipped = len(all_pending_digests) - len(digests)
+        self.logger.info(f"📄 Found {len(all_pending_digests)} pending digests, processing {len(digests)} (newest per topic)")
+        if duplicates_skipped > 0:
+            self.logger.info(f"⏭️ Skipping {duplicates_skipped} duplicate digests (TTS processes only one digest per topic per day)")
 
         # Apply limit
         if self.limit is not None:

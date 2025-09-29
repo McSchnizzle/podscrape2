@@ -371,11 +371,12 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.error(f"Failed to save script to {script_path}: {e}")
             raise ScriptGenerationError(f"Failed to save script: {e}")
     
-    def create_digest(self, topic: str, digest_date: date, 
+    def create_digest(self, topic: str, digest_date: date,
                      start_date: date = None, end_date: date = None) -> Digest:
         """
         Create complete digest: find episodes, generate script, save to database.
         Returns created Digest object.
+        Multiple digests per topic per day are allowed (with unique timestamps).
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
 
@@ -398,6 +399,7 @@ Thank you for your understanding, and we'll see you tomorrow!
             episode_ids=[ep.id for ep in episodes],
             episode_count=len(episodes),
             script_path=script_path,
+            script_content=script_content,
             script_word_count=word_count,
             average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
         )
