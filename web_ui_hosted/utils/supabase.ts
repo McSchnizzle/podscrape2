@@ -15,7 +15,9 @@ function getSupabaseClient() {
     supabaseClient = createClient(supabaseUrl, supabaseServiceRole, {
       auth: {
         autoRefreshToken: false,
-        persistSession: false
+        persistSession: false,
+        detectSessionInUrl: false,
+        storage: null
       }
     })
   }

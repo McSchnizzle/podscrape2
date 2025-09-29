@@ -31,9 +31,9 @@ export async function signOut() {
 export async function getSession() {
   const sessionPromise = supabaseAuth.auth.getSession()
 
-  // Add timeout to prevent hanging
+  // Add timeout to prevent hanging (increased to 10 seconds for initial session establishment)
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Session timeout')), 5000)
+    setTimeout(() => reject(new Error('Session timeout')), 10000)
   })
 
   try {
