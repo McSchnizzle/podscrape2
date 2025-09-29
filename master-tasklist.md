@@ -6,6 +6,13 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 
 **Core Principle**: FAIL FAST, FAIL LOUD - No silent failures, no fallbacks that mask configuration issues.
 
+**Testing Requirement**: For every task implemented from this list, we MUST have a way to test that it actually works and that the change/fix did what it was intended to do. This includes:
+- Unit tests for code changes
+- Integration tests for workflow modifications
+- Manual testing procedures for complex features
+- Performance benchmarks for optimization tasks
+- Validation commands to verify fixes work as expected
+
 ## CRITICAL (P0) - Security & Breaking Issues
 
 ### 1. Database Transaction Connection Bug ✅ FIXED
@@ -153,7 +160,28 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Expected Gain**: Reduced memory footprint for large transcripts
 - **Status**: ❌ Not implemented
 
-### 8. Remove Unnecessary Caching
+### 8. Database Migration for Transcripts and Scripts
+- **Files**: `scripts/run_audio.py`, `scripts/run_digest.py`, `src/generation/script_generator.py`, `src/podcast/audio_processor.py`
+- **Issue**: Audio and Digest phases currently write files to repo (`data/transcripts/`, `data/scripts/`)
+- **Goal**: Store transcripts and scripts in Supabase database instead of local files
+- **Benefits**:
+  - Cleaner repo (no data files committed)
+  - Better data management and querying
+  - Easier cleanup and retention policies
+  - No git conflicts from data files
+  - Improved scalability and search capabilities
+- **Implementation**:
+  - Add `transcript_text` column to `episodes` table
+  - Add `script_content` column to `digests` table
+  - Modify Audio phase to store transcripts in database via episode repository
+  - Modify Digest phase to store scripts in database via digest repository
+  - Remove file writing logic from both phases (lines in audio_processor.py ~350-359)
+  - Update downstream phases to read from database instead of files
+  - Remove git commit steps for transcripts/scripts once migration complete
+- **Expected Gain**: Cleaner architecture, better data management, no git repo bloat
+- **Status**: ❌ Not implemented
+
+### 9. Remove Unnecessary Caching
 - **Issue**: Remove Whisper cache from publishing workflow
 - **Fix**: Audit other caches for actual usage, document what caches are needed
 - **Status**: ❌ Not implemented

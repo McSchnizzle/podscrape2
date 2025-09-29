@@ -65,6 +65,8 @@ class VercelDeployer:
             username = result.stdout.strip()
             logger.info(f"Vercel CLI verified - authenticated as: {username}")
             
+        except FileNotFoundError:
+            raise PodcastError("CRITICAL: vercel CLI not found in PATH. Install Vercel CLI or check PATH")
         except subprocess.TimeoutExpired:
             raise PodcastError("Vercel CLI verification timed out")
         except Exception as e:

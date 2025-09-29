@@ -233,7 +233,7 @@ def safe_operation(operation_name: str, logger: logging.Logger = None,
         default_return: Default return value if exception occurs and reraise=False
     """
     if logger is None:
-        logger = globals()['logger']
+        logger = logging.getLogger(__name__)
     
     try:
         logger.info(f"Starting operation: {operation_name}")

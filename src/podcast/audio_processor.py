@@ -46,6 +46,8 @@ def _validate_external_tools():
                 f"Output: {result.stdout[:100] if result.stdout else 'no stdout'} "
                 f"Error: {result.stderr[:100] if result.stderr else 'no stderr'}"
             )
+    except FileNotFoundError:
+        raise PodcastError("CRITICAL: ffmpeg not found in PATH. Install ffmpeg or check PATH")
     except subprocess.TimeoutExpired:
         raise PodcastError("CRITICAL: ffmpeg command timed out - check ffmpeg installation")
     except Exception as e:
@@ -285,6 +287,8 @@ class AudioProcessor:
                         logger.error(error_msg)
                         raise PodcastError(error_msg)
 
+                except FileNotFoundError:
+                    raise PodcastError("CRITICAL: ffmpeg not found in PATH. Install ffmpeg or check PATH")
                 except subprocess.CalledProcessError as e:
                     error_msg = f"FFmpeg subprocess error for chunk {chunk_num+1}: {e}"
                     logger.error(error_msg)
@@ -397,6 +401,9 @@ class AudioProcessor:
                 'channels': int(stream.get('channels', 0)),
                 'codec': stream.get('codec_name', 'unknown')
             }
+        except FileNotFoundError:
+            logger.warning(f"ffprobe not found in PATH. Install ffmpeg or check PATH")
+            return {}
         except subprocess.CalledProcessError as e:
             logger.warning(f"FFprobe subprocess error for {audio_file_path}: {e}")
             return {}
@@ -451,6 +458,9 @@ class AudioProcessor:
             
             return 0.0
 
+        except FileNotFoundError:
+            logger.warning(f"ffprobe not found in PATH. Install ffmpeg or check PATH")
+            return 0.0
         except subprocess.CalledProcessError as e:
             logger.warning(f"FFprobe duration check subprocess error for {audio_file_path}: {e}")
             return 0.0

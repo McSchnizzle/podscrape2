@@ -52,6 +52,8 @@ def _validate_github_tools(require_gh_cli: bool = False) -> None:
                 raise PodcastError(
                     "CRITICAL: GitHub CLI is not authenticated. Run: gh auth login"
                 )
+        except FileNotFoundError:
+            raise PodcastError("CRITICAL: gh CLI not found in PATH. Install GitHub CLI or check PATH")
         except subprocess.TimeoutExpired:
             raise PodcastError("CRITICAL: GitHub CLI command timed out - check installation")
         except Exception as e:
@@ -202,6 +204,9 @@ class GitHubPublisher:
                                         logger.error(f"GH CLI asset upload failed: {out.stderr.strip()}")
                                         raise PodcastError(f"GH CLI asset upload failed: {out.stderr.strip()}")
                                     logger.info(f"Uploaded via GH CLI: {Path(mp3_file).name}")
+                                except FileNotFoundError:
+                                    logger.error("GH CLI not found in PATH. Install GitHub CLI or check PATH")
+                                    raise PodcastError("GH CLI not found in PATH. Install GitHub CLI or check PATH")
                                 except Exception as ce:
                                     logger.error(f"Failed to upload asset via GH CLI: {ce}")
                                     raise
@@ -268,6 +273,9 @@ class GitHubPublisher:
                 if created:
                     logger.info(f"Created GitHub release via CLI: {created.id} ({created.name})")
                 return created
+            except FileNotFoundError:
+                logger.error("GH CLI not found in PATH. Install GitHub CLI or check PATH")
+                raise PodcastError("GH CLI not found in PATH. Install GitHub CLI or check PATH")
             except Exception as ce:
                 logger.error(f"Failed to create GitHub release via CLI: {ce}")
                 raise PodcastError(f"Failed to create GitHub release: {ce}")
@@ -319,6 +327,9 @@ class GitHubPublisher:
                     assets=assets,
                     html_url=data.get('url', '')
                 )
+            except FileNotFoundError:
+                logger.error("GH CLI not found in PATH. Install GitHub CLI or check PATH")
+                raise PodcastError(f"Failed to get release: {e}")
             except Exception as ce:
                 logger.error(f"Failed to get release by tag {tag_name}: {e}; GH CLI fallback failed: {ce}")
                 raise PodcastError(f"Failed to get release: {e}")
