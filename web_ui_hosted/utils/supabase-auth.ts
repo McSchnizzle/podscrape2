@@ -27,20 +27,46 @@ export async function signOut() {
   return { error }
 }
 
-// Get current session with timeout
+// Session cache to prevent multiple concurrent calls
+let sessionCache: { session: any; error: any; timestamp: number } | null = null
+const CACHE_DURATION = 5000 // 5 seconds
+
+// Get current session with caching and timeout
 export async function getSession() {
+  // Return cached session if valid
+  if (sessionCache && Date.now() - sessionCache.timestamp < CACHE_DURATION) {
+    console.log('getSession: Returning cached session')
+    return { session: sessionCache.session, error: sessionCache.error }
+  }
+
   const sessionPromise = supabaseAuth.auth.getSession()
 
-  // Add timeout to prevent hanging (increased to 10 seconds for initial session establishment)
+  // Increased timeout to 15 seconds for better reliability
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Session timeout')), 10000)
+    setTimeout(() => reject(new Error('Session timeout')), 15000)
   })
 
   try {
     const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any
+
+    // Cache the result
+    sessionCache = {
+      session,
+      error,
+      timestamp: Date.now()
+    }
+
     return { session, error }
   } catch (error) {
     console.error('Session retrieval failed:', error)
+
+    // Cache the error to prevent immediate retries
+    sessionCache = {
+      session: null,
+      error: error as Error,
+      timestamp: Date.now()
+    }
+
     return { session: null, error: error as Error }
   }
 }

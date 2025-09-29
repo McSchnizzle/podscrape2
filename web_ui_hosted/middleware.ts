@@ -2,12 +2,16 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // Temporarily bypass middleware to test OAuth
-  console.log('Middleware bypassed for path:', request.nextUrl.pathname)
-  return NextResponse.next()
+  console.log('Middleware processing path:', request.nextUrl.pathname)
 
-  // Original middleware logic (commented out for testing)
-  // return await updateSession(request)
+  try {
+    // Update session and handle token refresh
+    return await updateSession(request)
+  } catch (error) {
+    console.error('Middleware error:', error)
+    // Don't block requests on middleware errors, just log them
+    return NextResponse.next()
+  }
 }
 
 export const config = {

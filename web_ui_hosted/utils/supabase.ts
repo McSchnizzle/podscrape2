@@ -135,8 +135,26 @@ export interface WebSetting {
   updated_at: string
 }
 
+// Singleton database client instance
+let databaseClientInstance: DatabaseClient | null = null
+
 // Database operations
 export class DatabaseClient {
+  // Singleton pattern - prevent multiple instances
+  constructor() {
+    if (databaseClientInstance) {
+      return databaseClientInstance
+    }
+    databaseClientInstance = this
+  }
+
+  // Static method to get singleton instance
+  static getInstance(): DatabaseClient {
+    if (!databaseClientInstance) {
+      databaseClientInstance = new DatabaseClient()
+    }
+    return databaseClientInstance
+  }
 
   async getSystemHealth() {
     try {

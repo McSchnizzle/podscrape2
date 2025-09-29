@@ -10,7 +10,7 @@ function slugify(input: string): string {
 // Cached function to fetch topics data
 const getCachedTopics = unstable_cache(
   async () => {
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const topics = await db.getTopics()
 
     const response = topics.map(topic => ({
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Topics must be an array' }, { status: 400 })
     }
 
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const existing = await db.getTopics()
     const existingBySlug = new Map(existing.map(t => [t.slug, t]))
     const seenSlugs = new Set<string>()

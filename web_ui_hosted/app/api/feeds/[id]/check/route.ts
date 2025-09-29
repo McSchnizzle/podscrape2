@@ -12,7 +12,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid feed ID' }, { status: 400 })
     }
 
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
 
     // Update the feed's last_checked timestamp to indicate a manual check was performed
     const updatedFeed = await db.checkFeed(id)

@@ -15,7 +15,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid episode ID' }, { status: 400 });
     }
 
-    const db = new DatabaseClient();
+    const db = DatabaseClient.getInstance();
 
     if (action === 'undigest') {
       // Reset episode to 'scored' status

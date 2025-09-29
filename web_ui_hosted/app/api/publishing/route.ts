@@ -3,7 +3,7 @@ import { DatabaseClient } from '@/utils/supabase'
 
 export async function GET() {
   try {
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const digests = await db.getDigests(25)
     const pipelineRuns = await db.getPipelineRuns(5)
 

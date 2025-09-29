@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 // Cached function to fetch episodes data
 const getCachedEpisodes = unstable_cache(
   async (q: string, status: string, sortBy: string, sortDir: string, limit: number) => {
-    const db = new DatabaseClient();
+    const db = DatabaseClient.getInstance();
 
     // Get episodes with filters
     const episodes = await db.getEpisodes({

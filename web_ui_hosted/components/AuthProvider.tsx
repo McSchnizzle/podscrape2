@@ -37,8 +37,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     let mounted = true
+    let isAuthCheckInProgress = false
 
     const checkAuth = async () => {
+      // Prevent concurrent auth checks
+      if (isAuthCheckInProgress) {
+        console.log('AuthProvider: Auth check already in progress, skipping')
+        return
+      }
+
+      isAuthCheckInProgress = true
       try {
         console.log('AuthProvider: Starting auth check...')
         const { authorized, user: validatedUser, reason } = await validateUserAuth()
@@ -71,16 +79,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (pathname !== '/login') {
           router.push('/login')
         }
+      } finally {
+        isAuthCheckInProgress = false
       }
     }
 
-    // Check auth on mount
+    // Check auth on mount only
     checkAuth()
 
     // Listen for auth state changes
     const { data: { subscription } } = supabaseAuth.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
-        if (!mounted) return
+        if (!mounted || isAuthCheckInProgress) return
+
+        console.log('AuthProvider: Auth state change:', event, !!session?.user)
 
         if (event === 'SIGNED_OUT' || !session?.user) {
           setUser(null)
@@ -89,12 +101,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         } else if (event === 'SIGNED_IN') {
           // Validate the signed-in user
-          const { authorized, user: validatedUser } = await validateUserAuth()
-          if (authorized && validatedUser) {
-            setUser(validatedUser)
-          } else {
-            setUser(null)
-            router.push('/login')
+          isAuthCheckInProgress = true
+          try {
+            const { authorized, user: validatedUser } = await validateUserAuth()
+            if (authorized && validatedUser) {
+              setUser(validatedUser)
+            } else {
+              setUser(null)
+              router.push('/login')
+            }
+          } finally {
+            isAuthCheckInProgress = false
           }
         }
         setLoading(false)
@@ -105,7 +122,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [router, pathname])
+  }, [router]) // Removed pathname dependency to prevent re-checking on navigation
 
   const handleSignOut = async () => {
     await signOut()

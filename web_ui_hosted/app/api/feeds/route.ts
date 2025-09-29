@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { unstable_cache, revalidateTag } from 'next/cache'
 
-const db = new DatabaseClient()
+const db = DatabaseClient.getInstance()
 
 // Cached function to fetch feeds data
 const getCachedFeeds = unstable_cache(
   async () => {
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const feeds = await db.getFeeds()
 
     console.log(`Feeds cache: Fetched ${feeds.length} feeds from database`)

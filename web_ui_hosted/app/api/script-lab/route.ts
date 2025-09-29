@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing topic parameter' }, { status: 400 })
     }
 
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const topic = await db.getTopicByName(topicName)
 
     if (!topic) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing topic' }, { status: 400 })
     }
 
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const topic = await db.getTopicByName(topicName)
 
     if (!topic) {

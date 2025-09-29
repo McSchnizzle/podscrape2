@@ -3,7 +3,7 @@ import { DatabaseClient, supabase } from '@/utils/supabase'
 
 export async function GET() {
   try {
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
 
     // Get all web settings from database
     const data = await db.getSettings()
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
 
     // Convert value to string for storage
     const stringValue = String(value)

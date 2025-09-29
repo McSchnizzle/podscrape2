@@ -1,7 +1,7 @@
 import { DatabaseClient } from '@/utils/supabase'
 
 async function getSystemHealth() {
-  const db = new DatabaseClient()
+  const db = DatabaseClient.getInstance()
   const health = await db.getSystemHealth()
 
   return {

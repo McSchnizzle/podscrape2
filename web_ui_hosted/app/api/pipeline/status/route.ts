@@ -43,7 +43,7 @@ export async function GET() {
     const latestRun = runs[0]
 
     // Get database stats
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const stats = await db.getPipelineStats()
     const pipelineRuns = await db.getPipelineRuns(5)
 

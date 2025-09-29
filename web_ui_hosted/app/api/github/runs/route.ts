@@ -37,7 +37,7 @@ export async function GET() {
     }
 
     // Pull recent Supabase pipeline runs (database is required; fail loudly if unavailable)
-    const db = new DatabaseClient()
+    const db = DatabaseClient.getInstance()
     const supabaseRuns = await db.getPipelineRuns(10)
 
     const pipelineActivities = supabaseRuns.map(run => {

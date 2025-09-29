@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { revalidateTag } from 'next/cache'
 
-const db = new DatabaseClient()
+const db = DatabaseClient.getInstance()
 
 export async function PUT(
   request: NextRequest,
