@@ -31,22 +31,13 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  console.log('Middleware - Path:', request.nextUrl.pathname, 'User:', !!user)
-
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
-    console.log('Middleware redirecting to login for path:', request.nextUrl.pathname)
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  // Just refresh the session, don't check auth (AuthProvider handles that)
+  // This prevents duplicate auth checks and multiple client instances
+  try {
+    await supabase.auth.getSession()
+    console.log('Middleware - Session refreshed for path:', request.nextUrl.pathname)
+  } catch (error) {
+    console.log('Middleware - Session refresh failed:', error)
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're

@@ -23,57 +23,41 @@ export async function GET() {
       }, { status: 500 })
     }
 
-    // Now try to create client
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(supabaseUrl, supabaseServiceRole, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    // Use singleton database client to prevent multiple instances
+    const { DatabaseClient } = await import('@/utils/supabase')
+    const db = DatabaseClient.getInstance()
 
-    console.log('Supabase client created, testing simple count...')
+    console.log('Using singleton database client for tests...')
 
-    // Test simple count
-    const { count, error: countError } = await supabase
-      .from('episodes')
-      .select('*', { count: 'exact', head: true })
+    // Test system health (uses database connectivity)
+    const health = await db.getSystemHealth()
 
-    if (countError) {
-      console.error('Count error:', countError)
+    if (health.database !== 'connected') {
       return NextResponse.json({
-        error: 'Count failed',
-        details: countError,
+        error: 'Database connection failed',
+        details: health,
         environment: { supabaseUrl: supabaseUrl?.substring(0, 30) + '...' }
       }, { status: 500 })
     }
 
-    console.log(`Count successful: ${count} episodes`)
+    // Test episode retrieval using database client methods
+    const episodes = await db.getEpisodes({ limit: 3, sortBy: 'published_date', sortDir: 'desc' })
 
-    // Test simple select
-    const { data: simpleData, error: simpleError } = await supabase
-      .from('episodes')
-      .select('id, title, status, published_date')
-      .order('published_date', { ascending: false })
-      .limit(3)
-
-    if (simpleError) {
-      console.error('Simple select error:', simpleError)
-      return NextResponse.json({
-        error: 'Simple select failed',
-        details: simpleError
-      }, { status: 500 })
-    }
-
-    console.log(`Simple select returned ${simpleData?.length || 0} episodes`)
+    console.log(`DatabaseClient returned ${episodes?.length || 0} episodes`)
 
     return NextResponse.json({
       success: true,
-      totalCount: count,
-      sampleEpisodes: simpleData,
+      totalCount: health.feeds_count || 0,
+      sampleEpisodes: episodes.slice(0, 3).map(ep => ({
+        id: ep.id,
+        title: ep.title,
+        status: ep.status,
+        published_date: ep.published_date
+      })),
       environment: {
         supabaseUrl: supabaseUrl?.substring(0, 30) + '...',
-        hasServiceRole: !!supabaseServiceRole
+        hasServiceRole: !!supabaseServiceRole,
+        databaseHealth: health.database
       }
     })
 

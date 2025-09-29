@@ -21,8 +21,12 @@ export async function signInWithGoogle() {
   return { data, error }
 }
 
-// Sign out
+// Sign out and clear session cache
 export async function signOut() {
+  // Clear session cache to prevent stale data
+  sessionCache = null
+  console.log('signOut: Cleared session cache')
+
   const { error } = await supabaseAuth.auth.signOut()
   return { error }
 }
@@ -81,6 +85,12 @@ export async function validateUserAuth() {
   console.log('validateUserAuth: Starting validation...')
   const { session, error } = await getSession()
   console.log('validateUserAuth: Session result:', { hasSession: !!session, error, email: session?.user?.email })
+
+  if (error) {
+    // Clear cache on auth errors to force fresh checks
+    sessionCache = null
+    console.log('validateUserAuth: Cleared session cache due to error')
+  }
 
   if (!session?.user?.email) {
     console.log('validateUserAuth: No active session')
