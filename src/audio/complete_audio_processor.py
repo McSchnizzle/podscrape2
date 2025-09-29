@@ -83,8 +83,8 @@ class CompleteAudioProcessor:
                     # If stats fail, fall through to regenerate
                     logger.info("Could not compare timestamps; regenerating audio as a safe fallback")
             
-            if not digest.script_path or not Path(digest.script_path).exists():
-                error_msg = f"Script file not found for digest {digest.id}: {digest.script_path}"
+            if not digest.script_content:
+                error_msg = f"Script content not found for digest {digest.id}"
                 results['errors'].append(error_msg)
                 logger.error(error_msg)
                 return results
@@ -114,9 +114,10 @@ class CompleteAudioProcessor:
                 except Exception:
                     ts = None
                 audio_metadata = self.audio_generator.generate_audio_for_script(
-                    digest.script_path,
+                    digest.script_content,
                     digest.topic,
-                    timestamp=ts
+                    timestamp=ts,
+                    script_reference=digest.script_path
                 )
                 results['audio_metadata'] = audio_metadata
                 logger.info(f"Generated audio: {Path(audio_metadata.file_path).name}")

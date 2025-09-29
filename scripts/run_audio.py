@@ -337,29 +337,27 @@ class AudioProcessor_Runner:
             total_words = len(combined_transcript.split())
             total_chars = len(combined_transcript)
 
-            # Save transcript
-            transcript_dir = Path("data/transcripts")
-            transcript_dir.mkdir(parents=True, exist_ok=True)
-
+            # Store transcript in database (no file creation)
             feed_name = episode_data.get('feed_name', 'Unknown')
             feed_prefix = feed_name.split()[0].lower()
             short_guid = episode_guid[:6]
             transcript_filename = f"{feed_prefix}-{short_guid}.txt"
-            transcript_path = transcript_dir / transcript_filename
 
-            with open(transcript_path, 'w', encoding='utf-8') as f:
-                f.write(f"# Complete Transcript\n")
-                f.write(f"# Episode: {db_episode.title}\n")
-                f.write(f"# Feed: {feed_name}\n")
-                f.write(f"# GUID: {episode_guid}\n")
-                f.write(f"# Processed: {datetime.now().isoformat()}\n")
-                f.write(f"# Chunks: {len(chunk_paths)}\n")
-                f.write(f"# Words: {total_words:,}\n")
-                f.write(f"# Characters: {total_chars:,}\n\n")
-                f.write(combined_transcript)
+            # Create transcript with metadata header
+            transcript_with_metadata = (
+                f"# Complete Transcript\n"
+                f"# Episode: {db_episode.title}\n"
+                f"# Feed: {feed_name}\n"
+                f"# GUID: {episode_guid}\n"
+                f"# Processed: {datetime.now().isoformat()}\n"
+                f"# Chunks: {len(chunk_paths)}\n"
+                f"# Words: {total_words:,}\n"
+                f"# Characters: {total_chars:,}\n\n"
+                f"{combined_transcript}"
+            )
 
-            # Update database with both file path and content
-            self.episode_repo.update_transcript(episode_guid, str(transcript_path), total_words, combined_transcript)
+            # Update database with transcript content only (no file path)
+            self.episode_repo.update_transcript(episode_guid, None, total_words, transcript_with_metadata)
 
             # Cleanup audio files
             self._cleanup_audio_files(episode_guid, chunk_paths)
@@ -371,7 +369,7 @@ class AudioProcessor_Runner:
                 'guid': episode_guid,
                 'title': db_episode.title,
                 'status': 'transcribed',
-                'transcript_path': str(transcript_path),
+                'transcript_path': None,  # Stored in database
                 'transcript_words': total_words,
                 'chunks_processed': len(transcription_result.chunks)
             }

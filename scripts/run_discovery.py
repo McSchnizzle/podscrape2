@@ -200,20 +200,21 @@ class DiscoveryRunner:
                     'episodes': []
                 }
 
-        # Standard discovery
-        max_episodes = self.limit or 3
+        # Standard discovery - Find ALL episodes within date range
+        # Note: max_episodes limit is for processing phases, not discovery
+        # Discovery should find ALL new episodes to mark them as 'pending'
+        processing_limit = self.limit or 3  # For processing phases only
         discovered_episodes = []
 
-        self.logger.info(f"Scanning feeds for new episodes (max {max_episodes}, {self.days_back} days back)")
+        self.logger.info(f"Scanning ALL feeds for new episodes within {self.days_back} days back")
+        self.logger.info(f"(Processing limit of {processing_limit} episodes will be applied in later phases)")
 
         headers = {
             'User-Agent': 'PodcastDigest/1.0 (+https://github.com/McSchnizzle/podscrape2)'
         }
 
         for feed_info in self.rss_feeds:
-            # Stop if we have enough episodes
-            if len(discovered_episodes) >= max_episodes:
-                break
+            # Continue checking all feeds - don't break early
 
             feed_url = feed_info['url']
             feed_name = feed_info['name']
@@ -287,7 +288,7 @@ class DiscoveryRunner:
                             'audio_url': existing.audio_url,
                             'mode': 'resume'
                         })
-                        break  # One per feed
+                        # Continue checking for more episodes in this feed
 
                     # Find audio URL for new episodes
                     audio_url = None
@@ -306,8 +307,26 @@ class DiscoveryRunner:
                         self.logger.info(f"SKIP: {title[:60]}... (no audio URL)")
                         continue
 
-                    # Found new episode
+                    # Found new episode - create database record as 'pending'
                     self.logger.info(f"NEW: {title}")
+
+                    if not self.dry_run:
+                        try:
+                            # Create episode in database with 'pending' status
+                            new_episode = Episode(
+                                episode_guid=episode_guid,
+                                title=title,
+                                description=entry.get('summary', '')[:500],
+                                audio_url=audio_url,
+                                published_date=published_date,
+                                feed_id=feed_info.get('id'),
+                                status='pending'
+                            )
+                            episode_id = self.episode_repo.create(new_episode)
+                            self.logger.info(f"   ✓ Created pending episode in database (ID: {episode_id})")
+                        except Exception as e:
+                            self.logger.warning(f"   ⚠️  Failed to create database record: {e}")
+
                     discovered_episodes.append({
                         'guid': episode_guid,
                         'title': title,
@@ -319,7 +338,7 @@ class DiscoveryRunner:
                         'feed_id': feed_info.get('id'),
                         'mode': 'new'
                     })
-                    break  # One per feed
+                    # Continue checking for more episodes in this feed
 
             except Exception as e:
                 self.logger.error(f"Error parsing {feed_name}: {e}")

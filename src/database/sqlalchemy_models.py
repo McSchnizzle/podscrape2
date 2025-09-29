@@ -86,6 +86,7 @@ class Digest(Base):
     digest_date = Column(Date, nullable=False)
     digest_timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(UTC))
     script_path = Column(String(4096))
+    script_content = Column(Text)
     script_word_count = Column(Integer)
     mp3_path = Column(String(4096))
     mp3_duration_seconds = Column(Integer)

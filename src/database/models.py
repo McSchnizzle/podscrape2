@@ -78,6 +78,7 @@ class Digest:
     digest_date: date
     digest_timestamp: Optional[datetime] = None
     script_path: Optional[str] = None
+    script_content: Optional[str] = None
     script_word_count: Optional[int] = None
     mp3_path: Optional[str] = None
     mp3_duration_seconds: Optional[int] = None
@@ -709,7 +710,7 @@ class DigestRepository:
             digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
             return self._model_to_digest(digest_model) if digest_model else None
 
-    def update_script(self, digest_id: int, script_path: str, word_count: int):
+    def update_script(self, digest_id: int, script_path: str, word_count: int, script_content: Optional[str] = None):
         """Update script information"""
         with self.db.get_session() as session:
             try:
@@ -717,6 +718,8 @@ class DigestRepository:
                 if digest_model:
                     digest_model.script_path = script_path
                     digest_model.script_word_count = word_count
+                    if script_content is not None:
+                        digest_model.script_content = script_content
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -828,6 +831,7 @@ class DigestRepository:
             digest_date=model.digest_date,
             digest_timestamp=model.digest_timestamp,
             script_path=model.script_path,
+            script_content=model.script_content,
             script_word_count=model.script_word_count,
             mp3_path=model.mp3_path,
             mp3_duration_seconds=model.mp3_duration_seconds,

@@ -312,24 +312,17 @@ Thank you for your understanding, and we'll see you tomorrow!
         return script, word_count
     
     def save_script(self, topic: str, digest_date: date, content: str, word_count: int, digest_timestamp: datetime = None) -> str:
-        """Save script to file and return file path"""
+        """Save script content to database (no file creation) and return reference path"""
         if digest_timestamp is None:
             digest_timestamp = datetime.now(UTC)
 
+        # Generate a reference path for backwards compatibility (not saved to disk)
         timestamp = digest_timestamp.strftime('%Y%m%d_%H%M%S')
         filename = f"{topic.replace(' ', '_')}_{digest_date.strftime('%Y%m%d')}_{timestamp}.md"
-        script_path = self.scripts_dir / filename
+        reference_path = str(self.scripts_dir / filename)
 
-        try:
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-            logger.info(f"Saved script to: {script_path}")
-            return str(script_path)
-
-        except Exception as e:
-            logger.error(f"Failed to save script to {script_path}: {e}")
-            raise ScriptGenerationError(f"Failed to save script: {e}")
+        logger.info(f"Script content prepared for database storage (ref: {reference_path})")
+        return reference_path
     
     def create_digest(self, topic: str, digest_date: date, 
                      start_date: date = None, end_date: date = None) -> Digest:
@@ -364,6 +357,9 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         digest_id = self.digest_repo.create(digest)
         digest.id = digest_id
+
+        # Store script content in database
+        self.digest_repo.update_script(digest_id, script_path, word_count, script_content)
 
         logger.info(f"Created digest {digest_id} for {topic}: {word_count} words, {len(episodes)} episodes")
 

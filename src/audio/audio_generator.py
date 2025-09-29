@@ -168,17 +168,13 @@ class AudioGenerator:
         
         return text
     
-    def generate_audio_for_script(self, script_path: str, topic: str, timestamp: str = None) -> AudioMetadata:
-        """Generate audio from a script file"""
-        logger.info(f"Generating audio for script: {script_path}")
-        
-        # Read script content
-        script_file = Path(script_path)
-        if not script_file.exists():
-            raise AudioGenerationError(f"Script file not found: {script_path}")
-        
-        with open(script_file, 'r', encoding='utf-8') as f:
-            script_content = f.read()
+    def generate_audio_for_script(self, script_content: str, topic: str, timestamp: str = None, script_reference: str = None) -> AudioMetadata:
+        """Generate audio from script content"""
+        ref_info = f" (ref: {script_reference})" if script_reference else ""
+        logger.info(f"Generating audio for script content{ref_info}")
+
+        if not script_content or not script_content.strip():
+            raise AudioGenerationError(f"Script content is empty{ref_info}")
         
         # Clean script for TTS
         tts_text = self._clean_script_for_tts(script_content)

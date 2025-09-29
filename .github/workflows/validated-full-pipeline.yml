@@ -123,22 +123,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Commit Audio Transcripts
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
-          TARGET_BRANCH: ${{ github.ref_name }}
-        run: |
-          git add data/transcripts/*.txt 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "Add audio transcripts - $(date -u +'%Y-%m-%d %H:%M:%S')"
-            git pull --rebase "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-            echo "✅ Audio transcripts committed and pushed"
-          else
-            echo "ℹ️  No audio transcripts to commit"
-          fi
+      # Audio transcripts are now stored in database - no git commits needed
 
       - name: Scoring
         run: |
@@ -160,22 +145,7 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Commit Digest Scripts
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
-          TARGET_BRANCH: ${{ github.ref_name }}
-        run: |
-          git add data/scripts/*.md 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "Add digest scripts - $(date -u +'%Y-%m-%d %H:%M:%S')"
-            git pull --rebase "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-            echo "✅ Digest scripts committed and pushed"
-          else
-            echo "ℹ️  No digest scripts to commit"
-          fi
+      # Digest scripts are now stored in database - no git commits needed
 
       - name: Capture existing MP3 inventory
         id: capture_mp3_baseline

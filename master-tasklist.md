@@ -112,12 +112,35 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 
 ## MEDIUM (P2) - Performance & Optimization
 
-### 1. Parallelize TTS Audio Generation
+### 0. Optimize Audio Phase to Process Only Relevant Episodes ⭐ HIGH PRIORITY
+- **Files**: `scripts/run_audio.py`, audio processing logic
+- **Issue**: Current audio phase counts 'not_relevant' episodes against `max_episodes_per_run` limit, reducing useful content
+- **Current Behavior**: Downloads episodes by order, scores them, and stops at max limit regardless of relevance
+- **Desired Behavior**:
+  - Process pending episodes by oldest first (FIFO queue)
+  - Download → Transcribe → Score each episode
+  - If episode scores 'not_relevant' across ALL topics: mark as 'not_relevant', do NOT count against limit
+  - If episode scores relevant on ANY topic: count against `max_episodes_per_run` limit
+  - Continue processing until `max_episodes_per_run` relevant episodes are found (or no more pending episodes)
+- **Benefits**:
+  - Always processes the full `max_episodes_per_run` of useful, relevant content
+  - Eliminates waste from processing irrelevant episodes that reduce digest quality
+  - Better utilization of processing resources and API calls
+  - Ensures consistent volume of relevant content for digests
+- **Implementation**:
+  - Modify audio phase to query episodes by `status='pending'` ordered by `published_date ASC` (oldest first)
+  - Add loop logic: process episode → score → if not_relevant continue, if relevant increment counter
+  - Update episode status handling for 'not_relevant' vs counted episodes
+  - Add logging to show relevant vs not_relevant episode counts
+- **Expected Gain**: Always produce full `max_episodes_per_run` of relevant content, better resource utilization
+- **Status**: ❌ Not implemented
+
+### 1. Parallelize TTS Audio Generation ✅ COMPLETED
 - **File**: `scripts/run_tts.py` (TTSRunner.generate_audio)
 - **Issue**: Sequential audio generation creates bottleneck
 - **Fix**: Use `concurrent.futures.ThreadPoolExecutor` respecting API rate limits
 - **Expected Gain**: 40-70% time reduction for multiple digests
-- **Status**: ❌ Not implemented
+- **Status**: ✅ **COMPLETED** - Added parallel processing with 5 concurrent workers, intelligent fallback to sequential for single digest/dry-run
 
 ### 2. Cache Configuration Data
 - **File**: `src/config/config_manager.py:41-55`
@@ -160,7 +183,7 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Expected Gain**: Reduced memory footprint for large transcripts
 - **Status**: ❌ Not implemented
 
-### 8. Database Migration for Transcripts and Scripts
+### 8. Database Migration for Transcripts and Scripts ✅ COMPLETED
 - **Files**: `scripts/run_audio.py`, `scripts/run_digest.py`, `src/generation/script_generator.py`, `src/podcast/audio_processor.py`
 - **Issue**: Audio and Digest phases currently write files to repo (`data/transcripts/`, `data/scripts/`)
 - **Goal**: Store transcripts and scripts in Supabase database instead of local files
@@ -179,12 +202,33 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
   - Update downstream phases to read from database instead of files
   - Remove git commit steps for transcripts/scripts once migration complete
 - **Expected Gain**: Cleaner architecture, better data management, no git repo bloat
-- **Status**: ❌ Not implemented
+- **Status**: ✅ **COMPLETED** - Added `script_content` column, updated all phases to use database storage only, removed file-based workflows
 
 ### 9. Remove Unnecessary Caching
 - **Issue**: Remove Whisper cache from publishing workflow
 - **Fix**: Audit other caches for actual usage, document what caches are needed
 - **Status**: ❌ Not implemented
+
+### 10. Fix Discovery Phase Episode Detection ✅ COMPLETED
+- **File**: `scripts/run_discovery.py`
+- **Issue**: Discovery phase only found 1 episode per feed and stopped early at `max_episodes_per_run` limit
+- **Problems**:
+  - `break # One per feed` limited discovery to single episode per RSS feed
+  - Early termination when reaching `max_episodes_per_run` across ALL feeds
+  - Missing majority of episodes within date range
+  - Processing limits incorrectly applied to discovery instead of later phases
+- **Fix**:
+  - Remove `break # One per feed` limitations to discover ALL episodes within date range
+  - Continue checking ALL feeds regardless of `max_episodes_per_run` setting
+  - Create database records with 'pending' status for all discovered new episodes
+  - Apply processing limits in later phases, not discovery
+- **Benefits**:
+  - Discovers 10x-20x more episodes per run
+  - Proper separation between discovery and processing limits
+  - All episodes within date range are marked as 'pending' for future processing
+  - Better utilization of RSS feed monitoring
+- **Expected Gain**: Complete episode discovery within date range, no missed content
+- **Status**: ✅ **COMPLETED** - Removed feed limits, fixed early termination, added database creation for pending episodes
 
 ## LOW (P3) - Architecture & Nice-to-Have
 
