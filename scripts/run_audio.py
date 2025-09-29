@@ -609,10 +609,6 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of episodes')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output', help='Output JSON file (default: stdout)')
-    parser.add_argument('--use-optimization', action='store_true', default=True,
-                        help='Use P2 optimization (process until relevant episodes found)')
-    parser.add_argument('--no-optimization', dest='use_optimization', action='store_false',
-                        help='Disable P2 optimization (legacy behavior)')
 
     args = parser.parse_args()
 
@@ -625,10 +621,10 @@ def main():
             verbose=args.verbose
         ) as runner:
 
-            # Handle input and optimization logic
+            # Handle input - but prefer database-driven processing
             if args.input:
                 if args.input.endswith('.json') or '/' in args.input:
-                    # JSON file input - use traditional processing
+                    # Legacy JSON file input for compatibility
                     episodes_data = args.input
                     result = runner.process_episodes(episodes_data)
                 else:
@@ -643,34 +639,10 @@ def main():
                     }
                     result = runner.process_episodes(episodes_data)
             else:
-                # No input provided - check for stdin or use optimization
-                stdin_data = None
-                if not sys.stdin.isatty():
-                    # Try to read from stdin (traditional orchestrator call)
-                    try:
-                        stdin_content = sys.stdin.read().strip()
-                        if stdin_content:
-                            stdin_data = json.loads(stdin_content)
-                    except (json.JSONDecodeError, Exception):
-                        pass  # Fall through to optimization
-
-                if stdin_data:
-                    # Use traditional processing with stdin data
-                    result = runner.process_episodes(stdin_data)
-                else:
-                    # Called directly without input or empty stdin - use optimization
-                    if args.use_optimization:
-                        max_episodes = args.limit or 5  # Default to 5 relevant episodes
-                        runner.logger.info(f"🚀 P2 OPTIMIZATION ACTIVE: Seeking {max_episodes} relevant episodes")
-                        result = runner.process_episodes_optimized(max_episodes)
-                    else:
-                        runner.logger.error("No input provided and optimization disabled")
-                        result = {
-                            'success': False,
-                            'error': 'No input provided',
-                            'episodes_processed': 0,
-                            'episodes': []
-                        }
+                # Default behavior: Process pending episodes from database
+                max_episodes = args.limit or 5  # Default to 5 relevant episodes
+                runner.logger.info(f"🚀 AUDIO PHASE: Processing pending episodes from database (seeking {max_episodes} relevant episodes)")
+                result = runner.process_episodes_optimized(max_episodes)
 
         # Output JSON
         if args.output:
