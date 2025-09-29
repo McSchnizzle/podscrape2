@@ -103,7 +103,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Discovery
+      - name: Phase 1 - Discovery
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -113,29 +113,19 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Audio
+      - name: Phase 2 - Audio Processing
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
 
           echo "Running: python scripts/run_audio.py --verbose --output artifacts/audio-output.json"
-          python scripts/run_audio.py --verbose --output artifacts/audio-output.json < artifacts/discovery-output.json
+          python scripts/run_audio.py --verbose --output artifacts/audio-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
       # Audio transcripts are now stored in database - no git commits needed
 
-      - name: Scoring
-        run: |
-          source "${VENV_PATH}/bin/activate"
-          mkdir -p artifacts
-
-          echo "Running: python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json"
-          python scripts/run_scoring.py --verbose --output artifacts/scoring-output.json < artifacts/audio-output.json
-        env:
-          ORCHESTRATED_EXECUTION: "1"
-
-      - name: Digest
+      - name: Phase 3 - Digest
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
@@ -159,18 +149,17 @@ jobs:
           find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
           echo "before_file=$(realpath "$BASELINE")" >> "$GITHUB_OUTPUT"
 
-      - name: TTS
+      - name: Phase 4 - TTS Audio Generation
         run: |
           source "${VENV_PATH}/bin/activate"
           mkdir -p artifacts
           python scripts/run_tts.py \
             --verbose \
-            --output artifacts/tts-output.json \
-            < artifacts/digest-output.json
+            --output artifacts/tts-output.json
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Publishing
+      - name: Phase 5 - Publishing
         if: success() && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
