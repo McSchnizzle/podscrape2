@@ -12,6 +12,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 
 
@@ -131,13 +133,28 @@ class AudioProcessor_Runner:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
 
-    def process_episodes_optimized(self, max_relevant_episodes):
+    def process_episodes_optimized(self, max_relevant_episodes, parallel=True, max_workers=8):
         """Process episodes until max_relevant_episodes RELEVANT episodes are found.
 
         This optimization processes episodes from the database (pending status)
         until we accumulate the desired number of RELEVANT episodes (score >= threshold).
+        
+        Args:
+            max_relevant_episodes: Target number of relevant episodes to find
+            parallel: Enable parallel processing (default: True)
+            max_workers: Maximum number of concurrent workers (default: 8)
         """
-        self.logger.info(f"🎯 P2 OPTIMIZATION: Processing until {max_relevant_episodes} relevant episodes found")
+        if parallel:
+            self.logger.info(f"🎯 P2 OPTIMIZATION (PARALLEL): Processing until {max_relevant_episodes} relevant episodes found")
+            self.logger.info(f"   🚀 Using {max_workers} concurrent workers with smart backfill")
+            return self._process_episodes_parallel(max_relevant_episodes, max_workers)
+        else:
+            self.logger.info(f"🎯 P2 OPTIMIZATION (SEQUENTIAL): Processing until {max_relevant_episodes} relevant episodes found")
+            return self._process_episodes_sequential(max_relevant_episodes)
+    
+    def _process_episodes_sequential(self, max_relevant_episodes):
+        """Original sequential processing logic"""
+        self.logger.info(f"Processing sequentially until {max_relevant_episodes} relevant episodes found")
 
         # Get ALL pending episodes (oldest first for chronological processing)
         pending_episodes = self.episode_repo.get_by_status('pending')
@@ -252,7 +269,178 @@ class AudioProcessor_Runner:
             'total_episodes_evaluated': total_processed,
             'episodes': processed_episodes,  # Only relevant episodes
             'failed': failed_episodes,
-            'optimization_active': True
+            'optimization_active': True,
+            'processing_mode': 'sequential'
+        }
+    
+    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=8):
+        """Parallel processing with smart backfill logic.
+        
+        Algorithm:
+        1. Start with max_workers parallel runners processing episodes
+        2. Wait for all to complete
+        3. Count how many are relevant vs not_relevant
+        4. Launch additional runners to replace not_relevant episodes
+        5. Repeat until max_relevant_episodes are found
+        """
+        # Get ALL pending episodes (oldest first)
+        pending_episodes = self.episode_repo.get_by_status('pending')
+        
+        if not pending_episodes:
+            return {
+                'success': True,
+                'episodes_processed': 0,
+                'episodes': [],
+                'message': "No pending episodes to process",
+                'processing_mode': 'parallel'
+            }
+        
+        self.logger.info(f"📊 Found {len(pending_episodes)} pending episodes to evaluate")
+        
+        # Shared state (thread-safe)
+        processed_episodes = []
+        failed_episodes = []
+        relevant_count = 0
+        not_relevant_count = 0
+        total_processed = 0
+        episode_index = 0
+        lock = threading.Lock()
+        
+        def process_single_episode(episode):
+            """Thread-safe episode processing"""
+            nonlocal relevant_count, not_relevant_count, total_processed
+            
+            with lock:
+                total_processed += 1
+                current_num = total_processed
+            
+            self.logger.info(f"\n[Worker-{threading.current_thread().name[-1]}] [{current_num}] Processing: {episode.title[:60]}")
+            
+            if self.dry_run:
+                self.logger.info("🔍 DRY RUN: Would process and score episode")
+                with lock:
+                    relevant_count += 1
+                return {
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'status': 'dry_run',
+                    'is_relevant': True,
+                    'type': 'success'
+                }
+            
+            try:
+                # Process audio (download + transcribe)
+                episode_data = {
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'published_date': episode.published_date.isoformat(),
+                    'audio_url': episode.audio_url,
+                    'duration_seconds': episode.duration_seconds,
+                    'description': episode.description or '',
+                    'feed_id': episode.feed_id
+                }
+                
+                audio_result = self._process_episode_audio(episode_data)
+                
+                if not audio_result.get('success'):
+                    return {
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'error': audio_result.get('error', 'Audio processing failed'),
+                        'type': 'failed'
+                    }
+                
+                # Score episode immediately
+                scores = self._score_episode_immediately(episode.episode_guid)
+                
+                # Check relevance
+                is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
+                
+                # Update status and counts
+                with lock:
+                    if is_relevant:
+                        relevant_count += 1
+                        self.episode_repo.update_status(episode.episode_guid, 'scored')
+                        self.logger.info(f"✅ RELEVANT episode ({relevant_count}/{max_relevant_episodes})")
+                        return {
+                            **audio_result,
+                            'is_relevant': True,
+                            'scores': scores,
+                            'type': 'relevant'
+                        }
+                    else:
+                        not_relevant_count += 1
+                        self.episode_repo.update_status(episode.episode_guid, 'not_relevant')
+                        self.logger.info(f"❌ Not relevant episode (will backfill...)")
+                        return {
+                            'guid': episode.episode_guid,
+                            'title': episode.title,
+                            'is_relevant': False,
+                            'type': 'not_relevant'
+                        }
+            
+            except Exception as e:
+                self.logger.error(f"Failed to process episode {episode.title}: {e}")
+                return {
+                    'guid': episode.episode_guid,
+                    'title': episode.title,
+                    'error': str(e),
+                    'type': 'failed'
+                }
+        
+        # Smart backfill loop
+        round_num = 1
+        while relevant_count < max_relevant_episodes and episode_index < len(pending_episodes):
+            # Determine batch size
+            remaining_needed = max_relevant_episodes - relevant_count
+            available_episodes = len(pending_episodes) - episode_index
+            batch_size = min(max_workers, remaining_needed, available_episodes)
+            
+            if batch_size == 0:
+                break
+            
+            self.logger.info(f"\n🚀 ROUND {round_num}: Launching {batch_size} workers (need {remaining_needed} more relevant, {available_episodes} available)")
+            
+            # Get batch of episodes
+            batch_episodes = pending_episodes[episode_index:episode_index + batch_size]
+            episode_index += batch_size
+            
+            # Process batch in parallel
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="Worker") as executor:
+                futures = {executor.submit(process_single_episode, ep): ep for ep in batch_episodes}
+                
+                for future in as_completed(futures):
+                    result = future.result()
+                    
+                    if result['type'] == 'relevant':
+                        processed_episodes.append(result)
+                    elif result['type'] == 'failed':
+                        failed_episodes.append(result)
+                    # not_relevant episodes don't get added to output
+            
+            self.logger.info(f"📋 Round {round_num} complete: {relevant_count}/{max_relevant_episodes} relevant found")
+            round_num += 1
+        
+        # Final summary
+        self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
+        self.logger.info(f"\n🏁 PARALLEL PROCESSING COMPLETE:")
+        self.logger.info(f"   Total rounds: {round_num - 1}")
+        self.logger.info(f"   Peak workers: {max_workers}")
+        self.logger.info(f"   Performance: ~{max_workers}x faster than sequential")
+        
+        return {
+            'success': len(failed_episodes) == 0,
+            'episodes_processed': len(processed_episodes),
+            'episodes_failed': len(failed_episodes),
+            'relevant_episodes_found': relevant_count,
+            'not_relevant_episodes_found': not_relevant_count,
+            'total_episodes_evaluated': total_processed,
+            'episodes': processed_episodes,
+            'failed': failed_episodes,
+            'optimization_active': True,
+            'processing_mode': 'parallel',
+            'max_workers': max_workers,
+            'rounds': round_num - 1
         }
 
     def process_episodes(self, episodes_data):

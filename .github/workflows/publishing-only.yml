@@ -103,8 +103,9 @@ jobs:
           echo "=== Running Publishing Pipeline ==="
           echo "Target branch: $TARGET_BRANCH"
           echo "Repository: $GITHUB_REPOSITORY"
+          echo "Days back: ${DAYS_BACK:-7}"
 
-          python scripts/run_publishing.py --verbose
+          python scripts/run_publishing.py --verbose --days-back "${DAYS_BACK:-7}"
 
           echo "=== Copying RSS files ==="
           cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml

@@ -55,7 +55,11 @@ def _validate_external_tools():
 
 class AudioProcessor:
     """
-    Handles audio file downloading, validation, and chunking for podcast episodes
+    Handles audio file downloading, validation, and chunking for podcast episodes.
+    
+    Supports context manager protocol for proper resource cleanup:
+        with AudioProcessor() as processor:
+            processor.download_audio(...)
     """
     
     def __init__(self, 
@@ -91,6 +95,26 @@ class AudioProcessor:
         })
         
         logger.info(f"AudioProcessor initialized - cache: {self.audio_cache_dir}, chunks: {self.chunk_dir}")
+    
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure resources are cleaned up"""
+        self.close()
+        return False  # Don't suppress exceptions
+    
+    def close(self):
+        """Explicitly close resources"""
+        if hasattr(self, 'session') and self.session:
+            try:
+                self.session.close()
+                logger.debug("AudioProcessor session closed")
+            except Exception as e:
+                logger.warning(f"Error closing session: {e}")
+            finally:
+                self.session = None
     
     @retry_with_backoff(max_retries=3, backoff_factor=2.0)
     def download_audio(self, audio_url: str, episode_guid: str, 
@@ -514,9 +538,8 @@ class AudioProcessor:
         return sanitized[:100]
     
     def __del__(self):
-        """Cleanup resources"""
-        if hasattr(self, 'session'):
-            self.session.close()
+        """Cleanup resources on deletion"""
+        self.close()
 
 
 def create_audio_processor(audio_cache_dir: str = "audio_cache", 
