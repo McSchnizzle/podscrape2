@@ -250,6 +250,10 @@ class AudioProcessor:
         if not audio_path.exists():
             raise PodcastError(f"Audio file not found: {audio_file_path}")
         
+        # Validate audio file before chunking to prevent segfaults
+        if not self._validate_audio_file(audio_path):
+            raise PodcastError(f"Audio file failed validation (corrupt or invalid): {audio_file_path}")
+        
         # Create episode chunk directory using same naming convention
         episode_id = episode_guid.replace('-', '')[:6]
         chunk_episode_dir = self.chunk_dir / episode_id
@@ -449,11 +453,18 @@ class AudioProcessor:
         """Validate downloaded audio file"""
         try:
             # Check file exists and has content
-            if not file_path.exists() or file_path.stat().st_size == 0:
+            if not file_path.exists():
+                logger.warning(f"Audio file does not exist: {file_path}")
+                return False
+            
+            actual_size = file_path.stat().st_size
+            
+            # Check minimum file size (1KB) - catch empty/corrupt files
+            if actual_size < 1024:
+                logger.warning(f"Audio file too small ({actual_size} bytes), likely corrupt: {file_path}")
                 return False
             
             # Check size if expected
-            actual_size = file_path.stat().st_size
             if expected_size and abs(actual_size - expected_size) > expected_size * 0.1:
                 logger.warning(f"Size validation failed: expected ~{expected_size}, got {actual_size}")
                 # Don't fail validation just on size mismatch, continue to format check
@@ -463,6 +474,14 @@ class AudioProcessor:
             if duration <= 0:
                 logger.warning(f"Audio file appears to have no duration: {file_path}")
                 return False
+            
+            # Sanity check: duration should be reasonable (> 1 second, < 24 hours)
+            if duration < 1.0:
+                logger.warning(f"Audio file duration too short ({duration}s): {file_path}")
+                return False
+            if duration > 86400:
+                logger.warning(f"Audio file duration suspiciously long ({duration}s / {duration/3600:.1f}h): {file_path}")
+                # Don't fail on long files, just warn
             
             return True
             

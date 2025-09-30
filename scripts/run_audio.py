@@ -717,14 +717,26 @@ class AudioProcessor_Runner:
             }
 
         except Exception as e:
-            self.logger.error(f"Audio processing failed: {e}")
-            try:
-                self.episode_repo.mark_failure(episode_guid, str(e))
-            except:
-                pass
+            error_str = str(e)
+            self.logger.error(f"Audio processing failed: {error_str}")
+            
+            # For 404 and corrupt audio errors, mark as not_relevant to avoid retries
+            if any(keyword in error_str.lower() for keyword in ['404', 'not found', 'failed validation', 'corrupt']):
+                self.logger.info(f"Marking episode as not_relevant due to permanent failure: {error_str}")
+                try:
+                    self.episode_repo.update_status(episode_guid, 'not_relevant')
+                except:
+                    pass
+            else:
+                # For other errors, mark as failed for potential retry
+                try:
+                    self.episode_repo.mark_failure(episode_guid, error_str)
+                except:
+                    pass
+            
             return {
                 'success': False,
-                'error': str(e)
+                'error': error_str
             }
 
     def _cleanup_audio_files(self, episode_guid, chunk_paths):
