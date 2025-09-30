@@ -360,9 +360,7 @@ class AudioProcessor_Runner:
                     total_processed += 1
                     current_num = total_processed
 
-            self.logger.info(f"\n[Worker-{threading.current_thread().name[-1]}] [{current_num}] Processing: {episode.title[:60]}")
-
-            try:
+                self.logger.info(f"\n[Worker-{threading.current_thread().name[-1]}] [{current_num}] Processing: {episode.title[:60]}")
                 if self.dry_run:
                     self.logger.info("🔍 DRY RUN: Would process and score episode")
                     with lock:
