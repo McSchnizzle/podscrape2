@@ -235,21 +235,21 @@ class AudioProcessor:
     def chunk_audio(self, audio_file_path: str, episode_guid: str) -> List[str]:
         """
         Split audio file into chunks for processing
-        
+
         Args:
             audio_file_path: Path to source audio file
             episode_guid: Episode identifier for chunk naming
-            
+
         Returns:
-            List of paths to audio chunks
-            
+            List of paths to audio chunks (only valid chunks)
+
         Raises:
-            PodcastError: If chunking fails
+            PodcastError: If chunking fails or all chunks are invalid
         """
         audio_path = Path(audio_file_path)
         if not audio_path.exists():
             raise PodcastError(f"Audio file not found: {audio_file_path}")
-        
+
         # Validate audio file before chunking to prevent segfaults
         if not self._validate_audio_file(audio_path):
             raise PodcastError(f"Audio file failed validation (corrupt or invalid): {audio_file_path}")
@@ -336,6 +336,15 @@ class AudioProcessor:
                     logger.warning(f"Empty or missing chunk: {chunk_path}")
                     continue
 
+                # CRITICAL: Validate chunk audio properties to prevent Whisper failures
+                if not self._validate_chunk_audio(str(chunk_path)):
+                    logger.warning(f"🚨 Invalid chunk detected (corrupt or silent), skipping: {chunk_path}")
+                    try:
+                        chunk_path.unlink()  # Delete corrupt chunk
+                    except Exception:
+                        pass
+                    continue
+
                 chunk_size_mb = chunk_path.stat().st_size / (1024 * 1024)
                 chunk_paths.append(str(chunk_path))
 
@@ -348,9 +357,16 @@ class AudioProcessor:
                 else:
                     logger.info(f"✅ Chunk {chunk_num+1}/{num_chunks} completed: {chunk_size_mb:.1f}MB, {chunk_duration:.1f}s processing time")
             
-            logger.info(f"Successfully created {len(chunk_paths)} audio chunks for {episode_guid}")
+            # CRITICAL: Ensure we have at least one valid chunk
+            if not chunk_paths:
+                raise PodcastError(
+                    f"No valid audio chunks created for {episode_guid} - "
+                    f"all chunks failed validation (likely corrupt or silent audio)"
+                )
+
+            logger.info(f"Successfully created {len(chunk_paths)} valid audio chunks for {episode_guid}")
             return chunk_paths
-            
+
         except subprocess.CalledProcessError as e:
             error_msg = f"FFmpeg chunking subprocess error for {episode_guid}: {e}"
             logger.error(error_msg)
@@ -449,6 +465,60 @@ class AudioProcessor:
             logger.warning(f"Could not get audio info for {audio_file_path}: {e}")
             return {}
     
+    def _validate_chunk_audio(self, chunk_path: str) -> bool:
+        """Validate audio chunk properties to prevent Whisper failures.
+
+        Checks for:
+        - Valid audio format and codec
+        - Non-zero duration (> 0.5 seconds)
+        - Proper sample rate and channels
+        - Audio stream presence
+
+        Args:
+            chunk_path: Path to audio chunk file
+
+        Returns:
+            True if chunk is valid, False if corrupt/silent/invalid
+        """
+        try:
+            # Get detailed audio info using ffprobe
+            info = self.get_audio_info(chunk_path)
+
+            if not info:
+                logger.warning(f"Could not get audio info for chunk: {chunk_path}")
+                return False
+
+            # Check duration - must be at least 0.5 seconds to have meaningful content
+            duration = info.get('duration', 0)
+            if duration < 0.5:
+                logger.warning(f"Chunk too short ({duration}s): {chunk_path}")
+                return False
+
+            # Check for valid sample rate (should be 16000 after conversion)
+            sample_rate = info.get('sample_rate', 0)
+            if sample_rate == 0:
+                logger.warning(f"Invalid sample rate ({sample_rate}): {chunk_path}")
+                return False
+
+            # Check for valid codec
+            codec = info.get('codec', '')
+            if not codec or codec == 'unknown':
+                logger.warning(f"Unknown codec: {chunk_path}")
+                return False
+
+            # Check file size is reasonable (at least 10KB for 16kHz mono)
+            file_size = Path(chunk_path).stat().st_size
+            if file_size < 10240:  # 10KB minimum
+                logger.warning(f"Chunk file too small ({file_size} bytes): {chunk_path}")
+                return False
+
+            logger.debug(f"✓ Chunk validated: {duration:.1f}s, {sample_rate}Hz, {codec}, {file_size} bytes")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Chunk validation error for {chunk_path}: {e}")
+            return False
+
     def _validate_audio_file(self, file_path: Path, expected_size: Optional[int] = None) -> bool:
         """Validate downloaded audio file"""
         try:

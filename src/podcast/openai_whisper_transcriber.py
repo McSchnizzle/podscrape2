@@ -232,7 +232,16 @@ class OpenAIWhisperTranscriber:
         try:
             logger.debug(f"Transcribing chunk {chunk_number}: {chunk_path}")
 
-            # Use local Whisper model to transcribe
+            # Validate chunk file exists and has content
+            import os
+            if not os.path.exists(chunk_path):
+                raise PodcastError(f"Chunk file not found: {chunk_path}")
+
+            chunk_size = os.path.getsize(chunk_path)
+            if chunk_size < 10240:  # 10KB minimum
+                raise PodcastError(f"Chunk file too small ({chunk_size} bytes): {chunk_path}")
+
+            # Use local Whisper model to transcribe with enhanced error handling
             result = self._whisper_model.transcribe(
                 chunk_path,
                 language='en',  # Specify English for better performance
@@ -265,6 +274,20 @@ class OpenAIWhisperTranscriber:
                 processing_time_seconds=processing_time
             )
 
+        except RuntimeError as e:
+            # Catch Whisper tensor errors specifically
+            error_str = str(e)
+            if 'cannot reshape tensor' in error_str or 'shape' in error_str.lower():
+                error_msg = (
+                    f"Whisper tensor error for chunk {chunk_number} - "
+                    f"likely corrupt or invalid audio data: {chunk_path}"
+                )
+                logger.error(error_msg)
+                raise PodcastError(error_msg) from e
+            else:
+                error_msg = f"Whisper runtime error for chunk {chunk_number}: {e}"
+                logger.error(error_msg)
+                raise PodcastError(error_msg) from e
         except Exception as e:
             error_msg = f"Failed to transcribe chunk {chunk_number} ({chunk_path}): {e}"
             logger.error(error_msg)

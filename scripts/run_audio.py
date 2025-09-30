@@ -320,32 +320,45 @@ class AudioProcessor_Runner:
         lock = threading.Lock()
         
         def process_single_episode(episode):
-            """Thread-safe episode processing with database cleanup"""
+            """Thread-safe episode processing with database cleanup.
+
+            Each worker thread gets its own database connection that is properly
+            closed after processing to prevent connection leaks.
+            """
             nonlocal relevant_count, not_relevant_count, total_processed
 
-            # Critical section: Claim this episode for processing
-            with lock:
-                # Check for stuck processing episodes periodically
-                if total_processed % 5 == 0:  # Every 5 episodes
-                    reset_count = self.episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
-                    if reset_count > 0:
-                        self.logger.info(f"🔄 Reset {reset_count} additional stuck episodes during processing")
+            # Create worker-specific database connection (thread-safe)
+            worker_episode_repo = None
+            try:
+                worker_episode_repo = get_episode_repo()
+            except Exception as e:
+                logger.error(f"Failed to create worker database connection: {e}")
+                return {'type': 'failed', 'guid': episode.episode_guid, 'error': 'Database connection failed'}
 
-                # Check if episode is already being processed or completed
-                current_episode = self.episode_repo.get_by_episode_guid(episode.episode_guid)
-                if current_episode and current_episode.status not in ['pending']:
-                    self.logger.debug(f"Episode {episode.title[:40]} already processing/processed (status: {current_episode.status}), skipping")
-                    return {'type': 'skipped', 'guid': episode.episode_guid}
+            try:
+                # Critical section: Claim this episode for processing
+                with lock:
+                    # Check for stuck processing episodes periodically
+                    if total_processed % 5 == 0:  # Every 5 episodes
+                        reset_count = worker_episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
+                        if reset_count > 0:
+                            self.logger.info(f"🔄 Reset {reset_count} additional stuck episodes during processing")
 
-                # Mark episode as processing to prevent other workers from taking it
-                try:
-                    self.episode_repo.update_status(episode.episode_guid, 'processing')
-                except Exception as e:
-                    self.logger.warning(f"Could not mark episode as processing: {e}")
-                    return {'type': 'skipped', 'guid': episode.episode_guid}
+                    # Check if episode is already being processed or completed
+                    current_episode = worker_episode_repo.get_by_episode_guid(episode.episode_guid)
+                    if current_episode and current_episode.status not in ['pending']:
+                        self.logger.debug(f"Episode {episode.title[:40]} already processing/processed (status: {current_episode.status}), skipping")
+                        return {'type': 'skipped', 'guid': episode.episode_guid}
 
-                total_processed += 1
-                current_num = total_processed
+                    # Mark episode as processing to prevent other workers from taking it
+                    try:
+                        worker_episode_repo.update_status(episode.episode_guid, 'processing')
+                    except Exception as e:
+                        self.logger.warning(f"Could not mark episode as processing: {e}")
+                        return {'type': 'skipped', 'guid': episode.episode_guid}
+
+                    total_processed += 1
+                    current_num = total_processed
 
             self.logger.info(f"\n[Worker-{threading.current_thread().name[-1]}] [{current_num}] Processing: {episode.title[:60]}")
 
@@ -392,7 +405,7 @@ class AudioProcessor_Runner:
                 with lock:
                     if is_relevant:
                         relevant_count += 1
-                        self.episode_repo.update_status(episode.episode_guid, 'scored')
+                        worker_episode_repo.update_status(episode.episode_guid, 'scored')
                         self.logger.info(f"✅ RELEVANT episode ({relevant_count}/{max_relevant_episodes})")
                         return {
                             **audio_result,
@@ -402,7 +415,7 @@ class AudioProcessor_Runner:
                         }
                     else:
                         not_relevant_count += 1
-                        self.episode_repo.update_status(episode.episode_guid, 'not_relevant')
+                        worker_episode_repo.update_status(episode.episode_guid, 'not_relevant')
                         self.logger.info(f"❌ Not relevant episode (will backfill...)")
                         return {
                             'guid': episode.episode_guid,
@@ -410,11 +423,11 @@ class AudioProcessor_Runner:
                             'is_relevant': False,
                             'type': 'not_relevant'
                         }
-            
+
             except Exception as e:
                 # Reset episode status on failure so it can be retried
                 try:
-                    self.episode_repo.update_status(episode.episode_guid, 'pending')
+                    worker_episode_repo.update_status(episode.episode_guid, 'pending')
                 except:
                     pass
                 self.logger.error(f"Failed to process episode {episode.title}: {e}")
@@ -425,8 +438,13 @@ class AudioProcessor_Runner:
                     'type': 'failed'
                 }
             finally:
-                # Cleanup any thread-specific resources if needed
-                pass
+                # CRITICAL: Cleanup worker database connection to prevent leaks
+                if worker_episode_repo:
+                    try:
+                        worker_episode_repo.close()
+                        logger.debug(f"Worker database connection closed for {episode.episode_guid[:8]}")
+                    except Exception as e:
+                        logger.warning(f"Error closing worker database connection: {e}")
         
         # Smart backfill loop
         round_num = 1
