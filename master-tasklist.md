@@ -492,6 +492,61 @@ for digest in all_pending_digests:
 
 **Status**: ✅ **COMPLETED** - TTS now efficiently processes only newest digest per topic, eliminating failures and duplicate MP3 generation
 
+## TTS Script Content Database Issue Resolution (v1.31) ✅ COMPLETED
+
+### Issue: TTS Phase Failing - Script Content Not Found
+- **Problem**: TTS phase failing with "Script content not found for digest" errors for all digests
+- **Root Cause**: DigestRepository.create() method was NOT saving script_content field to database
+- **Impact**: All digests created since database-first migration (v1.28) had no script_content, causing TTS failures
+
+### **SOLUTION IMPLEMENTED:**
+
+#### **1. Fixed DigestRepository.create() Method** (`src/database/models.py`)
+- **Added missing line**: `script_content=digest.script_content` (line 689)
+- **Result**: New digests will properly save script_content to database
+
+#### **2. Migration Script for Existing Digests** (`fix_script_content.py`)
+- **Created one-time migration script** to populate script_content from script files
+- **Result**: Fixed 6 of 22 pending digests (16 had missing script files from incomplete migration)
+- **Note**: Recent digests (Sep 29) never had script files created due to database-first approach
+
+### **CRITICAL FINDING:**
+- Database-first migration was only partially complete:
+  - ✅ Digest phase creates script_content in memory 
+  - ❌ DigestRepository wasn't saving script_content to database
+  - ✅ Script files no longer created (intentional, per database-first design)
+  - Result: Digests had neither script files nor database content
+
+### **VERIFICATION NEEDED:**
+- Run digest phase again to create new digests with script_content properly saved
+- Verify TTS phase can process these new digests successfully
+- Confirm publishing phase uploads MP3s to GitHub and RSS feed
+
+**Status**: ✅ **COMPLETED** - DigestRepository now saves script_content, fixing TTS phase failures
+
+## Next Priority Actions (Top 3)
+
+### 1. CRITICAL: Re-run Digest Phase for Today's Episodes
+- **Issue**: Today's digests (IDs 220-225) have no script_content and no script files
+- **Action**: Re-run digest phase to create new digests with proper script_content
+- **Command**: `python3 scripts/run_digest.py --date 2025-09-29`
+- **Expected**: New digests created with script_content properly saved to database
+
+### 2. HIGH: Verify Complete Pipeline Flow
+- **Issue**: Need to verify TTS → Publishing flow works with fixed digests  
+- **Action**: Run TTS phase on newly created digests, then publishing
+- **Commands**:
+  - `python3 scripts/run_tts.py` (should process new digests)
+  - `python3 scripts/run_publishing.py` (should upload MP3s)
+- **Expected**: MP3s generated, uploaded to GitHub, RSS feed updated
+
+### 3. HIGH: Global Logger Access Vulnerability (P1 Issue #1)
+- **File**: `src/utils/error_handling.py:236`
+- **Issue**: `logger = globals()['logger']` throws KeyError if 'logger' not in scope
+- **Fix**: Change to `logger = logging.getLogger(__name__)`
+- **Impact**: Prevents crashes in error handling paths
+- **Status**: Ready to fix
+
 ## Completed Sessions (Historical)
 
 - **Session 1**: ✅ COMPLETE (4/4 critical production issues resolved)
@@ -501,6 +556,7 @@ for digest in all_pending_digests:
 - **Session 5**: ✅ COMPLETE (3/3 test consolidation and cleanup tasks resolved)
 - **Session 6**: ✅ COMPLETE (1/1 critical workflow alignment issue resolved)
 - **Session 7**: ✅ COMPLETE (1/1 TTS duplicate digests issue resolved)
+- **Session 8**: ✅ COMPLETE (1/1 TTS script_content database issue resolved)
 
 ## Progress Summary
 
@@ -544,5 +600,5 @@ python3 src/publishing/rss_generator.py --validate web_ui_hosted/public/daily-di
 
 ---
 
-*Last Updated: 2025-09-29 (v1.30 - TTS Duplicate Digests Resolution)*
+*Last Updated: 2025-09-29 (v1.31 - TTS Script Content Database Issue Resolution)*
 *Consolidated from hardening-tasklist.md, move-online2.md, and second-hardening.md*

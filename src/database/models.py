@@ -686,6 +686,7 @@ class DigestRepository:
                     episode_ids=digest.episode_ids,
                     episode_count=digest.episode_count,
                     script_path=digest.script_path,
+                    script_content=digest.script_content,  # FIX: Save script_content to database
                     script_word_count=digest.script_word_count,
                     mp3_path=digest.mp3_path,
                     mp3_duration_seconds=digest.mp3_duration_seconds,
