@@ -38,6 +38,7 @@ from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, c
 from src.publishing.retention_manager import create_retention_manager
 from src.publishing.vercel_deployer import create_vercel_deployer
 from src.utils.rss_timestamps import generate_unique_pubdate
+from src.utils.timezone import get_pacific_now
 
 # Import centralized logging
 try:
@@ -129,8 +130,8 @@ class PublishingPipelineRunner:
         self.logger.info(f"Searching for unpublished digests from last {days_back} days...")
 
         # Get recent digests from database using SQLAlchemy repository
-        from datetime import datetime, timedelta
-        cutoff_date = datetime.now() - timedelta(days=days_back)
+        from datetime import timedelta
+        cutoff_date = get_pacific_now() - timedelta(days=days_back)
 
         recent_digests = self.digest_repo.get_recent_digests(days=days_back)
 
@@ -410,7 +411,7 @@ class PublishingPipelineRunner:
                     return False
 
                 # Step 5: Commit with timestamp
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = get_pacific_now().strftime("%Y-%m-%d %H:%M:%S %Z")
                 commit_message = f"Update RSS feed - {timestamp}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
 
                 result = subprocess.run(['git', 'commit', '-m', commit_message],
@@ -461,7 +462,7 @@ class PublishingPipelineRunner:
 
         try:
             self.logger.info("🚀 Starting complete publishing pipeline...")
-            start_time = datetime.now()
+            start_time = get_pacific_now()
             
             # 1. Find unpublished digests
             digests = self.find_unpublished_digests(days_back)
@@ -469,7 +470,8 @@ class PublishingPipelineRunner:
                 self.logger.info("No digests found to publish")
                 return True
             
-            # 2. Verify digests are ready for RSS (already uploaded by TTS phase)
+            # 2. Verify and repair digests FIRST - this updates database and digest dicts with github_url
+            # CRITICAL: Must happen BEFORE RSS generation so RSS includes all repaired digests
             verified = 0
             not_ready = 0
             for digest in digests:
@@ -479,7 +481,8 @@ class PublishingPipelineRunner:
                     not_ready += 1
             self.logger.info(f"Verified {verified} digests ready for RSS (not ready: {not_ready})")
             
-            # 3. Generate RSS feed (include all digests, published and newly published)
+            # 3. Generate RSS feed - NOW includes all repaired digests with updated github_url values
+            # Note: digests list has been modified in-place by publish_digest(), so it has current data
             rss_content = self.generate_rss_feed(digests)
             if not rss_content:
                 self.logger.error("Failed to generate RSS feed")
@@ -509,7 +512,7 @@ class PublishingPipelineRunner:
                 except Exception as e:
                     self.logger.warning(f"⚠️  Cleanup failed: {e}")
             
-            duration = (datetime.now() - start_time).total_seconds()
+            duration = (get_pacific_now() - start_time).total_seconds()
 
             # Log completion
             self.pipeline_logger.log_phase_complete(f"Publishing completed successfully in {duration:.1f}s")

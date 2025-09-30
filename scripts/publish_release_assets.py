@@ -26,6 +26,7 @@ from src.config.env import load_env
 from src.publishing.github_publisher import create_github_publisher, GitHubPublisher
 from src.publishing.retention_manager import create_retention_manager
 from src.utils.logging_config import get_logger
+from src.utils.timezone import get_pacific_now
 
 logger = get_logger(__name__)
 
@@ -245,7 +246,7 @@ Examples:
             mp3_files = find_mp3_files(search_paths)
 
             if mp3_files:
-                today = date.today()
+                today = get_pacific_now().date()
                 if args.dry_run:
                     print(f"Would publish {len(mp3_files)} MP3 files for {today}")
                     for mp3_file in mp3_files:
@@ -287,7 +288,7 @@ Examples:
                 print(f"Would clean up releases older than {args.keep_days} days")
                 # Show which releases would be deleted
                 releases = publisher.list_releases()
-                cutoff_date = datetime.now() - timedelta(days=args.keep_days)
+                cutoff_date = get_pacific_now() - timedelta(days=args.keep_days)
                 old_releases = [r for r in releases if r.published_at.replace(tzinfo=None) < cutoff_date]
 
                 if old_releases:

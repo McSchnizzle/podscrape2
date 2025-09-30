@@ -1,6 +1,6 @@
 # RSS Podcast Digest System - Remaining Tasks
 
-**Last Updated**: 2024-09-30 (v1.32)  
+**Last Updated**: 2024-09-30 (v1.34)  
 **Note**: All completed tasks have been moved to `COMPLETED_TASKS_SUMMARY.md`
 
 ## Overview
@@ -13,9 +13,50 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## CRITICAL (P0) - Security & Breaking Issues: 0 REMAINING
+## CRITICAL (P0) - Security & Breaking Issues: 2 NEW TASKS
 
-🎉 **ALL P0 CRITICAL ISSUES RESOLVED!**
+### 1. Convert All Timestamps from UTC to Pacific Time (NEW - v1.34)
+- **Scope**: System-wide timestamp generation
+- **Issue**: All timestamps use UTC, causing confusion (Sept 29 6pm PT shows as Sept 30 1am UTC)
+- **Files Affected**:
+  - MP3 filename generation: `src/audio/complete_audio_processor.py`, `scripts/run_tts.py`
+  - Digest date assignment: `scripts/run_digest.py`
+  - RSS pubDate generation: `src/publishing/rss_generator.py`
+  - GitHub release descriptions: `scripts/publish_release_assets.py`
+  - All `datetime.now()` calls throughout codebase
+- **Fix**: Replace `datetime.now()` with Pacific timezone-aware version
+- **Implementation Plan**:
+  1. Create utility function `get_pacific_now()` in `src/utils/timezone.py`
+  2. Search and replace all `datetime.now()` calls with `get_pacific_now()`
+  3. Update date formatting to preserve Pacific timezone
+  4. Test with pipeline run to verify filenames show correct dates
+- **Testing**: Run full pipeline at 11:50pm PT, verify files show current day not next day
+- **Priority**: CRITICAL - User confusion about episode dates
+- **Status**: ❌ Not started
+- **Estimated Time**: 2-3 hours
+
+### 2. Fix Validated Pipeline to Generate RSS After ALL Repairs Complete (NEW - v1.34)
+- **File**: `.github/workflows/validated-full-pipeline.yml`
+- **Issue**: Publishing phase runs immediately after TTS uploads, but database may not be updated yet
+- **Current Flow**:
+  1. TTS phase uploads MP3s to GitHub Release
+  2. Publishing phase queries database (finds UNPUBLISHED)
+  3. Publishing phase repairs digests and updates database
+  4. Publishing phase generates RSS (but already filtered out UNPUBLISHED ones)
+- **Proposed Fix**: Add verification step before RSS generation
+  - Option A: Add longer sleep (current 5s → 15s) for GitHub API propagation
+  - Option B: Publishing script should refresh digest list after repairs
+  - Option C: TTS phase should update database with github_url before exiting
+- **Recommendation**: Option C - TTS phase should call a database update function
+- **Files to modify**:
+  - `scripts/run_tts.py`: Add database update after GitHub upload success
+  - `scripts/publish_release_assets.py`: Return upload success details for database update
+- **Testing**: Run validated pipeline, verify RSS includes all new episodes without needing publishing-only
+- **Priority**: CRITICAL - Breaks automated workflow, requires manual intervention
+- **Status**: ❌ Not started
+- **Estimated Time**: 1-2 hours
+
+🎉 **Previously completed**: 10/10 P0 issues (v1.33 and earlier)
 
 ---
 
@@ -242,17 +283,23 @@ This document lists ONLY the remaining tasks that need to be completed.
 ## Summary Statistics
 
 ### By Priority:
-- **P0 (Critical)**: 0 remaining 🎉
+- **P0 (Critical)**: 2 NEW tasks (timezone, RSS generation timing)
 - **P1 (High)**: 5 remaining (core functionality)
 - **P2 (Medium)**: 7 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 30 tasks
+### **Total Remaining**: 32 tasks
+
+### **Session 11 Completed (v1.34)**:
+- ✅ Fixed discovery phase duplicate episode creation bug
+- ✅ Fixed audio phase max_episodes_per_run configuration enforcement
+- ✅ Enhanced publishing Git workflow for race condition handling
 
 ### Recommended Next Steps:
-1. **P1 Priority**: Fix resource leaks and workflow parameter handling
-2. **P2 Priority**: Implement parallel audio processing for major performance gains
-3. **P3 Priority**: Enhanced logging and monitoring features
+1. **P0 Priority (URGENT)**: Convert UTC to Pacific time for all timestamps
+2. **P0 Priority (URGENT)**: Fix validated pipeline RSS generation timing
+3. **P1 Priority**: Fix resource leaks and workflow parameter handling
+4. **P2 Priority**: Implement parallel audio processing for major performance gains
 
 ---
 

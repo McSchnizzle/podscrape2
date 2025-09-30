@@ -15,6 +15,7 @@ import logging
 
 from ..utils.logging_config import get_logger
 from ..utils.error_handling import PodcastError
+from ..utils.timezone import get_pacific_now, PACIFIC_TZ
 
 logger = get_logger(__name__)
 
@@ -107,7 +108,7 @@ class RSSGenerator:
         ET.SubElement(channel, "description").text = self.metadata.description
         ET.SubElement(channel, "link").text = self.metadata.website_url
         ET.SubElement(channel, "language").text = self.metadata.language
-        ET.SubElement(channel, "lastBuildDate").text = self._format_rss_date(datetime.now())
+        ET.SubElement(channel, "lastBuildDate").text = self._format_rss_date(get_pacific_now())
         ET.SubElement(channel, "generator").text = "RSS Podcast Digest System v1.0"
 
         # Podcast image (RSS 2.0 standard)
@@ -144,7 +145,8 @@ class RSSGenerator:
     def _format_rss_date(self, dt: datetime) -> str:
         """Format datetime for RSS pubDate (RFC 2822)"""
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            # If naive, assume it's already Pacific time
+            dt = dt.replace(tzinfo=PACIFIC_TZ)
         return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
     
     def _format_duration(self, seconds: int) -> str:
@@ -302,7 +304,7 @@ if __name__ == "__main__":
                     title="AI News Daily Digest - December 10, 2024",
                     description="Today's top AI developments and breakthroughs",
                     audio_url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2024-12-10/AI_News_20241210_120000.mp3",
-                    pub_date=datetime.now(),
+                    pub_date=get_pacific_now(),
                     duration_seconds=1200,  # 20 minutes
                     file_size=9600000,      # ~9.6MB
                     guid="ai-news-2024-12-10"
@@ -311,7 +313,7 @@ if __name__ == "__main__":
                     title="Tech Culture Daily Digest - December 10, 2024", 
                     description="Latest developments in tech culture and industry trends",
                     audio_url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2024-12-10/Tech_Culture_20241210_120000.mp3",
-                    pub_date=datetime.now() - timedelta(hours=1),
+                    pub_date=get_pacific_now() - timedelta(hours=1),
                     duration_seconds=900,   # 15 minutes
                     file_size=7200000,      # ~7.2MB
                     guid="tech-culture-2024-12-10"

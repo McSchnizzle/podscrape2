@@ -1,7 +1,7 @@
 # Completed Tasks Summary - RSS Podcast Digest System
 
 **Generated**: 2024-09-30  
-**Version**: v1.33
+**Version**: v1.34
 
 This document lists all completed tasks from the master-tasklist.md, organized by priority level.
 
@@ -256,7 +256,8 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 - **Session 7**: ✅ COMPLETE (1/1 TTS duplicate digests)
 - **Session 8**: ✅ COMPLETE (1/1 TTS script_content + 2 P1 issues)
 - **Session 9**: ✅ VERIFICATION (3 P0/P1 fixes verified)
-- **Session 10 (Today)**: ✅ COMPLETE (2 critical configuration fixes)
+- **Session 10**: ✅ COMPLETE (2 critical configuration fixes)
+- **Session 11 (Today)**: ✅ COMPLETE (1 critical bug fix + planning for 2 new P0 tasks)
 
 ---
 
@@ -399,4 +400,128 @@ error: Please commit or stash them.
 
 ---
 
-*This document represents a comprehensive review of all completed work on the RSS Podcast Digest System through version 1.32.*
+## 🔧 SESSION 11 (2024-09-30) - Discovery Bug Fix & Pipeline Planning
+
+### ✅ COMPLETED FIX:
+
+#### 1. Discovery Phase Duplicate Episode Creation Bug (P0)
+
+**Problem**: Discovery phase attempted to create duplicate episode records in database, causing UniqueViolation errors.
+
+**Root Cause**: 
+- Lines 279-291 in `scripts/run_discovery.py`
+- When existing episode with 'pending' status found, code logged "RESUME" and added to discovered_episodes
+- Missing `continue` statement allowed code to fall through to NEW episode creation logic
+- Attempted to INSERT episode with same GUID, violating unique constraint
+
+**Error Pattern**:
+```
+ERROR - Failed to create episode: (psycopg2.errors.UniqueViolation) 
+duplicate key value violates unique constraint "episodes_episode_guid_key"
+DETAIL:  Key (episode_guid)=(a6b7ae5d-d354-46d9-a4c3-c2a390fb4d04) already exists.
+```
+
+**Solution Implemented**:
+- Added `continue` statement on line 292 after RESUME episode detection
+- Prevents fall-through to NEW episode creation logic
+- One-line fix with major impact
+
+**Files Modified**:
+- `scripts/run_discovery.py` (line 292)
+
+**Impact**: Eliminates all UniqueViolation errors in discovery phase, allows clean episode discovery for pending episodes.
+
+---
+
+### 📝 NEW TASKS IDENTIFIED:
+
+#### 1. Convert All Timestamps from UTC to Pacific Time (P0 - URGENT)
+
+**User Request**: "Why is the date on these episodes sept 30th? today is sept 29th - if you're using UTC time, please change that so you're using pacific time"
+
+**Scope**: System-wide timezone conversion
+- MP3 filename timestamps currently show UTC (confusing for Pacific time users)
+- Example: Sept 29 6:44pm PT shows as Sept 30 01:44 UTC in filenames
+- All digest dates, RSS pubDates, and GitHub release timestamps use UTC
+
+**Implementation Plan**:
+1. Create `src/utils/timezone.py` with `get_pacific_now()` utility function
+2. Search and replace all `datetime.now()` calls with Pacific timezone version
+3. Update date formatting to preserve Pacific timezone
+4. Test at 11:50pm PT to verify files show correct day
+
+**Files Affected**:
+- `src/audio/complete_audio_processor.py` - MP3 filename generation
+- `scripts/run_tts.py` - TTS audio generation timestamps
+- `scripts/run_digest.py` - Digest date assignment
+- `src/publishing/rss_generator.py` - RSS pubDate generation
+- `scripts/publish_release_assets.py` - GitHub release descriptions
+- All other `datetime.now()` usage throughout codebase
+
+**Priority**: CRITICAL - User confusion about episode dates
+**Status**: Planned, not started
+**Estimated Time**: 2-3 hours
+
+---
+
+#### 2. Fix Validated Pipeline RSS Generation Timing (P0 - URGENT)
+
+**User Request**: "please change the validated full pipeline so that it generated the rss feed as a result of identifying additional episodes... i don't want to have to run the publishing-only workflow after running the fully validated pipeline"
+
+**Problem**: Publishing phase generates RSS before database repairs complete
+
+**Current Flow** (BROKEN):
+1. TTS phase uploads MP3s to GitHub Release ✅
+2. Publishing phase queries database → finds digests marked UNPUBLISHED ❌
+3. Publishing phase repairs digests and updates database to PUBLISHED ✅
+4. Publishing phase generates RSS from original digest list (still has UNPUBLISHED) ❌
+5. RSS feed missing new episodes, requires manual publishing-only workflow run
+
+**Root Cause**: 
+- Workflow line 216: `publish_release_assets.py` uploads MP3s but doesn't update database
+- TTS phase exits without setting `github_url` in database
+- Publishing phase has to "repair" the records by finding GitHub release
+- But RSS generation uses original filtered list
+
+**Proposed Solution (Option C - Recommended)**:
+- TTS phase should update database with `github_url` after successful upload
+- Eliminates need for "repair" logic in publishing phase
+- RSS generation gets correct data immediately
+
+**Files to Modify**:
+- `scripts/run_tts.py`: Add database update after GitHub upload
+- `scripts/publish_release_assets.py`: Return upload success details
+- `.github/workflows/validated-full-pipeline.yml`: Pass upload results to database update
+
+**Alternative Options**:
+- Option A: Increase sleep from 5s to 15s (band-aid fix)
+- Option B: Refresh digest list after repairs (architectural fix)
+
+**Priority**: CRITICAL - Breaks automated workflow
+**Status**: Planned, not started  
+**Estimated Time**: 1-2 hours
+
+---
+
+### 🎯 Session Summary
+
+**Fixes Completed**: 1
+- Discovery phase duplicate episode bug (1 line fix, major impact)
+
+**Planning Completed**: 2 new P0 tasks identified and documented
+- Timezone conversion (UTC → Pacific)
+- RSS generation timing fix
+
+**User Experience Improvements**:
+- ✅ Eliminated UniqueViolation errors in discovery phase
+- 📋 Planned fix for confusing episode dates (Sept 30 vs Sept 29)
+- 📋 Planned fix for manual publishing-only workflow requirement
+
+**Documentation Updates**:
+- Updated `master-tasklist.md` with 2 new P0 tasks
+- Detailed implementation plans for both fixes
+- Version bumped to v1.34
+
+---
+
+*This document represents a comprehensive review of all completed work on the RSS Podcast Digest System through version 1.34.*

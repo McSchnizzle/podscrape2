@@ -30,6 +30,7 @@ bootstrap_phase()
 
 from src.database.models import get_episode_repo, get_digest_repo
 from src.generation.script_generator import ScriptGenerator
+from src.utils.timezone import get_pacific_now
 
 # Import centralized logging
 try:
@@ -102,7 +103,7 @@ class DigestRunner:
         self.pipeline_logger.log_phase_start("Digest Script Generation Phase")
 
         if target_date is None:
-            target_date = date.today()
+            target_date = get_pacific_now().date()
 
         self.logger.info("Generating daily digests for all active topics (database-first approach)")
 

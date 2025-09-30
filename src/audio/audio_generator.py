@@ -18,6 +18,7 @@ from .voice_manager import VoiceManager, VoiceSettings
 from ..database.models import Digest, get_digest_repo
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager
+from ..utils.timezone import get_pacific_now
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ class AudioGenerator:
         
         # Generate filename (allow caller to supply an exact timestamp to match script)
         if not timestamp:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
         safe_topic = topic.replace(' ', '_').replace('&', 'and')
         filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
@@ -218,7 +219,7 @@ class AudioGenerator:
             file_size_bytes=file_size,
             voice_name=voice_name,
             voice_id=voice_id,
-            generation_timestamp=datetime.now()
+            generation_timestamp=get_pacific_now()
         )
     
     def _get_voice_id_for_topic(self, topic: str) -> str:
