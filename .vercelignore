@@ -1,0 +1,58 @@
+# Vercel should ONLY deploy the RSS XML file and web UI
+# MP3 files are hosted on GitHub Releases, NOT Vercel
+
+# Ignore everything by default
+*
+
+# Then explicitly include only what we need
+!web_ui_hosted/
+!web_ui_hosted/**
+!vercel.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!next.config.js
+!tailwind.config.js
+!postcss.config.js
+
+# But exclude node_modules and build artifacts even from web_ui_hosted
+web_ui_hosted/node_modules/
+web_ui_hosted/.next/
+web_ui_hosted/out/
+
+# Exclude any MP3s that might accidentally be in web_ui_hosted
+**/*.mp3
+**/*.wav
+**/*.m4a
+
+# Exclude Python stuff completely
+*.py
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.egg-info/
+
+# Exclude data directories completely
+data/
+logs/
+temp/
+archive/
+reference-docs/
+docs/
+tests/
+scripts/
+src/
+
+# Exclude database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Exclude git and config files we don't need
+.git/
+.github/
+.gitignore
+.env
+.env.local
+*.log
