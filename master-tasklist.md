@@ -341,7 +341,29 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Note**: Current 872MB is expected - all files within 14-day window (oldest from Sept 16)
 - **Status**: ✅ **COMPLETED** - Files will auto-delete when they exceed retention period
 
-### 7. Database Retention and Cleanup System
+### 7. Simplify MP3 Storage - Remove 'current' Subdirectory
+- **Files**: `src/audio/audio_manager.py`, `src/audio/complete_audio_processor.py`, `src/publishing/github_publisher.py`
+- **Issue**: Unnecessary `data/completed-tts/current/` subdirectory adds complexity
+- **Current Architecture**:
+  - MP3s created in `data/completed-tts/`
+  - AudioManager.organize_audio_files() moves them to `data/completed-tts/current/`
+  - GitHub publisher looks in `current/` subdirectory
+  - Retention manager needs to handle both locations
+- **Proposed Simplification**:
+  - Store all MP3s directly in `data/completed-tts/` (no subdirectories)
+  - Remove AudioManager.organize_audio_files() calls
+  - Update GitHub publisher to look in base `completed-tts/` directory
+  - Remove current_dir, archive_dir, temp_dir logic from AudioManager
+- **Files to Update**:
+  - `src/audio/audio_manager.py` - Remove subdirectory creation and organization logic
+  - `src/audio/complete_audio_processor.py` - Remove organize_audio_files() call (line 150)
+  - `src/publishing/github_publisher.py` - Update file discovery paths
+  - `src/publishing/retention_manager.py` - Already handles both locations correctly
+- **Migration**: Move existing files from `current/` to parent directory
+- **Benefits**: Simpler architecture, fewer code paths, easier to understand and maintain
+- **Status**: ❌ Not implemented
+
+### 8. Database Retention and Cleanup System
 - **Status**: ⚠️ IN PROGRESS (from move-online2.md Phase 6.5)
 - **Goal**: Implement automated database cleanup to prevent database bloat
 - **Implementation**: Delete episodes/digests based on configurable retention periods
