@@ -125,6 +125,86 @@ class PublishingPipelineRunner:
                 self.logger.warning(f"GH CLI check failed: {e}")
         self.logger.info("Environment variables verified (repository set)")
     
+    def recover_orphaned_mp3s(self, days_back: int = 30):
+        """Scan for MP3 files without database mp3_path entries and update database.
+
+        This recovers from situations where TTS phase generated MP3s but failed to
+        update the database (e.g., due to incorrect update_audio() signature).
+        """
+        from src.audio.audio_manager import AudioManager
+        from pathlib import Path
+
+        self.logger.info("🔍 Scanning for orphaned MP3 files without database entries...")
+
+        # Get recent digests that might have orphaned MP3s
+        recent_digests = self.digest_repo.get_recent_digests(days=days_back)
+
+        recovered_count = 0
+        for digest_model in recent_digests:
+            # Skip digests that already have mp3_path set
+            if digest_model.mp3_path:
+                continue
+
+            # Skip digests without metadata (can't recover)
+            if not digest_model.mp3_title or not digest_model.mp3_summary:
+                continue
+
+            # Look for MP3 file matching the topic and date pattern
+            topic_slug = digest_model.topic.replace(' ', '_').replace('and', 'and')
+            date_str = digest_model.digest_date.strftime('%Y%m%d')
+
+            # Search in common locations
+            search_paths = [
+                Path('data/completed-tts'),
+                Path('.'),  # Current directory (after organize_audio_files)
+            ]
+
+            for search_dir in search_paths:
+                if not search_dir.exists():
+                    continue
+
+                # Look for files matching pattern: Topic_YYYYMMDD_*.mp3
+                pattern = f"{topic_slug}_{date_str}_*.mp3"
+                matching_files = list(search_dir.glob(pattern))
+
+                if matching_files:
+                    # Use the first (should be only) matching file
+                    mp3_file = matching_files[0]
+
+                    # Get audio duration using ffprobe
+                    try:
+                        import subprocess
+                        result = subprocess.run(
+                            ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                             '-of', 'csv=p=0', str(mp3_file)],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        duration = int(float(result.stdout.strip())) if result.stdout.strip() else digest_model.mp3_duration_seconds or 0
+                    except Exception:
+                        duration = digest_model.mp3_duration_seconds or 0
+
+                    # Update database with recovered MP3 path
+                    try:
+                        self.digest_repo.update_audio(
+                            digest_id=digest_model.id,
+                            mp3_path=str(mp3_file),
+                            duration_seconds=duration,
+                            title=digest_model.mp3_title,
+                            summary=digest_model.mp3_summary
+                        )
+                        self.logger.info(f"✅ Recovered orphaned MP3: {mp3_file.name} → digest {digest_model.id}")
+                        recovered_count += 1
+                        break  # Found and updated, move to next digest
+                    except Exception as e:
+                        self.logger.warning(f"Failed to update database for recovered MP3 {mp3_file}: {e}")
+
+        if recovered_count > 0:
+            self.logger.info(f"🎉 Recovered {recovered_count} orphaned MP3 file(s)")
+        else:
+            self.logger.info("✓ No orphaned MP3 files found")
+
     def find_unpublished_digests(self, days_back: int = 30) -> List[Dict[str, Any]]:
         """Find digests that have MP3 files but haven't been published"""
         self.logger.info(f"Searching for unpublished digests from last {days_back} days...")
@@ -463,7 +543,11 @@ class PublishingPipelineRunner:
         try:
             self.logger.info("🚀 Starting complete publishing pipeline...")
             start_time = get_pacific_now()
-            
+
+            # 0. RECOVERY: Scan for orphaned MP3 files and update database
+            # This recovers from TTS phase failures where MP3 was generated but database wasn't updated
+            self.recover_orphaned_mp3s(days_back)
+
             # 1. Find unpublished digests
             digests = self.find_unpublished_digests(days_back)
             if not digests:
