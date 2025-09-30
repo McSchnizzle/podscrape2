@@ -20,19 +20,20 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Issue**: Unbound `conn` variable in `database_transaction` context manager
 - **Status**: ✅ **FIXED** - Added `conn = None` initialization and `if conn:` check before rollback
 
-### 2. Limit Check Ignores Zero
-- **Files**: `scripts/run_tts.py:151`, `scripts/run_scoring.py:154`, `scripts/run_audio.py:169`
+### 2. Limit Check Ignores Zero ✅ FIXED
+- **Files**: `scripts/run_tts.py:147`, `scripts/run_audio.py:298`
 - **Issue**: `if self.limit:` condition treats `--limit 0` as falsy, processing all items instead of none
 - **Evidence**: Zero is falsy in Python, so `--limit 0` doesn't slice the list
-- **Fix**: Change to `if self.limit is not None:` before slicing
-- **Status**: ❌ Not fixed
+- **Fix**: Changed to `if self.limit is not None:` before slicing
+- **Status**: ✅ **FIXED** - All occurrences now use `if self.limit is not None:` pattern
+- **Note**: `run_scoring.py` was removed in v1.28 database-first refactoring
 
-### 3. Voice Fetch Failure Cached Permanently
+### 3. Voice Fetch Failure Cached Permanently ✅ FIXED
 - **File**: `src/audio/voice_manager.py:90-93`
 - **Issue**: Failed voice fetches set `_available_voices = []` permanently until refresh
 - **Evidence**: Network errors cause empty list to be cached, preventing future fetches
-- **Fix**: Set `_available_voices = None` on failure or implement retry mechanism
-- **Status**: ❌ Not fixed
+- **Fix**: Set `_available_voices = None` on failure to allow retry on next call
+- **Status**: ✅ **FIXED** - Line 93 now sets `self._available_voices = None` on exception
 
 ### 4. Command Injection Vulnerability in Publishing Workflow
 - **File**: `.github/workflows/phase-publishing.yml`
@@ -75,11 +76,14 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Fix**: Add `encoding='utf-8'` to all file operations
 - **Status**: ✅ **FIXED** - Added encoding='utf-8' to file operation
 
-### 3. Missing Subprocess Exception Handling
-- **Files**: Multiple files using `subprocess.run()`
+### 3. Missing Subprocess Exception Handling ✅ FIXED
+- **Files**: `src/podcast/audio_processor.py`, `src/publishing/github_publisher.py`, `src/publishing/vercel_deployer.py`
 - **Issue**: Inconsistent handling of `FileNotFoundError` when external tools missing
-- **Fix**: Add FileNotFoundError handling with clear error messages
-- **Status**: ❌ Not fixed
+- **Fix**: Added FileNotFoundError handling with clear error messages
+- **Status**: ✅ **FIXED** - All subprocess.run() calls now have proper FileNotFoundError exception handling:
+  - `audio_processor.py`: Lines 49-50, 290-291, 404-406, 461-463
+  - `github_publisher.py`: Lines 55-56, 207-209, 276-278, 330-332
+  - `vercel_deployer.py`: Line 68-69
 
 ### 4. Resource Leak in Audio Processing
 - **File**: `src/podcast/audio_processor.py:509`
@@ -631,7 +635,7 @@ for digest in all_pending_digests:
 
 ## Progress Summary
 
-### Immediate Fixes Completed Today
+### Immediate Fixes Completed (Historical)
 - ✅ **Database transaction connection bug** - Fixed unbound variable issue
 - ✅ **Git push race conditions** - Added `git pull --rebase` to all workflows
 - ✅ **Publishing workflow file copy error** - Fixed obsolete file path references
@@ -643,8 +647,29 @@ for digest in all_pending_digests:
 - ✅ **GitHub workflow alignment with database-first architecture** - Updated validated-full-pipeline.yml to match completed v1.28 refactoring (v1.29)
 - ✅ **TTS duplicate digests issue resolution** - Fixed TTS to process only newest digest per topic, cleaned 48 duplicate digests (v1.30)
 
+### Today's Verification Session (2024-09-30)
+- ✅ **Verified Limit Check Fix** - Confirmed `if self.limit is not None:` in run_audio.py:298, run_tts.py:147
+- ✅ **Verified Voice Fetch Fix** - Confirmed `self._available_voices = None` on exception in voice_manager.py:93
+- ✅ **Verified Subprocess Exception Handling** - Confirmed FileNotFoundError handling in all subprocess.run() calls across:
+  - audio_processor.py (4 locations)
+  - github_publisher.py (4 locations)
+  - vercel_deployer.py (1 location)
+- 📝 **Updated master-tasklist.md** - Marked 3 P0/P1 issues as FIXED with verification details
+
 ### Critical Issues Remaining (P0): 0 items
 🎉 **ALL P0 CRITICAL ISSUES RESOLVED**
+
+### High Priority Issues Remaining (P1): 3 items
+- ✅ Global Logger Access Vulnerability - Already fixed
+- ✅ File Encoding Inconsistency - Already fixed  
+- ✅ Missing Subprocess Exception Handling - Verified fixed
+- ⚠️ Resource Leak in Audio Processing - Not yet fixed
+- ⚠️ --log Parameter in Orchestrator - Not yet fixed
+- ⚠️ Publishing Workflow Parameter Handling - Not yet fixed
+- ⚠️ Missing Secrets in Workflow - Not yet fixed
+- ⚠️ Retention Manager Initialization - Not yet fixed
+
+**P1 Summary**: 3 of 8 items verified as already fixed, 5 items remaining
 
 ### Next Priority Actions
 1. Address P1 High priority issues (Global logger access, file encoding, subprocess exceptions)
@@ -671,5 +696,5 @@ python3 src/publishing/rss_generator.py --validate web_ui_hosted/public/daily-di
 
 ---
 
-*Last Updated: 2025-09-29 (v1.31 - TTS Script Content Database Issue Resolution)*
+*Last Updated: 2024-09-30 (v1.32 - Verification Session: Confirmed 3 P0/P1 Issues Already Fixed)*
 *Consolidated from hardening-tasklist.md, move-online2.md, and second-hardening.md*
