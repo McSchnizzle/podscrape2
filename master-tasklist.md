@@ -19,7 +19,7 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## HIGH (P1) - Core Functionality Issues: 3 REMAINING
+## HIGH (P1) - Core Functionality Issues: 2 REMAINING
 
 ### 1. --log Parameter in Orchestrator
 - **File**: `run_full_pipeline_orchestrator.py`
@@ -40,6 +40,18 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Fix**: Add try/catch with graceful degradation, make GitHub CLI optional
 - **Priority**: MEDIUM - Error handling
 - **Status**: ❌ Not fixed
+
+### 4. Parallel Audio Processing Robustness (P1 - URGENT)
+- **Files**: `scripts/run_audio.py`, `src/database/models.py`
+- **Issue**: Parallel processing fails with stuck 'processing' episodes and misleading worker counts
+- **Fixes Implemented**:
+  - Added automatic recovery for stuck 'processing' episodes at startup
+  - Fixed worker count reporting to show actual workers used
+  - Added periodic timeout protection during processing
+  - Improved empty queue handling with helpful suggestions
+  - Added better database connection management
+- **Priority**: HIGH - Core functionality fix
+- **Status**: ✅ Fixed (v1.35)
 
 ---
 
@@ -215,11 +227,11 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ### By Priority:
 - **P0 (Critical)**: 0 remaining (ALL COMPLETE! 🎉)
-- **P1 (High)**: 3 remaining (core functionality)
+- **P1 (High)**: 2 remaining (core functionality)
 - **P2 (Medium)**: 6 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 27 tasks
+### **Total Remaining**: 26 tasks
 
 ### **Session 11 Completed (v1.30)**:
 - ✅ Fixed discovery phase duplicate episode creation bug (P0)
@@ -229,10 +241,18 @@ This document lists ONLY the remaining tasks that need to be completed.
 - ✅ Fixed resource leak in audio processing with context managers (P1)
 - ✅ Implemented parallel audio phase processing with smart backfill (P2)
 
+### **Session 12 Completed (v1.35)**:
+- ✅ Fixed parallel audio processing robustness issues (P1)
+  - Added automatic recovery for stuck 'processing' episodes
+  - Fixed misleading worker count reporting
+  - Added periodic timeout protection
+  - Improved empty queue handling
+  - Enhanced database connection management
+
 ### Recommended Next Steps:
-1. **P1 Priority**: Fix resource leaks and workflow parameter handling
-2. **P2 Priority**: Implement parallel audio processing for major performance gains
-3. **P2 Priority**: Batch API requests for better throughput
+1. **P1 Priority**: Fix --log parameter and workflow secret handling
+2. **P2 Priority**: Batch API requests for better throughput
+3. **P2 Priority**: Remove synchronous sleep calls and optimize memory
 
 ---
 

@@ -454,6 +454,45 @@ class EpisodeRepository:
                 logger.error(f"Failed to mark episodes as digested: {e}")
                 raise
 
+    def reset_stuck_processing_episodes(self, timeout_minutes: int = 10) -> int:
+        """Reset episodes stuck in 'processing' status back to 'pending'
+
+        Args:
+            timeout_minutes: Episodes in processing status longer than this are considered stuck
+
+        Returns:
+            Number of episodes reset
+        """
+        from datetime import timedelta
+        timeout_threshold = datetime.now(UTC) - timedelta(minutes=timeout_minutes)
+
+        with self.db.get_session() as session:
+            try:
+                # Find episodes stuck in processing status
+                stuck_episodes = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.status == 'processing')\
+                    .filter(EpisodeModel.updated_at < timeout_threshold)\
+                    .all()
+
+                if not stuck_episodes:
+                    return 0
+
+                # Reset to pending status
+                reset_count = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.status == 'processing')\
+                    .filter(EpisodeModel.updated_at < timeout_threshold)\
+                    .update({
+                        EpisodeModel.status: 'pending',
+                        EpisodeModel.updated_at: datetime.now(UTC)
+                    }, synchronize_session=False)
+
+                session.commit()
+                return reset_count
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to reset stuck processing episodes: {e}")
+                raise
+
     def update_audio_download(self, episode_guid: str, audio_path: str):
         """Update audio download information"""
         with self.db.get_session() as session:

@@ -146,7 +146,7 @@ class AudioProcessor_Runner:
         """
         if parallel:
             self.logger.info(f"🎯 P2 OPTIMIZATION (PARALLEL): Processing until {max_relevant_episodes} relevant episodes found")
-            self.logger.info(f"   🚀 Using {max_workers} concurrent workers with smart backfill")
+            self.logger.info(f"   🚀 Smart backfill with concurrent workers (details below)")
             return self._process_episodes_parallel(max_relevant_episodes, max_workers)
         else:
             self.logger.info(f"🎯 P2 OPTIMIZATION (SEQUENTIAL): Processing until {max_relevant_episodes} relevant episodes found")
@@ -275,27 +275,40 @@ class AudioProcessor_Runner:
     
     def _process_episodes_parallel(self, max_relevant_episodes, max_workers=8):
         """Parallel processing with smart backfill logic.
-        
+
         Algorithm:
-        1. Start with max_workers parallel runners processing episodes
-        2. Wait for all to complete
-        3. Count how many are relevant vs not_relevant
-        4. Launch additional runners to replace not_relevant episodes
-        5. Repeat until max_relevant_episodes are found
+        1. Reset any stuck 'processing' episodes from previous failed runs
+        2. Start with max_workers parallel runners processing episodes
+        3. Wait for all to complete
+        4. Count how many are relevant vs not_relevant
+        5. Launch additional runners to replace not_relevant episodes
+        6. Repeat until max_relevant_episodes are found
         """
+        # Step 1: Reset stuck 'processing' episodes at startup
+        reset_count = self.episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
+        if reset_count > 0:
+            self.logger.info(f"🔄 Reset {reset_count} stuck 'processing' episodes back to 'pending'")
+
         # Get ALL pending episodes (oldest first)
         pending_episodes = self.episode_repo.get_by_status('pending')
         
         if not pending_episodes:
+            self.logger.info("📊 No pending episodes found to process")
+            self.logger.info("💡 Suggestion: Run discovery phase to find new episodes, or check for episodes in other statuses")
             return {
                 'success': True,
                 'episodes_processed': 0,
                 'episodes': [],
-                'message': "No pending episodes to process",
+                'message': "No pending episodes to process - pipeline complete or discovery needed",
                 'processing_mode': 'parallel'
             }
-        
-        self.logger.info(f"📊 Found {len(pending_episodes)} pending episodes to evaluate")
+
+        # Calculate actual worker capacity
+        available_episodes = len(pending_episodes)
+        actual_max_workers = min(max_workers, max_relevant_episodes, available_episodes)
+
+        self.logger.info(f"📊 Found {available_episodes} pending episodes to evaluate")
+        self.logger.info(f"⚙️ Using up to {actual_max_workers} concurrent workers (max: {max_workers}, need: {max_relevant_episodes}, available: {available_episodes})")
         
         # Shared state (thread-safe)
         processed_episodes = []
@@ -307,42 +320,47 @@ class AudioProcessor_Runner:
         lock = threading.Lock()
         
         def process_single_episode(episode):
-            """Thread-safe episode processing"""
+            """Thread-safe episode processing with database cleanup"""
             nonlocal relevant_count, not_relevant_count, total_processed
-            
+
             # Critical section: Claim this episode for processing
             with lock:
+                # Check for stuck processing episodes periodically
+                if total_processed % 5 == 0:  # Every 5 episodes
+                    reset_count = self.episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
+                    if reset_count > 0:
+                        self.logger.info(f"🔄 Reset {reset_count} additional stuck episodes during processing")
+
                 # Check if episode is already being processed or completed
                 current_episode = self.episode_repo.get_by_episode_guid(episode.episode_guid)
                 if current_episode and current_episode.status not in ['pending']:
                     self.logger.debug(f"Episode {episode.title[:40]} already processing/processed (status: {current_episode.status}), skipping")
                     return {'type': 'skipped', 'guid': episode.episode_guid}
-                
+
                 # Mark episode as processing to prevent other workers from taking it
                 try:
                     self.episode_repo.update_status(episode.episode_guid, 'processing')
                 except Exception as e:
                     self.logger.warning(f"Could not mark episode as processing: {e}")
                     return {'type': 'skipped', 'guid': episode.episode_guid}
-                
+
                 total_processed += 1
                 current_num = total_processed
-            
+
             self.logger.info(f"\n[Worker-{threading.current_thread().name[-1]}] [{current_num}] Processing: {episode.title[:60]}")
-            
-            if self.dry_run:
-                self.logger.info("🔍 DRY RUN: Would process and score episode")
-                with lock:
-                    relevant_count += 1
-                return {
-                    'guid': episode.episode_guid,
-                    'title': episode.title,
-                    'status': 'dry_run',
-                    'is_relevant': True,
-                    'type': 'success'
-                }
-            
+
             try:
+                if self.dry_run:
+                    self.logger.info("🔍 DRY RUN: Would process and score episode")
+                    with lock:
+                        relevant_count += 1
+                    return {
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'status': 'dry_run',
+                        'is_relevant': True,
+                        'type': 'success'
+                    }
                 # Process audio (download + transcribe)
                 episode_data = {
                     'guid': episode.episode_guid,
@@ -406,6 +424,9 @@ class AudioProcessor_Runner:
                     'error': str(e),
                     'type': 'failed'
                 }
+            finally:
+                # Cleanup any thread-specific resources if needed
+                pass
         
         # Smart backfill loop
         round_num = 1
@@ -413,7 +434,7 @@ class AudioProcessor_Runner:
             # Determine batch size
             remaining_needed = max_relevant_episodes - relevant_count
             available_episodes = len(pending_episodes) - episode_index
-            batch_size = min(max_workers, remaining_needed, available_episodes)
+            batch_size = min(actual_max_workers, remaining_needed, available_episodes)
             
             if batch_size == 0:
                 break
@@ -425,7 +446,7 @@ class AudioProcessor_Runner:
             episode_index += batch_size
             
             # Process batch in parallel
-            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="Worker") as executor:
+            with ThreadPoolExecutor(max_workers=actual_max_workers, thread_name_prefix="Worker") as executor:
                 futures = {executor.submit(process_single_episode, ep): ep for ep in batch_episodes}
                 
                 for future in as_completed(futures):
@@ -448,8 +469,8 @@ class AudioProcessor_Runner:
         self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
         self.logger.info(f"\n🏁 PARALLEL PROCESSING COMPLETE:")
         self.logger.info(f"   Total rounds: {round_num - 1}")
-        self.logger.info(f"   Peak workers: {max_workers}")
-        self.logger.info(f"   Performance: ~{max_workers}x faster than sequential")
+        self.logger.info(f"   Peak workers: {actual_max_workers}")
+        self.logger.info(f"   Performance: ~{actual_max_workers}x faster than sequential")
         
         return {
             'success': len(failed_episodes) == 0,
@@ -462,7 +483,7 @@ class AudioProcessor_Runner:
             'failed': failed_episodes,
             'optimization_active': True,
             'processing_mode': 'parallel',
-            'max_workers': max_workers,
+            'max_workers': actual_max_workers,
             'rounds': round_num - 1
         }
 
