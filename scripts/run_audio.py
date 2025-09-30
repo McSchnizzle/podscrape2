@@ -260,8 +260,15 @@ class AudioProcessor_Runner:
         # Enhanced logging summary as requested
         self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
 
+        # Success criteria: No failures occurred
+        # Note: Finding 0 relevant episodes is NOT a failure - it's a valid outcome
+        success = len(failed_episodes) == 0
+
+        if success and relevant_count == 0 and total_processed > 0:
+            self.logger.info("✓ Audio phase completed successfully (0 relevant episodes found - this is normal)")
+
         return {
-            'success': len(failed_episodes) == 0,
+            'success': success,
             'episodes_processed': len(processed_episodes),  # Only relevant episodes
             'episodes_failed': len(failed_episodes),
             'relevant_episodes_found': relevant_count,
@@ -439,8 +446,10 @@ class AudioProcessor_Runner:
                 # CRITICAL: Cleanup worker database connection to prevent leaks
                 if worker_episode_repo:
                     try:
-                        worker_episode_repo.close()
-                        self.logger.debug(f"Worker database connection closed for {episode.episode_guid[:8]}")
+                        # Try to close if method exists (SQLAlchemy sessions auto-close via context manager)
+                        if hasattr(worker_episode_repo, 'close'):
+                            worker_episode_repo.close()
+                            self.logger.debug(f"Worker database connection closed for {episode.episode_guid[:8]}")
                     except Exception as e:
                         self.logger.warning(f"Error closing worker database connection: {e}")
         
@@ -487,9 +496,17 @@ class AudioProcessor_Runner:
         self.logger.info(f"   Total rounds: {round_num - 1}")
         self.logger.info(f"   Peak workers: {actual_max_workers}")
         self.logger.info(f"   Performance: ~{actual_max_workers}x faster than sequential")
-        
+
+        # Success criteria: No failures occurred
+        # Note: Finding 0 relevant episodes is NOT a failure - it's a valid outcome
+        # The pipeline successfully processed all available episodes
+        success = len(failed_episodes) == 0
+
+        if success and relevant_count == 0 and total_processed > 0:
+            self.logger.info("✓ Audio phase completed successfully (0 relevant episodes found - this is normal)")
+
         return {
-            'success': len(failed_episodes) == 0,
+            'success': success,
             'episodes_processed': len(processed_episodes),
             'episodes_failed': len(failed_episodes),
             'relevant_episodes_found': relevant_count,
