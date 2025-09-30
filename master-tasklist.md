@@ -322,7 +322,21 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Expected Gain**: Better voice-topic matching, configurable per topic
 - **Status**: ❌ Not implemented
 
-### 6. Database Retention and Cleanup System
+### 6. Local MP3 File Retention and Cleanup ⚠️ CRITICAL
+- **File**: `src/publishing/retention_manager.py`
+- **Issue**: 872MB of local MP3 files (59 files) accumulating in `data/completed-tts/`
+- **Current State**: RetentionManager exists but does NOT clean up MP3 files
+- **Root Cause**: MP3s are uploaded to GitHub Releases but never deleted locally
+- **Implementation Needed**:
+  - Add RetentionPolicy for MP3 files in `data/completed-tts/`
+  - Default retention: 7 days (once uploaded to GitHub, local copy not needed)
+  - Verify MP3 is in GitHub release before deleting local file
+  - Add to default retention policies in RetentionManager
+- **Expected Savings**: ~850MB disk space, faster deployments, cleaner repo
+- **Priority**: HIGH - 872MB of unnecessary files is excessive
+- **Status**: ❌ Not implemented
+
+### 7. Database Retention and Cleanup System
 - **Status**: ⚠️ IN PROGRESS (from move-online2.md Phase 6.5)
 - **Goal**: Implement automated database cleanup to prevent database bloat
 - **Implementation**: Delete episodes/digests based on configurable retention periods
