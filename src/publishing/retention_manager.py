@@ -69,14 +69,39 @@ class RetentionManager:
         logger.info(f"Retention Manager initialized with {len(self.retention_policies)} policies")
     
     def _get_default_policies(self) -> List[RetentionPolicy]:
-        """Get default retention policies for the project"""
+        """Get default retention policies for the project, loading retention days from WebConfig"""
         project_root = Path(__file__).parent.parent.parent
+        
+        # Load retention settings from WebConfig
+        try:
+            from ..config.web_config import WebConfigManager
+            wc = WebConfigManager()
+            local_mp3_days = int(wc.get_setting('retention', 'local_mp3_days', 14))
+            audio_cache_days = int(wc.get_setting('retention', 'audio_cache_days', 3))
+            logs_days = int(wc.get_setting('retention', 'logs_days', 3))
+        except Exception as e:
+            logger.warning(f"Could not load retention settings from WebConfig, using defaults: {e}")
+            local_mp3_days = 14
+            audio_cache_days = 3
+            logs_days = 3
 
         return [
             RetentionPolicy(
+                name="Local MP3 Files",
+                path_pattern=str(project_root / "data" / "completed-tts"),
+                retention_days=local_mp3_days,
+                file_pattern="*.mp3"
+            ),
+            RetentionPolicy(
+                name="Audio Cache",
+                path_pattern=str(project_root / "data" / "audio-cache"),
+                retention_days=audio_cache_days,
+                file_pattern="*"
+            ),
+            RetentionPolicy(
                 name="Old Logs",
                 path_pattern=str(project_root / "logs"),
-                retention_days=30,
+                retention_days=logs_days,
                 file_pattern="*.log"
             ),
             RetentionPolicy(
