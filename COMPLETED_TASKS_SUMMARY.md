@@ -7,7 +7,7 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 
 ---
 
-## 🎉 CRITICAL (P0) - Security & Breaking Issues: 5/8 COMPLETED
+## 🎉 CRITICAL (P0) - Security & Breaking Issues: 8/8 COMPLETED 🎉
 
 ### ✅ COMPLETED:
 
@@ -36,10 +36,24 @@ This document lists all completed tasks from the master-tasklist.md, organized b
    - Fixed copying non-existent `data/rss/daily-digest.xml`
    - File: `.github/workflows/publishing-only.yml`
 
-### ⚠️ NOT YET FIXED (3 items):
-- Command Injection Vulnerability in Publishing Workflow
-- JSON Output Parsing in Orchestrator
-- Google Account Authentication Security
+6. **Google Account Authentication Security**
+   - Implemented Google OAuth via Supabase Auth
+   - Restricted access to `brownpr0@gmail.com` only
+   - Automatic sign-out for unauthorized users
+   - Files: `web_ui_hosted/app/login/page.tsx`, `web_ui_hosted/utils/supabase-auth.ts`
+
+7. **JSON Output Parsing in Orchestrator**
+   - Implemented robust multi-line JSON parsing with buffering
+   - Handles incomplete JSON gracefully during streaming
+   - Used for status reporting and diagnostics (not phase data transfer)
+   - Note: Less critical after v1.28 database-first architecture (phases don't depend on JSON)
+   - File: `run_full_pipeline_orchestrator.py:189-280`
+
+8. **Command Injection Vulnerability in Publishing Workflow**
+   - Verified NO `eval` commands exist in any GitHub workflow files
+   - All workflows use direct command execution with proper argument arrays
+   - Files checked: `publishing-only.yml`, `validated-full-pipeline.yml`, all workflow files
+   - Status: Never existed in current codebase or already fixed in earlier refactoring
 
 ---
 
@@ -205,7 +219,7 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 ## 📊 OVERALL COMPLETION STATISTICS
 
 ### By Priority Level:
-- **P0 (Critical)**: 5/8 completed (62.5%)
+- **P0 (Critical)**: 8/8 completed (100%) 🎉
 - **P1 (High)**: 3/8 completed (37.5%)
 - **P2 (Medium)**: 6 major items completed
 - **P3 (Low)**: 1 item completed
