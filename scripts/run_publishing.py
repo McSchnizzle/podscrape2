@@ -260,7 +260,111 @@ class PublishingPipelineRunner:
             self.logger.info(f"  - {digest['digest_date']} | {digest['topic']} | {status}")
 
         return digests
-    
+
+    def upload_digests_to_github(self, digests: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Upload digests to GitHub releases and update database with github_url
+
+        Groups digests by date and creates/updates daily GitHub releases.
+        Updates database with github_url for successfully uploaded digests.
+
+        Args:
+            digests: List of digest dictionaries with mp3_path
+
+        Returns:
+            Dictionary with upload statistics (uploaded, failed, skipped counts)
+        """
+        from datetime import datetime
+
+        self.logger.info(f"📤 Uploading {len(digests)} digests to GitHub...")
+
+        if self.dry_run:
+            self.logger.info("DRY RUN: Would upload digests to GitHub")
+            return {'uploaded': len(digests), 'failed': 0, 'skipped': 0}
+
+        # Filter digests that already have github_url (skip re-upload)
+        digests_to_upload = [d for d in digests if not d.get('github_url')]
+        already_uploaded = len(digests) - len(digests_to_upload)
+
+        if already_uploaded > 0:
+            self.logger.info(f"⏭️  Skipping {already_uploaded} digests already uploaded to GitHub")
+
+        if not digests_to_upload:
+            self.logger.info("All digests already uploaded to GitHub")
+            return {'uploaded': 0, 'failed': 0, 'skipped': already_uploaded}
+
+        # Group digests by date (one release per date)
+        digests_by_date = {}
+        for digest in digests_to_upload:
+            date = digest['digest_date']
+            if date not in digests_by_date:
+                digests_by_date[date] = []
+            digests_by_date[date].append(digest)
+
+        self.logger.info(f"Creating/updating {len(digests_by_date)} GitHub releases...")
+
+        uploaded_count = 0
+        failed_count = 0
+
+        # Process each date group
+        for release_date_str, date_digests in digests_by_date.items():
+            try:
+                self.logger.info(f"\n📅 Processing release for {release_date_str}...")
+
+                # Collect MP3 file paths and validate they exist
+                mp3_files = []
+                for digest in date_digests:
+                    mp3_path = digest.get('mp3_path')
+                    if mp3_path and Path(mp3_path).exists():
+                        mp3_files.append(mp3_path)
+                        self.logger.info(f"  • {digest['topic']}: {Path(mp3_path).name}")
+                    else:
+                        self.logger.warning(f"  ⚠️  Missing MP3 for {digest['topic']}: {mp3_path}")
+
+                if not mp3_files:
+                    self.logger.warning(f"  ⚠️  No valid MP3 files found for {release_date_str}, skipping")
+                    failed_count += len(date_digests)
+                    continue
+
+                # Upload to GitHub (creates/updates daily release)
+                release_date = datetime.strptime(release_date_str, '%Y-%m-%d').date()
+                github_release = self.github_publisher.create_daily_release(
+                    release_date=release_date,
+                    mp3_files=mp3_files
+                )
+
+                # Update database with github_url for all digests in this release
+                github_url = github_release.html_url
+                self.logger.info(f"  ✅ Release created: {github_url}")
+
+                for digest in date_digests:
+                    try:
+                        # Update database
+                        self.digest_repo.update_digest(digest['id'], {'github_url': github_url})
+                        # Update in-place for RSS generation
+                        digest['github_url'] = github_url
+                        uploaded_count += 1
+                        self.logger.info(f"  ✅ Updated database for {digest['topic']}")
+                    except Exception as db_error:
+                        self.logger.error(f"  ❌ Failed to update database for {digest['topic']}: {db_error}")
+                        failed_count += 1
+
+            except Exception as e:
+                self.logger.error(f"❌ Failed to upload {release_date_str}: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                failed_count += len(date_digests)
+
+        self.logger.info(f"\n📊 Upload Summary:")
+        self.logger.info(f"  ✅ Uploaded: {uploaded_count}")
+        self.logger.info(f"  ❌ Failed: {failed_count}")
+        self.logger.info(f"  ⏭️  Skipped: {already_uploaded}")
+
+        return {
+            'uploaded': uploaded_count,
+            'failed': failed_count,
+            'skipped': already_uploaded
+        }
+
     def publish_digest(self, digest: Dict[str, Any]) -> bool:
         """Verify digest is ready for RSS generation (already uploaded by TTS phase)"""
         try:
@@ -553,9 +657,18 @@ class PublishingPipelineRunner:
             if not digests:
                 self.logger.info("No digests found to publish")
                 return True
-            
-            # 2. Verify and repair digests FIRST - this updates database and digest dicts with github_url
-            # CRITICAL: Must happen BEFORE RSS generation so RSS includes all repaired digests
+
+            # 2. Upload digests to GitHub releases (NEW STEP v1.43)
+            # This sets github_url in database for digests that don't have it yet
+            self.logger.info(f"\n📤 STEP 2: Upload to GitHub")
+            upload_stats = self.upload_digests_to_github(digests)
+            self.logger.info(f"Upload complete: ✅ {upload_stats['uploaded']} uploaded, "
+                           f"❌ {upload_stats['failed']} failed, "
+                           f"⏭️  {upload_stats['skipped']} skipped")
+
+            # 3. Verify and repair digests - should now pass since github_url is set by upload step
+            # This also handles edge cases where GitHub release exists but database wasn't updated
+            self.logger.info(f"\n✅ STEP 3: Verify GitHub Status")
             verified = 0
             not_ready = 0
             for digest in digests:
@@ -564,15 +677,17 @@ class PublishingPipelineRunner:
                 else:
                     not_ready += 1
             self.logger.info(f"Verified {verified} digests ready for RSS (not ready: {not_ready})")
-            
-            # 3. Generate RSS feed - NOW includes all repaired digests with updated github_url values
-            # Note: digests list has been modified in-place by publish_digest(), so it has current data
+
+            # 4. Generate RSS feed - includes all uploaded digests with github_url
+            # Note: digests list has been modified in-place by upload and verify steps
+            self.logger.info(f"\n📝 STEP 4: Generate RSS Feed")
             rss_content = self.generate_rss_feed(digests)
             if not rss_content:
                 self.logger.error("Failed to generate RSS feed")
                 return False
-            
-            # 4. Commit RSS feed to main branch (triggers automatic Vercel deployment)
+
+            # 5. Commit RSS feed to main branch (triggers automatic Vercel deployment)
+            self.logger.info(f"\n🚀 STEP 5: Deploy RSS Feed")
             self.logger.info(f"Publishing decision point: dry_run={self.dry_run}, _is_github_actions={self._is_github_actions}")
             if self.dry_run:
                 self.logger.info("DRY RUN: Would commit RSS feed to main branch")
@@ -588,7 +703,7 @@ class PublishingPipelineRunner:
                     self.logger.error("Failed to deploy to Vercel")
                     return False
 
-            # 5. Cleanup old files (optional) - only when not running under orchestrator or CI
+            # 6. Cleanup old files (optional) - only when not running under orchestrator or CI
             if not self.dry_run and not self._is_github_actions and not os.getenv('ORCHESTRATED_EXECUTION'):
                 try:
                     self.retention_manager.cleanup_all()
