@@ -1,6 +1,6 @@
 # RSS Podcast Digest System - Remaining Tasks
 
-**Last Updated**: 2024-09-30 (v1.34)  
+**Last Updated**: 2024-09-30 (v1.30)  
 **Note**: All completed tasks have been moved to `COMPLETED_TASKS_SUMMARY.md`
 
 ## Overview
@@ -19,36 +19,22 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## HIGH (P1) - Core Functionality Issues: 5 REMAINING
+## HIGH (P1) - Core Functionality Issues: 3 REMAINING
 
-### 1. Resource Leak in Audio Processing
-- **File**: `src/podcast/audio_processor.py:509`
-- **Issue**: Session only closed in destructor, not in exception paths
-- **Fix**: Add explicit resource cleanup or use context managers
-- **Priority**: MEDIUM - Resource management
-- **Status**: ❌ Not fixed
-
-### 2. --log Parameter in Orchestrator
+### 1. --log Parameter in Orchestrator
 - **File**: `run_full_pipeline_orchestrator.py`
 - **Issue**: Pass log_file parameter to setup_phase_logging
 - **Fix**: Remove redundant self.log_file assignment, test Web UI log file specification
 - **Priority**: LOW - Feature enhancement
 - **Status**: ❌ Not fixed
 
-### 3. Publishing Workflow Parameter Handling
-- **File**: `.github/workflows/phase-publishing.yml`
-- **Issue**: Remove hardcoded `--days-back "30"` in publishing workflow
-- **Fix**: Pass DAYS_BACK workflow input to publishing script
-- **Priority**: MEDIUM - Configuration flexibility
-- **Status**: ❌ Not fixed
-
-### 4. Missing Secrets in Workflow
+### 2. Missing Secrets in Workflow
 - **Issue**: Use standard GITHUB_TOKEN instead of requiring GH_TOKEN
 - **Fix**: Remove duplicate secret requirements, update secret validation
 - **Priority**: LOW - Simplification
 - **Status**: ❌ Not fixed
 
-### 5. Retention Manager Initialization
+### 3. Retention Manager Initialization
 - **File**: `src/publishing/retention_manager.py`
 - **Issue**: Defer retention manager initialization until needed
 - **Fix**: Add try/catch with graceful degradation, make GitHub CLI optional
@@ -57,58 +43,44 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## MEDIUM (P2) - Performance & Optimization: 7 REMAINING
+## MEDIUM (P2) - Performance & Optimization: 6 REMAINING
 
-### 1. Parallelize Audio Phase Processing with Smart Backfill
-- **File**: `scripts/run_audio.py`
-- **Issue**: Sequential processing of episodes limits throughput
-- **Proposed Implementation**:
-  - Start with `max_episodes_per_run` parallel runners (e.g., 8)
-  - Each runner downloads, transcribes, and scores one episode
-  - Wait for all runners to complete
-  - Count how many came back as "not_relevant" (e.g., 3 of 8)
-  - Launch that many additional parallel runners (3 new runners)
-  - Repeat until `max_episodes_per_run` relevant episodes are processed
-- **Benefits**: 5-8x faster audio processing, guaranteed relevant episode count
-- **Expected Gain**: Massive throughput improvement (8x initial parallelism)
-- **Status**: ❌ Not implemented
-
-### 2. Batch API Requests
+### 1. Batch API Requests
 - **Files**: Audio generation, voice fetching, content scoring loops
 - **Issue**: Individual API calls in loops instead of batching
 - **Fix**: Implement request batching or connection pooling
 - **Expected Gain**: Reduced API overhead and improved throughput
 - **Status**: ❌ Not implemented
 
-### 3. Remove Synchronous Sleep Calls
+### 2. Remove Synchronous Sleep Calls
 - **Files**: `src/audio/audio_generator.py:119,273` and others
 - **Issue**: `time.sleep()` calls block entire process
 - **Fix**: Replace with async/await patterns or token bucket rate limiting
 - **Expected Gain**: Better resource utilization and responsiveness
 - **Status**: ❌ Not implemented
 
-### 4. Orchestrator Memory Management
+### 3. Orchestrator Memory Management
 - **File**: `run_full_pipeline_orchestrator.py`
 - **Issue**: Implement rolling buffer for stdout_lines (keep last 100-200 lines)
 - **Fix**: Stream large outputs directly to log file, add memory usage monitoring
 - **Expected Gain**: Reduced memory usage for large outputs
 - **Status**: ❌ Not implemented
 
-### 5. Database Connection Optimization
+### 4. Database Connection Optimization
 - **Files**: SQLAlchemy usage throughout codebase
 - **Issue**: No evidence of connection pooling or prepared statements
 - **Fix**: Implement connection pooling and compiled statement caching
 - **Expected Gain**: Better database performance and resource usage
 - **Status**: ❌ Not implemented
 
-### 6. Memory Optimization for Large Transcripts
+### 5. Memory Optimization for Large Transcripts
 - **Files**: Transcript processing code
 - **Issue**: Large files read entirely into memory
 - **Fix**: Implement streaming processing for large files
 - **Expected Gain**: Reduced memory footprint for large transcripts
 - **Status**: ❌ Not implemented
 
-### 7. Remove Unnecessary Caching
+### 6. Remove Unnecessary Caching
 - **Issue**: Remove Whisper cache from publishing workflow
 - **Fix**: Audit other caches for actual usage, document what caches are needed
 - **Expected Gain**: Cleaner workflows, less confusion
@@ -243,16 +215,19 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ### By Priority:
 - **P0 (Critical)**: 0 remaining (ALL COMPLETE! 🎉)
-- **P1 (High)**: 5 remaining (core functionality)
-- **P2 (Medium)**: 7 remaining (performance & optimization)
+- **P1 (High)**: 3 remaining (core functionality)
+- **P2 (Medium)**: 6 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 30 tasks
+### **Total Remaining**: 27 tasks
 
-### **Session 11 Completed (v1.29)**:
-- ✅ Fixed discovery phase duplicate episode creation bug
-- ✅ Converted all timestamps from UTC to Pacific time
-- ✅ Verified RSS generation timing fix (already implemented)
+### **Session 11 Completed (v1.30)**:
+- ✅ Fixed discovery phase duplicate episode creation bug (P0)
+- ✅ Converted all timestamps from UTC to Pacific time (P0)
+- ✅ Verified RSS generation timing fix (P0)
+- ✅ Fixed publishing workflow parameter handling (P1)
+- ✅ Fixed resource leak in audio processing with context managers (P1)
+- ✅ Implemented parallel audio phase processing with smart backfill (P2)
 
 ### Recommended Next Steps:
 1. **P1 Priority**: Fix resource leaks and workflow parameter handling

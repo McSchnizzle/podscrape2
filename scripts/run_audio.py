@@ -310,7 +310,21 @@ class AudioProcessor_Runner:
             """Thread-safe episode processing"""
             nonlocal relevant_count, not_relevant_count, total_processed
             
+            # Critical section: Claim this episode for processing
             with lock:
+                # Check if episode is already being processed or completed
+                current_episode = self.episode_repo.get_by_episode_guid(episode.episode_guid)
+                if current_episode and current_episode.status not in ['pending']:
+                    self.logger.debug(f"Episode {episode.title[:40]} already processing/processed (status: {current_episode.status}), skipping")
+                    return {'type': 'skipped', 'guid': episode.episode_guid}
+                
+                # Mark episode as processing to prevent other workers from taking it
+                try:
+                    self.episode_repo.update_status(episode.episode_guid, 'processing')
+                except Exception as e:
+                    self.logger.warning(f"Could not mark episode as processing: {e}")
+                    return {'type': 'skipped', 'guid': episode.episode_guid}
+                
                 total_processed += 1
                 current_num = total_processed
             
@@ -380,6 +394,11 @@ class AudioProcessor_Runner:
                         }
             
             except Exception as e:
+                # Reset episode status on failure so it can be retried
+                try:
+                    self.episode_repo.update_status(episode.episode_guid, 'pending')
+                except:
+                    pass
                 self.logger.error(f"Failed to process episode {episode.title}: {e}")
                 return {
                     'guid': episode.episode_guid,
@@ -410,13 +429,17 @@ class AudioProcessor_Runner:
                 futures = {executor.submit(process_single_episode, ep): ep for ep in batch_episodes}
                 
                 for future in as_completed(futures):
-                    result = future.result()
-                    
-                    if result['type'] == 'relevant':
-                        processed_episodes.append(result)
-                    elif result['type'] == 'failed':
-                        failed_episodes.append(result)
-                    # not_relevant episodes don't get added to output
+                    try:
+                        result = future.result()
+                        
+                        if result['type'] == 'relevant':
+                            processed_episodes.append(result)
+                        elif result['type'] == 'failed':
+                            failed_episodes.append(result)
+                        # not_relevant and skipped episodes don't get added to output
+                    except Exception as e:
+                        self.logger.error(f"Worker thread exception: {e}")
+                        # Continue with other workers
             
             self.logger.info(f"📋 Round {round_num} complete: {relevant_count}/{max_relevant_episodes} relevant found")
             round_num += 1
@@ -799,6 +822,7 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of episodes')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (use sequential)')
 
     args = parser.parse_args()
 
@@ -849,7 +873,9 @@ def main():
                     runner.logger.info(f"🚀 Using database setting: {max_episodes} relevant episodes (from pipeline.max_episodes_per_run)")
                 
                 runner.logger.info(f"🚀 AUDIO PHASE: Processing pending episodes from database (seeking {max_episodes} relevant episodes)")
-                result = runner.process_episodes_optimized(max_episodes)
+                # Use parallel processing by default, unless --no-parallel flag is set
+                use_parallel = not args.no_parallel
+                result = runner.process_episodes_optimized(max_episodes, parallel=use_parallel)
 
         # Output JSON
         if args.output:

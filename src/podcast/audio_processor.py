@@ -160,12 +160,22 @@ class AudioProcessor:
         try:
             # Stream download for large files
             response = self.session.get(audio_url, stream=True, timeout=30)
+            
+            # Check HTTP status first
+            if response.status_code == 404:
+                raise PodcastError(f"Audio file not found (404): {audio_url}")
+            elif response.status_code >= 400:
+                raise PodcastError(f"HTTP error {response.status_code} downloading audio: {audio_url}")
+            
             response.raise_for_status()
             
-            # Check content type
+            # Check content type - fail fast on non-audio content
             content_type = response.headers.get('content-type', '').lower()
-            if 'audio' not in content_type and 'mpeg' not in content_type:
-                logger.warning(f"Unexpected content type: {content_type}")
+            if 'audio' not in content_type and 'mpeg' not in content_type and 'octet-stream' not in content_type:
+                # Check if it's HTML (likely an error page)
+                if 'text/html' in content_type:
+                    raise PodcastError(f"Received HTML instead of audio (likely error page): {audio_url}")
+                logger.warning(f"Unexpected content type: {content_type}, will attempt to process anyway")
             
             # Download with progress tracking
             total_size = int(response.headers.get('content-length', 0))
