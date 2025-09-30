@@ -38,6 +38,7 @@ from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.utils.logging_config import setup_phase_logging
 from src.scoring.content_scorer import ContentScorer
+import threading
 
 class AudioProcessor_Runner:
     """Audio download and transcription phase"""
@@ -73,10 +74,17 @@ class AudioProcessor_Runner:
         self.audio_processor = AudioProcessor(chunk_duration_minutes=self.audio_config['chunk_duration_minutes'])
 
         # Initialize OpenAI Whisper transcriber
+        # IMPORTANT: Main transcriber is for metadata only - workers get thread-local instances
         self.transcriber = None
+        self._transcriber_config = None  # Store config for thread-local creation
+        self._thread_local = threading.local()  # Thread-local storage for transcribers
         if self.has_openai_whisper:
             from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
             self.transcriber = create_openai_whisper_transcriber(chunk_duration_minutes=self.audio_config['chunk_duration_minutes'])
+            # Store config for creating thread-local transcribers
+            self._transcriber_config = {
+                'chunk_duration_minutes': self.audio_config['chunk_duration_minutes']
+            }
 
         self.logger.info("Audio processing initialized")
         self.logger.info(f"Database settings - Chunk duration: {self.audio_config['chunk_duration_minutes']}min, "
@@ -86,6 +94,22 @@ class AudioProcessor_Runner:
                         f"Max episodes per run: {self.pipeline_config['max_episodes_per_run']}")
 
         self.pipeline_logger.log_phase_start("Audio download and transcription processing")
+
+    def _get_thread_local_transcriber(self):
+        """Get or create thread-local Whisper transcriber instance.
+
+        CRITICAL: Each worker thread gets its own Whisper model to avoid race conditions.
+        Whisper/PyTorch models are NOT thread-safe - concurrent access causes corruption.
+        """
+        if not hasattr(self._thread_local, 'transcriber'):
+            # Create new transcriber for this thread
+            from src.podcast.openai_whisper_transcriber import create_openai_whisper_transcriber
+            self._thread_local.transcriber = create_openai_whisper_transcriber(
+                chunk_duration_minutes=self._transcriber_config['chunk_duration_minutes']
+            )
+            thread_name = threading.current_thread().name
+            self.logger.debug(f"Created thread-local Whisper transcriber for {thread_name}")
+        return self._thread_local.transcriber
 
     def _verify_dependencies(self):
         """Verify required dependencies"""
@@ -280,8 +304,11 @@ class AudioProcessor_Runner:
             'processing_mode': 'sequential'
         }
     
-    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=8):
+    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=4):
         """Parallel processing with smart backfill logic.
+
+        IMPORTANT: Reduced to 4 workers (from 8) to mitigate Whisper model thread safety issues.
+        Single shared Whisper model causes race conditions with >4 concurrent transcriptions.
 
         Algorithm:
         1. Reset any stuck 'processing' episodes from previous failed runs
@@ -718,14 +745,19 @@ class AudioProcessor_Runner:
                 }
 
             self.logger.info("Starting transcription...")
-            model_info = self.transcriber.get_model_info()
+
+            # CRITICAL: Get thread-local transcriber to avoid race conditions
+            # Each worker thread must have its own Whisper model instance
+            thread_transcriber = self._get_thread_local_transcriber()
+
+            model_info = thread_transcriber.get_model_info()
             self.logger.info(f"Using OpenAI Whisper: {model_info.get('model', 'unknown')} model")
 
             # Convert paths to strings for Whisper API
             chunk_paths_str = [str(path) for path in chunk_paths]
 
-            # Transcribe
-            transcription_result = self.transcriber.transcribe_episode(chunk_paths_str, episode_guid)
+            # Transcribe using thread-local instance
+            transcription_result = thread_transcriber.transcribe_episode(chunk_paths_str, episode_guid)
 
             # Combine transcripts
             all_transcripts = [chunk.text for chunk in transcription_result.chunks]

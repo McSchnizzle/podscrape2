@@ -14,11 +14,15 @@ from datetime import datetime
 import subprocess
 import tempfile
 import shutil
+import threading
 
 from ..utils.error_handling import retry_with_backoff, PodcastError
 from ..utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Global lock for thread-safe chunk directory creation
+_chunk_dir_lock = threading.Lock()
 
 
 def _validate_external_tools():
@@ -255,9 +259,12 @@ class AudioProcessor:
             raise PodcastError(f"Audio file failed validation (corrupt or invalid): {audio_file_path}")
         
         # Create episode chunk directory using same naming convention
+        # CRITICAL: Use lock to prevent race conditions when multiple workers create same directory
         episode_id = episode_guid.replace('-', '')[:6]
         chunk_episode_dir = self.chunk_dir / episode_id
-        chunk_episode_dir.mkdir(exist_ok=True)
+
+        with _chunk_dir_lock:
+            chunk_episode_dir.mkdir(exist_ok=True, parents=True)
         
         logger.info(f"Chunking audio file: {audio_file_path}")
         
@@ -357,14 +364,42 @@ class AudioProcessor:
                 else:
                     logger.info(f"✅ Chunk {chunk_num+1}/{num_chunks} completed: {chunk_size_mb:.1f}MB, {chunk_duration:.1f}s processing time")
             
-            # CRITICAL: Ensure we have at least one valid chunk
+            # CRITICAL: Validate minimum chunk threshold for partial transcription
+            # Accept episodes with ≥70% valid chunks (or at least 1 chunk if total < 3)
             if not chunk_paths:
                 raise PodcastError(
                     f"No valid audio chunks created for {episode_guid} - "
                     f"all chunks failed validation (likely corrupt or silent audio)"
                 )
 
-            logger.info(f"Successfully created {len(chunk_paths)} valid audio chunks for {episode_guid}")
+            # Calculate success rate
+            success_rate = len(chunk_paths) / num_chunks if num_chunks > 0 else 0
+            failed_chunks = num_chunks - len(chunk_paths)
+
+            # Partial transcription threshold: 70% valid OR at least 1 chunk for short episodes
+            min_threshold = 0.70
+            if num_chunks < 3:
+                # For very short episodes (1-2 chunks), accept if we got any chunks
+                if len(chunk_paths) == 0:
+                    raise PodcastError(
+                        f"No valid audio chunks for short episode {episode_guid} ({num_chunks} expected)"
+                    )
+            elif success_rate < min_threshold:
+                raise PodcastError(
+                    f"Insufficient valid chunks for {episode_guid}: {len(chunk_paths)}/{num_chunks} "
+                    f"({success_rate:.1%} < {min_threshold:.0%} threshold). "
+                    f"Too many corrupt chunks to produce reliable transcript."
+                )
+
+            if failed_chunks > 0:
+                logger.warning(
+                    f"⚠️ Partial transcription: {len(chunk_paths)}/{num_chunks} valid chunks "
+                    f"({failed_chunks} corrupt/skipped) - transcript will have gaps"
+                )
+                logger.info(f"✓ Proceeding with {len(chunk_paths)} valid chunks ({success_rate:.1%} success rate)")
+            else:
+                logger.info(f"✓ Successfully created {len(chunk_paths)} valid audio chunks for {episode_guid}")
+
             return chunk_paths
 
         except subprocess.CalledProcessError as e:
