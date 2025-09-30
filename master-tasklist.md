@@ -322,19 +322,24 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Expected Gain**: Better voice-topic matching, configurable per topic
 - **Status**: ❌ Not implemented
 
-### 6. Local MP3 File Retention and Cleanup ⚠️ CRITICAL
+### 6. Local MP3 File Retention and Cleanup ✅ COMPLETED
 - **File**: `src/publishing/retention_manager.py`
 - **Issue**: 872MB of local MP3 files (59 files) accumulating in `data/completed-tts/`
-- **Current State**: RetentionManager exists but does NOT clean up MP3 files
-- **Root Cause**: MP3s are uploaded to GitHub Releases but never deleted locally
-- **Implementation Needed**:
-  - Add RetentionPolicy for MP3 files in `data/completed-tts/`
-  - Default retention: 7 days (once uploaded to GitHub, local copy not needed)
-  - Verify MP3 is in GitHub release before deleting local file
-  - Add to default retention policies in RetentionManager
-- **Expected Savings**: ~850MB disk space, faster deployments, cleaner repo
-- **Priority**: HIGH - 872MB of unnecessary files is excessive
-- **Status**: ❌ Not implemented
+- **Solution Implemented**:
+  - ✅ RetentionManager now loads MP3 retention days from WebConfig
+  - ✅ Added MP3 file retention policy for `data/completed-tts/*.mp3`
+  - ✅ Added audio cache retention policy for `data/audio-cache/*`
+  - ✅ Log retention now uses WebConfig setting (3 days) instead of hardcoded 30
+  - ✅ All retention policies respect web UI settings
+- **Current Settings** (from Web UI):
+  - Episode retention: 14 days (database cleanup)
+  - Digest retention: 14 days (database cleanup)
+  - Local MP3s: 14 days (file cleanup)
+  - Audio cache: 3 days (file cleanup)
+  - Logs: 3 days (file cleanup)
+- **Verification**: Tested with --stats and --dry-run, working correctly
+- **Note**: Current 872MB is expected - all files within 14-day window (oldest from Sept 16)
+- **Status**: ✅ **COMPLETED** - Files will auto-delete when they exceed retention period
 
 ### 7. Database Retention and Cleanup System
 - **Status**: ⚠️ IN PROGRESS (from move-online2.md Phase 6.5)
