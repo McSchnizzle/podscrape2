@@ -7,7 +7,7 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 
 ---
 
-## 🎉 CRITICAL (P0) - Security & Breaking Issues: 10/10 COMPLETED 🎉
+## 🎉 CRITICAL (P0) - Security & Breaking Issues: 12/12 COMPLETED 🎉
 
 ### ✅ COMPLETED:
 
@@ -66,6 +66,27 @@ This document lists all completed tasks from the master-tasklist.md, organized b
     - Implemented stash/fetch/pull/commit/push/restore workflow
     - Prevents "You have unstaged changes" and "Updates were rejected" errors
     - File: `scripts/run_publishing.py:355-451`
+
+11. **Convert All Timestamps from UTC to Pacific Time** (v1.29)
+    - Created `src/utils/timezone.py` with `get_pacific_now()` utility function
+    - Converted all key production files to use Pacific time:
+      - `src/audio/audio_generator.py` - MP3 filename timestamps
+      - `src/publishing/rss_generator.py` - RSS lastBuildDate and pubDate
+      - `scripts/publish_release_assets.py` - GitHub release dates
+      - `scripts/run_digest.py` - Digest date generation
+      - `scripts/run_publishing.py` - Commit timestamps and cutoff dates
+    - All timestamps now correctly display Pacific time (e.g., Sept 29 7:09 PM PT instead of Sept 30 02:09 UTC)
+    - Fixes user confusion about episode dates
+    - Files: 6 production files + 1 new utility module
+
+12. **RSS Generation Timing Fix** (v1.29 - Verified Already Fixed)
+    - Verified `scripts/run_publishing.py` has correct flow:
+      - Lines 472-481: Verify and repair digests FIRST (updates database with github_url)
+      - Line 485: THEN generate RSS feed (includes all repaired digests)
+      - Comment on line 472: "CRITICAL: Must happen BEFORE RSS generation so RSS includes all repaired digests"
+    - RSS feed now includes all newly published episodes without requiring separate publishing-only workflow run
+    - Fix was already implemented in earlier refactoring, just needed verification
+    - File: `scripts/run_publishing.py:457-525`
 
 ---
 
