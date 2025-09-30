@@ -63,17 +63,17 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 
 ## HIGH (P1) - Core Functionality Issues
 
-### 1. Global Logger Access Vulnerability
+### 1. Global Logger Access Vulnerability ✅ FIXED
 - **File**: `src/utils/error_handling.py:236`
 - **Issue**: `logger = globals()['logger']` throws KeyError if 'logger' not in scope
 - **Fix**: Use `logger = logging.getLogger(__name__)` instead
-- **Status**: ❌ Not fixed
+- **Status**: ✅ **FIXED** - Already uses `logging.getLogger(__name__)` on line 236
 
-### 2. File Encoding Inconsistency
+### 2. File Encoding Inconsistency ✅ FIXED
 - **File**: `tests/test_phase1.py:270`
 - **Issue**: File opened without encoding while most files use UTF-8
 - **Fix**: Add `encoding='utf-8'` to all file operations
-- **Status**: ❌ Not fixed
+- **Status**: ✅ **FIXED** - Added encoding='utf-8' to file operation
 
 ### 3. Missing Subprocess Exception Handling
 - **Files**: Multiple files using `subprocess.run()`
@@ -156,7 +156,30 @@ This document consolidates all outstanding tasks, bugs, and improvements for the
 - **Performance**: 84.9% faster configuration access (0.61s → 0.09s)
 - **Status**: ✅ **COMPLETED** - Smart caching with file modification time tracking
 
-### 3. Batch API Requests
+### 3. Parallelize Audio Phase Processing with Smart Backfill
+- **File**: `scripts/run_audio.py`
+- **Issue**: Sequential processing of episodes limits throughput, especially when many episodes are "not_relevant"
+- **Proposed Implementation**:
+  - Start with `max_episodes_per_run` parallel runners (e.g., 8)
+  - Each runner downloads, transcribes, and scores one episode
+  - Wait for all runners to complete
+  - Count how many came back as "not_relevant" (e.g., 3 of 8)
+  - Launch that many additional parallel runners (3 new runners)
+  - Repeat until `max_episodes_per_run` relevant episodes are processed
+- **Benefits**:
+  - Massive throughput improvement (8x initial parallelism)
+  - Smart backfill ensures we always get the target number of relevant episodes
+  - Better resource utilization (parallel downloading, transcription, scoring)
+  - Handles "not_relevant" episodes efficiently without counting against limit
+- **Implementation Details**:
+  - Use `concurrent.futures.ThreadPoolExecutor` or `ProcessPoolExecutor`
+  - Respect API rate limits for transcription and scoring services
+  - Implement proper error handling for failed runners
+  - Log progress clearly showing parallel execution status
+- **Expected Gain**: 5-8x faster audio processing, guaranteed relevant episode count
+- **Status**: ❌ Not implemented
+
+### 4. Batch API Requests
 - **Files**: Audio generation, voice fetching, content scoring loops
 - **Issue**: Individual API calls in loops instead of batching
 - **Fix**: Implement request batching or connection pooling
@@ -540,12 +563,19 @@ for digest in all_pending_digests:
   - `python3 scripts/run_publishing.py` (should upload MP3s)
 - **Expected**: MP3s generated, uploaded to GitHub, RSS feed updated
 
-### 3. HIGH: Global Logger Access Vulnerability (P1 Issue #1)
-- **File**: `src/utils/error_handling.py:236`
-- **Issue**: `logger = globals()['logger']` throws KeyError if 'logger' not in scope
-- **Fix**: Change to `logger = logging.getLogger(__name__)`
-- **Impact**: Prevents crashes in error handling paths
+### 3. HIGH: Missing Subprocess Exception Handling (P1 Issue #3)
+- **File**: Multiple files using `subprocess.run()`
+- **Issue**: Inconsistent handling of `FileNotFoundError` when external tools missing
+- **Fix**: Add FileNotFoundError handling with clear error messages
+- **Impact**: Better error reporting when ffmpeg, gh CLI, or other tools are missing
 - **Status**: Ready to fix
+
+## Actions Completed This Session (v1.31)
+
+1. **✅ TTS Script Content Database Issue** - Fixed DigestRepository.create() to save script_content
+2. **✅ Global Logger Access Issue** - Already fixed, uses logging.getLogger(__name__)
+3. **✅ File Encoding Inconsistency** - Added encoding='utf-8' to test file operations
+4. **⚠️ Publishing Phase** - Attempted but failed due to Vercel file size limits (100MB exceeded)
 
 ## Completed Sessions (Historical)
 
@@ -556,7 +586,7 @@ for digest in all_pending_digests:
 - **Session 5**: ✅ COMPLETE (3/3 test consolidation and cleanup tasks resolved)
 - **Session 6**: ✅ COMPLETE (1/1 critical workflow alignment issue resolved)
 - **Session 7**: ✅ COMPLETE (1/1 TTS duplicate digests issue resolved)
-- **Session 8**: ✅ COMPLETE (1/1 TTS script_content database issue resolved)
+- **Session 8**: ✅ COMPLETE (1/1 TTS script_content database issue resolved + 2 P1 issues)
 
 ## Progress Summary
 

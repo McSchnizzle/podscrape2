@@ -267,7 +267,7 @@ class Phase1TestSuite:
         # Test log content
         main_log = log_dir / 'digest.log'
         if main_log.exists():
-            with open(main_log, 'r') as f:
+            with open(main_log, 'r', encoding='utf-8') as f:
                 content = f.read()
                 assert "Test info message" in content, "Log message not found in file"
         
