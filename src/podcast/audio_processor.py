@@ -512,6 +512,28 @@ class AudioProcessor:
                 logger.warning(f"Chunk file too small ({file_size} bytes): {chunk_path}")
                 return False
 
+            # CRITICAL: Test actual audio decoding to catch corrupt PCM data
+            # ffprobe only checks container/metadata, not actual audio samples
+            try:
+                import subprocess
+                # Try to decode first 5 seconds to verify audio is actually decodable
+                test_result = subprocess.run(
+                    ['ffmpeg', '-v', 'error', '-i', chunk_path, '-t', '5',
+                     '-f', 'null', '-'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if test_result.returncode != 0:
+                    logger.warning(f"Audio decode test failed for {chunk_path}: {test_result.stderr[:200]}")
+                    return False
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Audio decode test timed out for {chunk_path}")
+                return False
+            except Exception as e:
+                logger.warning(f"Audio decode test error for {chunk_path}: {e}")
+                return False
+
             logger.debug(f"✓ Chunk validated: {duration:.1f}s, {sample_rate}Hz, {codec}, {file_size} bytes")
             return True
 
