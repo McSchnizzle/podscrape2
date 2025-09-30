@@ -254,24 +254,34 @@ class VercelDeployer:
 </html>"""
     
     def _deploy_static_file(self, file_path: Path, production: bool) -> DeploymentResult:
-        """Deploy a single static file to Vercel without triggering a rebuild
+        """Deploy a single static file to Vercel without triggering a full rebuild
 
-        Uses `vercel deploy --prebuilt` to upload static files directly to existing deployment
+        Strategy: The RSS file is already written to web_ui_hosted/public/daily-digest.xml.
+        This will be served as a static asset by Next.js. We just need to ensure it's
+        committed to git and deployed.
+
+        For local runs: File is ready, deployment happens via commit_rss_to_main()
+        For GitHub Actions: File is committed and Vercel auto-deploys
         """
         try:
-            # For static file updates, we just need to ensure the file is committed to git
-            # Vercel will auto-deploy via GitHub integration (configured in project settings)
-            logger.info("RSS file updated locally - relying on git commit for deployment")
+            # Verify file exists
+            if not file_path.exists():
+                raise PodcastError(f"RSS file not found: {file_path}")
 
+            logger.info(f"✅ RSS file prepared for deployment: {file_path}")
+            logger.info("📝 Next.js will serve this as static asset from /daily-digest.xml")
+
+            # File is ready - actual deployment happens via git commit
+            # (either manual commit or commit_rss_to_main() in run_publishing.py)
             return DeploymentResult(
                 success=True,
-                url="https://podcast.paulrbrown.org",
+                url="https://podcast.paulrbrown.org/daily-digest.xml",
                 deployment_id=None,
                 duration_seconds=0
             )
 
         except Exception as e:
-            error_msg = f"Static file deployment failed: {e}"
+            error_msg = f"Static file preparation failed: {e}"
             logger.error(error_msg)
             return DeploymentResult(
                 success=False,
