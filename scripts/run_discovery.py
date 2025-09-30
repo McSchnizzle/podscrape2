@@ -288,7 +288,8 @@ class DiscoveryRunner:
                             'audio_url': existing.audio_url,
                             'mode': 'resume'
                         })
-                        # Continue checking for more episodes in this feed
+                        # IMPORTANT: Skip NEW episode creation for existing episodes
+                        continue
 
                     # Find audio URL for new episodes
                     audio_url = None
