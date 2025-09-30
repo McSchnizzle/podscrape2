@@ -151,7 +151,7 @@ class CompleteAudioProcessor:
                 logger.info("Audio files organized")
 
                 try:
-                    if audio_metadata:
+                    if audio_metadata and episode_metadata:
                         current_path = None
                         if isinstance(audio_metadata, dict):
                             current_path = audio_metadata.get('file_path')
@@ -161,7 +161,15 @@ class CompleteAudioProcessor:
                         if current_path:
                             new_path = self.audio_manager.current_dir / Path(current_path).name
                             if new_path.exists():
-                                self.digest_repo.update_audio(digest.id, {'mp3_path': str(new_path)})
+                                # Update database with new path using complete update_audio() signature
+                                self.digest_repo.update_audio(
+                                    digest_id=digest.id,
+                                    mp3_path=str(new_path),
+                                    duration_seconds=int(audio_metadata.duration_seconds or 0),
+                                    title=episode_metadata.title,
+                                    summary=episode_metadata.summary
+                                )
+                                logger.info(f"Updated mp3_path after organizing: {new_path}")
                                 if isinstance(audio_metadata, dict):
                                     audio_metadata['file_path'] = str(new_path)
                                 else:
