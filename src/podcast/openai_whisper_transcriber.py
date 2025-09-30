@@ -44,12 +44,16 @@ class PodcastError(Exception):
     pass
 
 def retry_with_backoff(max_retries=2, backoff_factor=1.5):
-    """Simple retry decorator"""
+    """Simple retry decorator - does NOT retry PodcastError (permanent failures)"""
     def decorator(func):
         def wrapper(*args, **kwargs):
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
+                except PodcastError:
+                    # Don't retry PodcastError - these are permanent failures
+                    # (corrupt audio, missing files, validation failures)
+                    raise
                 except Exception as e:
                     if attempt == max_retries:
                         raise

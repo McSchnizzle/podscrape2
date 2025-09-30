@@ -440,9 +440,9 @@ class AudioProcessor_Runner:
                 if worker_episode_repo:
                     try:
                         worker_episode_repo.close()
-                        logger.debug(f"Worker database connection closed for {episode.episode_guid[:8]}")
+                        self.logger.debug(f"Worker database connection closed for {episode.episode_guid[:8]}")
                     except Exception as e:
-                        logger.warning(f"Error closing worker database connection: {e}")
+                        self.logger.warning(f"Error closing worker database connection: {e}")
         
         # Smart backfill loop
         round_num = 1
