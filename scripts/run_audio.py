@@ -59,6 +59,7 @@ class AudioProcessor_Runner:
 
         # Get settings from database
         self.audio_config = self.config_reader.get_audio_processing_config()
+        self.pipeline_config = self.config_reader.get_pipeline_config()
         self.score_threshold = self.config_reader.get_score_threshold()
 
         # Initialize content scorer for immediate relevance checking
@@ -79,7 +80,8 @@ class AudioProcessor_Runner:
         self.logger.info(f"Database settings - Chunk duration: {self.audio_config['chunk_duration_minutes']}min, "
                         f"Max chunks per episode: {self.audio_config['max_chunks_per_episode']}, "
                         f"Transcribe all chunks: {self.audio_config['transcribe_all_chunks']}, "
-                        f"STT model: {self.audio_config['stt_model']}")
+                        f"STT model: {self.audio_config['stt_model']}, "
+                        f"Max episodes per run: {self.pipeline_config['max_episodes_per_run']}")
 
         self.pipeline_logger.log_phase_start("Audio download and transcription processing")
 
@@ -640,7 +642,24 @@ def main():
                     result = runner.process_episodes(episodes_data)
             else:
                 # Default behavior: Process pending episodes from database
-                max_episodes = args.limit or 5  # Default to 5 relevant episodes
+                # Use --limit flag if provided, otherwise read from database settings
+                if args.limit is not None:
+                    max_episodes = args.limit
+                    runner.logger.info(f"🚀 Using --limit override: {max_episodes} relevant episodes")
+                else:
+                    # CRITICAL: Must read max_episodes_per_run from database - NO DEFAULTS
+                    max_episodes_setting = runner.pipeline_config.get('max_episodes_per_run')
+                    if max_episodes_setting is None:
+                        error_msg = (
+                            "FATAL: max_episodes_per_run setting not found in database. "
+                            "This setting is required for audio phase processing. "
+                            "Please configure 'pipeline.max_episodes_per_run' in web_settings table."
+                        )
+                        runner.logger.error(error_msg)
+                        raise RuntimeError(error_msg)
+                    max_episodes = max_episodes_setting
+                    runner.logger.info(f"🚀 Using database setting: {max_episodes} relevant episodes (from pipeline.max_episodes_per_run)")
+                
                 runner.logger.info(f"🚀 AUDIO PHASE: Processing pending episodes from database (seeking {max_episodes} relevant episodes)")
                 result = runner.process_episodes_optimized(max_episodes)
 

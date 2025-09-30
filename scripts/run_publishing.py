@@ -355,58 +355,100 @@ class PublishingPipelineRunner:
             # Git operations
             import subprocess
 
-            # Add the RSS files
-            result = subprocess.run(['git', 'add', 'web_ui_hosted/public/daily-digest.xml'],
-                                  capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                self.logger.error(f"Git add failed: {result.stderr}")
-                return False
-
-            # Commit with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            commit_message = f"Update RSS feed - {timestamp}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
-
-            result = subprocess.run(['git', 'commit', '-m', commit_message],
-                                  capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                if "nothing to commit" in result.stdout:
-                    self.logger.info("   ℹ️  No changes to commit (RSS feed unchanged)")
-                    return True
-                else:
-                    self.logger.error(f"Git commit failed: {result.stderr}")
-                    return False
-
-            # Pull latest changes to handle race conditions
+            # Get remote URL
             github_token = os.getenv('GITHUB_TOKEN')
             github_repo = os.getenv('GITHUB_REPOSITORY')
 
             if github_token and github_repo:
-                # Use HTTPS with token authentication
                 remote_url = f"https://x-access-token:{github_token}@github.com/{github_repo}.git"
-
-                # Pull with rebase first
-                pull_result = subprocess.run(['git', 'pull', '--rebase', remote_url, 'main'],
-                                           capture_output=True, text=True, timeout=60)
-                if pull_result.returncode != 0:
-                    self.logger.warning(f"Git pull --rebase had issues: {pull_result.stderr}")
-
-                # Then push
-                result = subprocess.run(['git', 'push', remote_url, 'main'],
-                                      capture_output=True, text=True, timeout=60)
+                remote_name = remote_url
             else:
-                # Fallback to default remote
-                subprocess.run(['git', 'pull', '--rebase', 'origin', 'main'],
-                             capture_output=True, text=True, timeout=60)
-                result = subprocess.run(['git', 'push', 'origin', 'main'],
-                                      capture_output=True, text=True, timeout=60)
+                remote_name = 'origin'
 
-            if result.returncode != 0:
-                self.logger.error(f"Git push failed: {result.stderr}")
-                return False
+            # Step 1: Fetch latest changes from remote
+            self.logger.info("   🔄 Fetching latest changes from remote...")
+            fetch_result = subprocess.run(['git', 'fetch', remote_name],
+                                         capture_output=True, text=True, timeout=60)
+            if fetch_result.returncode != 0:
+                self.logger.warning(f"Git fetch had issues: {fetch_result.stderr}")
 
-            self.logger.info("   ✅ RSS feed committed and pushed to main")
-            self.logger.info("   🚀 Vercel will automatically deploy the updated RSS feed")
-            return True
+            # Step 2: Check if there are any uncommitted changes beyond our RSS file
+            status_result = subprocess.run(['git', 'status', '--porcelain'],
+                                          capture_output=True, text=True, timeout=30)
+            uncommitted_files = [line for line in status_result.stdout.strip().split('\n') 
+                                if line and 'daily-digest.xml' not in line]
+            
+            if uncommitted_files:
+                self.logger.warning(f"⚠️  Uncommitted changes detected (will be stashed): {len(uncommitted_files)} files")
+                # Stash any other uncommitted changes
+                stash_result = subprocess.run(['git', 'stash', 'push', '-u', '-m', 'RSS publish: stashing other changes'],
+                                             capture_output=True, text=True, timeout=30)
+                stashed = stash_result.returncode == 0
+            else:
+                stashed = False
+
+            try:
+                # Step 3: Pull latest changes with rebase strategy
+                self.logger.info("   🔄 Pulling latest changes...")
+                if github_token and github_repo:
+                    pull_result = subprocess.run(['git', 'pull', '--rebase', remote_url, 'main'],
+                                                capture_output=True, text=True, timeout=60)
+                else:
+                    pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', 'main'],
+                                                capture_output=True, text=True, timeout=60)
+                
+                if pull_result.returncode != 0 and "up to date" not in pull_result.stderr.lower():
+                    self.logger.warning(f"Git pull --rebase had issues: {pull_result.stderr}")
+                    # Try to abort rebase if it's in progress
+                    subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True, timeout=10)
+
+                # Step 4: Add the RSS file
+                result = subprocess.run(['git', 'add', 'web_ui_hosted/public/daily-digest.xml'],
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    self.logger.error(f"Git add failed: {result.stderr}")
+                    return False
+
+                # Step 5: Commit with timestamp
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                commit_message = f"Update RSS feed - {timestamp}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+
+                result = subprocess.run(['git', 'commit', '-m', commit_message],
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    if "nothing to commit" in result.stdout or "nothing to commit" in result.stderr:
+                        self.logger.info("   ℹ️  No changes to commit (RSS feed unchanged)")
+                        return True
+                    else:
+                        self.logger.error(f"Git commit failed: {result.stderr}")
+                        return False
+
+                # Step 6: Push to remote
+                self.logger.info("   📤 Pushing to remote...")
+                if github_token and github_repo:
+                    result = subprocess.run(['git', 'push', remote_url, 'main'],
+                                          capture_output=True, text=True, timeout=60)
+                else:
+                    result = subprocess.run(['git', 'push', 'origin', 'main'],
+                                          capture_output=True, text=True, timeout=60)
+
+                if result.returncode != 0:
+                    self.logger.error(f"Git push failed: {result.stderr}")
+                    return False
+
+                self.logger.info("   ✅ RSS feed committed and pushed to main")
+                self.logger.info("   🚀 Vercel will automatically deploy the updated RSS feed")
+                return True
+
+            finally:
+                # Step 7: Pop stash if we stashed earlier
+                if stashed:
+                    self.logger.info("   🔄 Restoring stashed changes...")
+                    pop_result = subprocess.run(['git', 'stash', 'pop'],
+                                               capture_output=True, text=True, timeout=30)
+                    if pop_result.returncode != 0:
+                        self.logger.warning(f"⚠️  Failed to pop stash: {pop_result.stderr}")
+                        self.logger.warning("   Run 'git stash pop' manually to restore your changes")
 
         except Exception as e:
             self.logger.error(f"❌ Failed to commit RSS to main: {e}")
