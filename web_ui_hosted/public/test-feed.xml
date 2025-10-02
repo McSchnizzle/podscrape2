@@ -5,15 +5,22 @@
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>
     <link>https://podcast.paulrbrown.org</link>
     <language>en-us</language>
-    <lastBuildDate>Tue, 30 Sep 2025 01:56:18 +0000</lastBuildDate>
+    <lastBuildDate>Thu, 02 Oct 2025 05:12:06 -0700</lastBuildDate>
     <generator>RSS Podcast Digest System v1.0</generator>
     <copyright>© 2025 Paul Brown</copyright>
     <item>
-      <title>AI &amp; Tech Daily Digest - Sep 30, 2025</title>
-      <description>Fast, firm insights for pros: AP2, MCP, YouTube AI tools, and enterprise-ready AI. Production-first trends shaping commerce, creation, and governance.</description>
-      <pubDate>Tue, 30 Sep 2025 01:03:18 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-30-ai-and-technology-AI_and_Technology_20250930_010318</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-30/AI_and_Technology_20250930_010318.mp3" length="0" type="audio/mpeg"/>
+      <title>AI Daily Digest: Sora 2 &amp; Soares (Oct 1, 2025)</title>
+      <description>Sora 2 debuts with lifelike video, multi-shot control, and Cameo consent. Quick take: why identity, safety, and creatorship collide as AI video scales.</description>
+      <pubDate>Thu, 02 Oct 2025 06:20:15 -0800</pubDate>
+      <guid isPermaLink="false">digest-2025-10-01-ai-and-technology-AI_and_Technology_20251002_062015</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-10-01/AI_and_Technology_20251002_062015.mp3" length="0" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>October 01, 2025: Movements in Action (Daily Digest)</title>
+      <description>Three powerful episodes on street-level care, moral ambition, and anti-repression—packed with practical steps for organizers and collaborators.</description>
+      <pubDate>Thu, 02 Oct 2025 06:23:09 -0800</pubDate>
+      <guid isPermaLink="false">digest-2025-10-01-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20251002_062309</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-10-01/Social_Movements_and_Community_Organizing_20251002_062309.mp3" length="0" type="audio/mpeg"/>
     </item>
     <item>
       <title>AI &amp; Tech Daily Digest – Sep 30, 2025</title>
@@ -21,6 +28,20 @@
       <pubDate>Tue, 30 Sep 2025 01:44:20 -0800</pubDate>
       <guid isPermaLink="false">digest-2025-09-30-ai-and-technology-AI_and_Technology_20250930_014420</guid>
       <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-30/AI_and_Technology_20250930_014420.mp3" length="0" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>AI Daily Digest — Sept 30, 2025</title>
+      <description>Today: Claude Sonnet 4.5 debuts with autonomous coding, plus OpenAI Sora 2 rumors and a wave of AI-driven workforce shifts. Quick takes on cost-savings, policy nudges, and market moves for busy pros.</description>
+      <pubDate>Tue, 30 Sep 2025 22:06:19 -0800</pubDate>
+      <guid isPermaLink="false">digest-2025-09-30-ai-and-technology-AI_and_Technology_20250930_220619</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-30/AI_and_Technology_20250930_220619.mp3" length="0" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>AI &amp; Tech Daily Digest - Sep 30, 2025</title>
+      <description>Fast, firm insights for pros: AP2, MCP, YouTube AI tools, and enterprise-ready AI. Production-first trends shaping commerce, creation, and governance.</description>
+      <pubDate>Tue, 30 Sep 2025 01:03:18 -0800</pubDate>
+      <guid isPermaLink="false">digest-2025-09-30-ai-and-technology-AI_and_Technology_20250930_010318</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-30/AI_and_Technology_20250930_010318.mp3" length="0" type="audio/mpeg"/>
     </item>
     <item>
       <title>Sept 30, 2025: Meaning, Psychedelics &amp; Spirituality</title>
@@ -35,6 +56,13 @@
       <pubDate>Tue, 30 Sep 2025 01:46:02 -0800</pubDate>
       <guid isPermaLink="false">digest-2025-09-30-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250930_014602</guid>
       <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-30/Social_Movements_and_Community_Organizing_20250930_014602.mp3" length="0" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>Agentic Coding Matures: Async Interns (Sept 29, 2025)</title>
+      <description>A quick, sharp look at Devin’s async, repo-aware workflow and how it reshapes engineering toil for busy teams. From scoping with DeepWiki to PRs via Slack, learn the patterns that boost throughput.</description>
+      <pubDate>Mon, 29 Sep 2025 18:04:52 -0800</pubDate>
+      <guid isPermaLink="false">digest-2025-09-29-ai-and-technology-AI_and_Technology_20250929_180452</guid>
+      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-29/AI_and_Technology_20250929_180452.mp3" length="13396054" type="audio/mpeg"/>
     </item>
     <item>
       <title>Social Movements Daily Digest — Sep 28, 2025</title>
@@ -98,314 +126,6 @@
       <pubDate>Thu, 25 Sep 2025 06:18:13 -0800</pubDate>
       <guid isPermaLink="false">digest-2025-09-25-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250925_061813</guid>
       <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-25/Social_Movements_and_Community_Organizing_20250925_061813.mp3" length="17788387" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily: Nvidia-OpenAI $100B Bet (Sep 24, 2025)</title>
-      <description>Busy pros: a tight read on the $100B Nvidia–OpenAI pact, 10GW deploy plans, and what it means for infra, pricing, and productivity tools today.</description>
-      <pubDate>Wed, 24 Sep 2025 06:10:37 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-24-ai-and-technology-AI_and_Technology_20250924_061037</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-24/AI_and_Technology_20250924_061037.mp3" length="13143607" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest: Social Movements &amp; Organizing — Sept 24, 2025</title>
-      <description>Three city-scale episodes reveal how communities resist repression with radical solidarity and practical power-building tactics.</description>
-      <pubDate>Wed, 24 Sep 2025 06:13:54 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-24-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250924_061354</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-24/Social_Movements_and_Community_Organizing_20250924_061354.mp3" length="21383254" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily: Frontiers &amp; Flux – Sept 23, 2025</title>
-      <description>Quick, sharp briefing: GROK-4-Fast cuts cost near frontier, SweetBench Pro reshapes benchmarks, and the compute boom fuels big launches. Plus AI agents, YouTube live commerce, and Apple’s quiet AI edge.</description>
-      <pubDate>Tue, 23 Sep 2025 13:16:52 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-23-ai-and-technology-AI_and_Technology_20250923_131652</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-23/AI_and_Technology_20250923_131652.mp3" length="16141628" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Autonomous AI Agents: Memory, Energy, &amp; Deployment — Sep 23, 2025</title>
-      <description>Busy pros: a crisp look at why memory is the bottleneck and how near-term agents can work overnight, plus energy &amp; culture tradeoffs shaping real-world deployment.</description>
-      <pubDate>Tue, 23 Sep 2025 05:50:19 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-23-ai-and-technology-AI_and_Technology_20250923_055019</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-23/AI_and_Technology_20250923_055019.mp3" length="15536841" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Sept 23, 2025: People Power Across Movements</title>
-      <description>Three threads drive today: Pueblo-led cultural defense, 1917-era durable organizing, and a heads-up on the Supreme Court term—plus actionable tactics you can apply now.</description>
-      <pubDate>Tue, 23 Sep 2025 13:19:04 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-23-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250923_131904</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-23/Social_Movements_and_Community_Organizing_20250923_131904.mp3" length="19978911" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements Digest: Reclaiming Sport — Sept 23, 2025</title>
-      <description>Fast, focused take on RevLeft Radio’s Socializing Sports: ownership by supporters, anti-gambling policing, and human-rights in global football.</description>
-      <pubDate>Tue, 23 Sep 2025 05:53:01 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-23-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250923_055301</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-23/Social_Movements_and_Community_Organizing_20250923_055301.mp3" length="17128430" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI Daily Digest — Sept 22, 2025 (Hard Fork)</title>
-      <description>Sharp take on how outrage fuels feeds, plus AI chips, policy battles, and bridging-based ranking—keys for leaders aiming calmer, smarter digital ecosystems.</description>
-      <pubDate>Mon, 22 Sep 2025 04:14:35 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-ai-and-technology-AI_and_Technology_20250922_041435</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/AI_and_Technology_20250922_041435.mp3" length="9381556" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Digest — Sept 22, 2025</title>
-      <description>Daily briefing: key Apple-focused moves, security shifts, and wearables trends shaping AI-enabled tech. Quick takes for busy pros—what to watch and what to act on today.</description>
-      <pubDate>Mon, 22 Sep 2025 05:41:37 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-ai-and-technology-AI_and_Technology_20250922_054137</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/AI_and_Technology_20250922_054137.mp3" length="11200515" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Digest — Sept 22, 2025</title>
-      <description>Concise briefing: agentic coding, Gemini 2.5 GA, and the AI bubble framework—actionable takeaways for engineers, product leaders, and execs in 2 minutes.</description>
-      <pubDate>Mon, 22 Sep 2025 12:41:20 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-ai-and-technology-AI_and_Technology_20250922_124120</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/AI_and_Technology_20250922_124120.mp3" length="15370494" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest Sep 22, 2025: Sostre, Gaza, and Narrative Power</title>
-      <description>Three pragmatic conversations for movers: defense committees, Gaza solidarity through international law, and building durable narrative infrastructure—without the outrage trap.</description>
-      <pubDate>Mon, 22 Sep 2025 04:16:48 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250922_041648</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/Social_Movements_and_Community_Organizing_20250922_041648.mp3" length="18985840" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Sept 22, 2025: Power Tools for Movements (2 Ep.)</title>
-      <description>Two timely drops on building real community power: a Black anarchist reflection on Year 1 of Trump 2.0 and Vivek Chibber on the PMC — with 5 actionable sparks for organizers today.</description>
-      <pubDate>Mon, 22 Sep 2025 12:43:35 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250922_124335</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/Social_Movements_and_Community_Organizing_20250922_124335.mp3" length="19081135" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Sep 22, 2025: Sovereignty to Safety in Movements</title>
-      <description>Four sparks from crises to community power: imperialism, safety after political violence, LA immigration raids, and building durable organizing infrastructure.</description>
-      <pubDate>Mon, 22 Sep 2025 05:43:29 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-22-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250922_054329</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-22/Social_Movements_and_Community_Organizing_20250922_054329.mp3" length="17567705" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily Digest — Sep 20, 2025</title>
-      <description>Busy pros: quick hits on ICPC-scale AI mastery, safety advances, and edge AI wearables in one brief. Key takeaways and actionable prompts for product, policy, and security.</description>
-      <pubDate>Sat, 20 Sep 2025 23:35:43 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_233543</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_233543.mp3" length="15074578" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily Digest — Sep 20, 2025</title>
-      <description>Bite-sized briefing: regulatory push, broadcast consolidation, and the AI data-rundown shaping news, platforms, and policy. Fast, sharp take for busy pros.</description>
-      <pubDate>Sat, 20 Sep 2025 00:26:05 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_002605</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_002605.mp3" length="9676636" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI Beats Top Coders — AI Daily Digest Sep 20, 2025</title>
-      <description> crisp briefing on safety breakthroughs, Anthropic Claude post-mortem, US‑China chip split, inference silicon bets, and Zoom/Meta AI interfaces.</description>
-      <pubDate>Sat, 20 Sep 2025 14:13:07 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_141307</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_141307.mp3" length="13020309" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily Digest — Sep 20, 2025</title>
-      <description>Enterprise AI agents go mainstream: deployments surge, Chrome dives in, and Notion/Teams push automation. Busy pros get fast takeaways on what’s shipping, why it matters, and how to govern it.</description>
-      <pubDate>Sat, 20 Sep 2025 01:11:28 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_011128</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_011128.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily: iPhone Air, iPhone 17 Pro, Meta Ray-Ban Display (Sep 20, 2025)</title>
-      <description>Today’s quick briefing: Apple’s ultra-thin iPhone Air vs. Pro thermals and feature tiers, plus Meta’s Ray-Ban Display glasses signal a mainstream AR path. What matters, what’s design trade-off, and what to watch next.</description>
-      <pubDate>Sat, 20 Sep 2025 01:30:57 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_013057</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_013057.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI and Technology</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:35:43 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-ai-and-technology-AI_and_Technology_20250920_233543</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/AI_and_Technology_20250920_233543.mp3" length="15074578" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Personal Struggles, Collective Freedom — Sept 20, 2025</title>
-      <description>A sharp look at Martin Sostre’s organizing, from defense committees to horizontal power. Practical takeaways for today: court watch, mutual aid, and culture-as-structure.</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Sat, 20 Sep 2025 23:38:22 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-20-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250920_233822</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-20/Social_Movements_and_Community_Organizing_20250920_233822.mp3" length="15763375" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily: Who’s the iPhone Air For? — Sept 19, 2025</title>
-      <description>Apple’s new iPhone Air reshapes the lineup: design-first trade-offs vs. Pro power. Quick takeaways on battery, thermals, camera, and who should consider the Air.</description>
-      <pubDate>Fri, 19 Sep 2025 04:06:43 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-19-ai-and-technology-AI_and_Technology_20250919_040643</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/AI_and_Technology_20250919_040643.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI Agents in 2025: Autonomy, Standards &amp; ROI — Sep 19, 2025</title>
-      <description>A rapid briefing on agent advances: reasoning LLMs, AWS Bedrock Agents, MCP/A2A standards, and real ROI (F1 case). Practical steps for builders, leaders, and risk teams.</description>
-      <pubDate>Fri, 19 Sep 2025 03:52:43 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-19-ai-and-technology-AI_and_Technology_20250919_035243</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/AI_and_Technology_20250919_035243.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Digest — Sept 19, 2025: Chips, Crypto, and Online Rage</title>
-      <description>How platform design fuels online rage after an assassination, a $2B crypto-investment and chip export risks, and what export controls mean for AI builders and enterprises.</description>
-      <pubDate>Fri, 19 Sep 2025 11:05:47 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-19-ai-and-technology-AI_and_Technology_20250919_110547</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/AI_and_Technology_20250919_110547.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements Digest — Sept 19, 2025: Brief Update</title>
-      <description>No new episodes met our quality threshold today. We’ll return tomorrow with curated insights; meanwhile explore related digests or recent top episodes.</description>
-      <pubDate>Fri, 19 Sep 2025 11:05:50 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-19-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250919_110550</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/Social_Movements_and_Community_Organizing_20250919_110550.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest: Social Movements — Sept 19, 2025</title>
-      <description>Four practical sparks from “Why Spotify and Fan Fiction Are Communist”: building commons, fair-pay organizing, open-access blueprints, and artist salary pilots. Quick tactics to act now.</description>
-      <pubDate>Fri, 19 Sep 2025 03:54:11 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-19-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250919_035411</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-19/Social_Movements_and_Community_Organizing_20250919_035411.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest — Social Movements: Sports, Betting &amp; the Fed (2025-09-18)</title>
-      <description>Two episodes show how to reclaim sport and finance for communities: supporter ownership, betting harm reduction, public banking, and 4 organizing sparks you can use now.</description>
-      <pubDate>Thu, 18 Sep 2025 14:10:47 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-18-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250918_141047</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-18/Social_Movements_and_Community_Organizing_20250918_141047.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Raids, Retaliation &amp; Radical Solidarity — Sep 18, 2025</title>
-      <description>Chicago frontline tactics: turn protest into protective disruption, build rapid-response networks, faith-rooted organizing, and disciplined narratives. Practical steps to act this week, month, and season.</description>
-      <pubDate>Thu, 18 Sep 2025 12:24:02 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-18-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250918_122402</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-18/Social_Movements_and_Community_Organizing_20250918_122402.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI Daily Digest — Sep 17, 2025: GPT‑5 Codex &amp; Viral AI Trends</title>
-      <description>Quick briefing on GPT‑5 Codex’s agentic coding, Google Gemini’s viral surge and 11 Labs’ human‑in‑the‑loop production — plus practical takeaways for developers and leaders.</description>
-      <pubDate>Wed, 17 Sep 2025 13:54:41 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-ai-and-technology-AI_and_Technology_20250917_135441</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/AI_and_Technology_20250917_135441.mp3" length="13956538" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily — Sept 17, 2025: iPhone Air, Agents, Apple AI</title>
-      <description>Quick briefing: iPhone Air’s thin-feel tradeoffs, Apple’s wearables adding AI health/translation, and AWS-led agent standards (MCP/A2A) shifting enterprise deployment. Actionable tips for teams.</description>
-      <pubDate>Wed, 17 Sep 2025 12:27:57 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-ai-and-technology-AI_and_Technology_20250917_122757</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/AI_and_Technology_20250917_122757.mp3" length="13401488" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI Digest — Sept 17, 2025: Use LLMs as Contractors, Not Architects</title>
-      <description>Douglas Rushkoff’s Team Human distilled: use LLMs for microtasks, avoid auto‑reliance, and apply AI after you think to boost learning and preserve judgment.</description>
-      <pubDate>Thu, 18 Sep 2025 05:12:05 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-ai-and-technology-AI_and_Technology_20250918_051205</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/AI_and_Technology_20250918_051205.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Sep 17, 2025 — Oñate, Monuments &amp; Long‑Haul Organizing</title>
-      <description>Quick insights from The Red Nation on dismantling Oñate pageantry: art-led organizing, safety protocols, policy tactics, and how communities turn protest into lasting process.</description>
-      <pubDate>Thu, 18 Sep 2025 05:13:18 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250918_051318</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/Social_Movements_and_Community_Organizing_20250918_051318.mp3" length="0" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Wed, 17 Sep 2025 12:30:21 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250917_123021</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/Social_Movements_and_Community_Organizing_20250917_123021.mp3" length="19501602" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest: Power, Platforms &amp; Guardrails — Sep 17, 2025</title>
-      <description>Four quick briefs on statelessness as control, precise threat-mapping, organizing vs. platform rent, and movement guardrails. Actionable tactics for organizers in 15–90 minutes.</description>
-      <pubDate>Wed, 17 Sep 2025 12:30:21 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250917_123021</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/Social_Movements_and_Community_Organizing_20250917_123021.mp3" length="19501602" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Wed, 17 Sep 2025 12:30:21 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250917_123021</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/Social_Movements_and_Community_Organizing_20250917_123021.mp3" length="19501602" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Social Movements and Community Organizing</title>
-      <description>Generated audio digest</description>
-      <pubDate>Wed, 17 Sep 2025 12:30:21 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-17-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250917_123021</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-17/Social_Movements_and_Community_Organizing_20250917_123021.mp3" length="19501602" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily — iPhone Air, Orange Pro &amp; AirPods AI (Sep 16, 2025)</title>
-      <description>Quick digest: iPhone 17’s incremental updates vs. thin iPhone Air standout, orange Pro buzz, AirPods Pro live translation, and Apple Watch health tradeoffs. Design, AI, and market takeaways for leaders.</description>
-      <pubDate>Tue, 16 Sep 2025 22:46:49 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology-AI_and_Technology_20250916_224649</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250916_224649.mp3" length="9649886" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; iPhone Shift: Air, Orange Pro, and Yudkowsky — Sep 16, 2025</title>
-      <description>Quick briefing: Apple’s thin-new iPhone Air, orange Pro buzz, AirPods live translation, Watch health alerts—and Eliezer Yudkowsky’s AI doom debate. What it means for products, developers, and policy.</description>
-      <pubDate>Tue, 16 Sep 2025 23:29:23 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology-AI_and_Technology_20250916_232923</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250916_232923.mp3" length="13294908" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily — Sep 16, 2025: Agents, iPhone Air, AirPods Translate</title>
-      <description>Quick briefing: Apple’s ultra-thin iPhone Air, AirPods Pro 3 live translation, Watch health pushes, and AWS on multi-agent AI shaping enterprise deployments. Actionable takeaways for devs and product leaders.</description>
-      <pubDate>Wed, 17 Sep 2025 05:09:46 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology-AI_and_Technology_20250917_050946</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250917_050946.mp3" length="11875937" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>AI &amp; Tech Daily Digest — Sept 16, 2025: Agents, Apple, Risks</title>
-      <description>Quick briefing: AWS on agent standards, Apple’s ultra‑thin iPhone Air + orange iPhone 17 Pro, and renewed AI risk debate. Practical takeaways for developers, product leaders, and policy teams.</description>
-      <pubDate>Wed, 17 Sep 2025 03:18:02 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-16-ai-and-technology-AI_and_Technology_20250917_031802</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/AI_and_Technology_20250917_031802.mp3" length="12234128" type="audio/mpeg"/>
-    </item>
-    <item>
-      <title>Daily Digest — Social Movements (Sept 16, 2025)</title>
-      <description>Two episodes unpack technofeudalism, rent-seeking platforms, sanctions on Venezuela, and municipal leverage—practical tactics for public options, solidarity, and organizing at city scale.</description>
-      <pubDate>Wed, 17 Sep 2025 04:54:44 -0800</pubDate>
-      <guid isPermaLink="false">digest-2025-09-16-social-movements-and-community-organizing-Social_Movements_and_Community_Organizing_20250917_045444</guid>
-      <enclosure url="https://github.com/McSchnizzle/podscrape2/releases/download/daily-2025-09-16/Social_Movements_and_Community_Organizing_20250917_045444.mp3" length="18373948" type="audio/mpeg"/>
     </item>
   </channel>
 </rss>
