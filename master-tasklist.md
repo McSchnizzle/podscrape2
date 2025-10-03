@@ -1,6 +1,6 @@
 # RSS Podcast Digest System - Remaining Tasks
 
-**Last Updated**: 2024-09-30 (v1.30)  
+**Last Updated**: 2025-10-03 (v1.50)
 **Note**: All completed tasks have been moved to `COMPLETED_TASKS_SUMMARY.md`
 
 ## Overview
@@ -13,35 +13,13 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## CRITICAL (P0) - Security & Breaking Issues: 1 ACTIVE
+## CRITICAL (P0) - Security & Breaking Issues: 0 REMAINING
 
-### 1. RSS Publishing Reliability & Performance Fix (IN PROGRESS)
-- **Files**: `.github/workflows/validated-full-pipeline.yml`, `web_ui_hosted/app/api/rss/daily-digest/route.ts`, `scripts/run_publishing.py`
-- **Issue**: Validated full pipeline creates GitHub releases but RSS feed never updates on podcast.paulrbrown.org
-  - Root cause: Python script's git operations fail silently in subprocess
-  - Current workaround: Run publishing-only workflow manually after full pipeline
-  - Secondary issue: RSS updates require 2-4 minute Vercel full redeployments
-- **Fix (Two Phases)**:
-  - **Phase 1 (Quick Fix)**: Update validated-full-pipeline.yml to handle git operations explicitly in workflow (like publishing-only.yml does)
-    - Copy proven git add/commit/push logic from publishing-only.yml
-    - Update sleep timer to 120s for Vercel deployment
-    - Add RSS verification step
-  - **Phase 2 (Better Solution)**: Create dynamic Next.js API route for RSS feed
-    - Create `/api/rss/daily-digest/route.ts` that queries Supabase database directly
-    - Configure Vercel rewrite: `/daily-digest.xml` → `/api/rss/daily-digest`
-    - Add Vercel edge caching (5 min cache, stale-while-revalidate)
-    - Remove RSS file generation from publishing pipeline
-    - Remove git commit/push operations for RSS files
-    - Remove Vercel deployment wait times
-- **Benefits**:
-  - Immediate: Validated full pipeline works reliably without manual intervention
-  - Long-term: Instant RSS updates (no deployment), always accurate (reads database), fast for users (20-50ms edge cache)
-- **Priority**: CRITICAL - Core pipeline functionality broken
-- **Status**: 🔄 In Progress
+**All P0 tasks completed!** 🎉
 
 ---
 
-## HIGH (P1) - Core Functionality Issues: 2 REMAINING
+## HIGH (P1) - Core Functionality Issues: 3 REMAINING
 
 ### 1. --log Parameter in Orchestrator
 - **File**: `run_full_pipeline_orchestrator.py`
@@ -62,18 +40,6 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Fix**: Add try/catch with graceful degradation, make GitHub CLI optional
 - **Priority**: MEDIUM - Error handling
 - **Status**: ❌ Not fixed
-
-### 4. Parallel Audio Processing Robustness (P1 - URGENT)
-- **Files**: `scripts/run_audio.py`, `src/database/models.py`
-- **Issue**: Parallel processing fails with stuck 'processing' episodes and misleading worker counts
-- **Fixes Implemented**:
-  - Added automatic recovery for stuck 'processing' episodes at startup
-  - Fixed worker count reporting to show actual workers used
-  - Added periodic timeout protection during processing
-  - Improved empty queue handling with helpful suggestions
-  - Added better database connection management
-- **Priority**: HIGH - Core functionality fix
-- **Status**: ✅ Fixed (v1.35)
 
 ---
 
@@ -248,12 +214,12 @@ This document lists ONLY the remaining tasks that need to be completed.
 ## Summary Statistics
 
 ### By Priority:
-- **P0 (Critical)**: 1 in progress (RSS publishing reliability)
-- **P1 (High)**: 2 remaining (core functionality)
+- **P0 (Critical)**: 0 remaining 🎉
+- **P1 (High)**: 3 remaining (core functionality)
 - **P2 (Medium)**: 6 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 27 tasks (1 P0 in progress + 26 other tasks)
+### **Total Remaining**: 27 tasks
 
 ### **Session 11 Completed (v1.30)**:
 - ✅ Fixed discovery phase duplicate episode creation bug (P0)
@@ -271,17 +237,19 @@ This document lists ONLY the remaining tasks that need to be completed.
   - Improved empty queue handling
   - Enhanced database connection management
 
-### **Session 13 In Progress (v1.48+)**:
-- 🔄 RSS Publishing Reliability & Performance Fix (P0)
-  - **Phase 1**: Quick fix for validated-full-pipeline.yml git operations
-  - **Phase 2**: Dynamic RSS API route to eliminate deployment delays
-  - Eliminates 2-4 minute deployment waits, provides instant updates
-  - RSS always reflects current database state with edge caching
+### **Session 13 Completed (v1.49-v1.50)**:
+- ✅ RSS Publishing Reliability & Performance Fix (P0)
+  - Created dynamic Next.js API route (`web_ui_hosted/app/api/rss/daily-digest/route.ts`)
+  - Configured URL rewriting via `web_ui_hosted/vercel.json`
+  - Removed static RSS file generation from publishing pipeline
+  - Eliminated 2-4 minute Vercel deployment waits
+  - RSS now queries database on-demand with 5-minute edge caching
+  - **Result**: Instant updates, always accurate, 20-50ms response times
 
 ### Recommended Next Steps:
-1. **P0 Priority (IN PROGRESS)**: RSS publishing reliability fix
-2. **P1 Priority**: Fix --log parameter and workflow secret handling
-3. **P2 Priority**: Batch API requests for better throughput
+1. **P1 Priority**: Fix --log parameter and workflow secret handling
+2. **P2 Priority**: Batch API requests for better throughput
+3. **P3 Priority**: Simplify MP3 storage and remove 'current' subdirectory
 
 ---
 
@@ -296,8 +264,9 @@ python3 scripts/doctor.py
 # Test suite validation
 python3 -m pytest tests/ -v
 
-# RSS feed validation
-python3 src/publishing/rss_generator.py --validate web_ui_hosted/public/daily-digest.xml
+# RSS feed validation (dynamic API)
+curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
+curl -s https://podcast.paulrbrown.org/daily-digest.xml | grep generator
 
 # Pipeline test
 # Manual trigger via GitHub Actions interface
