@@ -359,6 +359,32 @@ def main():
 
         result = runner.discover_episodes()
 
+        # Display discovery summary
+        if result['success'] and result['episodes_found'] > 0:
+            runner.logger.info("=" * 60)
+            runner.logger.info("DISCOVERY PHASE SUMMARY")
+            runner.logger.info("=" * 60)
+
+            # Group episodes by feed
+            episodes_by_feed = {}
+            for ep in result['episodes']:
+                feed_name = ep['feed_name']
+                if feed_name not in episodes_by_feed:
+                    episodes_by_feed[feed_name] = []
+                episodes_by_feed[feed_name].append(ep)
+
+            # Display by feed
+            for feed_name, episodes in episodes_by_feed.items():
+                runner.logger.info(f"\nFeed: {feed_name} ({len(episodes)} episode{'s' if len(episodes) != 1 else ''})")
+                for ep in episodes:
+                    pub_date = ep.get('published_date', 'unknown')
+                    mode = ep.get('mode', 'unknown')
+                    runner.logger.info(f"  - \"{ep['title']}\" ({pub_date}) [{mode}]")
+
+            runner.logger.info("\n" + "=" * 60)
+            runner.logger.info(f"Total: {result['episodes_found']} episode{'s' if result['episodes_found'] != 1 else ''} discovered across {len(episodes_by_feed)} feed{'s' if len(episodes_by_feed) != 1 else ''}")
+            runner.logger.info("=" * 60)
+
         # Output JSON
         if args.output:
             with open(args.output, 'w') as f:

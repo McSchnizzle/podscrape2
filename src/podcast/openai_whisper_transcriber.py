@@ -132,7 +132,8 @@ class OpenAIWhisperTranscriber:
 
     @retry_with_backoff(max_retries=2, backoff_factor=1.5)
     def transcribe_episode(self, audio_chunks: List[str], episode_guid: str,
-                          in_progress_file: Optional[str] = None) -> EpisodeTranscription:
+                          in_progress_file: Optional[str] = None,
+                          episode_repo=None) -> EpisodeTranscription:
         """
         Transcribe a complete episode from audio chunks
 
@@ -140,6 +141,7 @@ class OpenAIWhisperTranscriber:
             audio_chunks: List of paths to audio chunk files
             episode_guid: Unique episode identifier
             in_progress_file: Path to write in-progress transcript (optional, ignored for now)
+            episode_repo: EpisodeRepository for incremental database writes (memory-efficient mode)
 
         Returns:
             EpisodeTranscription object with complete transcription
@@ -153,7 +155,12 @@ class OpenAIWhisperTranscriber:
         # Initialize client if needed
         self._initialize_model()
 
-        logger.info(f"Transcribing episode {episode_guid} with {len(audio_chunks)} chunks using OpenAI Whisper")
+        memory_efficient = episode_repo is not None
+        if memory_efficient:
+            logger.info(f"Transcribing episode {episode_guid} with {len(audio_chunks)} chunks using OpenAI Whisper (MEMORY-EFFICIENT MODE)")
+        else:
+            logger.info(f"Transcribing episode {episode_guid} with {len(audio_chunks)} chunks using OpenAI Whisper")
+
         start_time = datetime.now()
 
         # No cost limits needed for local Whisper - it's free!
@@ -161,6 +168,7 @@ class OpenAIWhisperTranscriber:
         try:
             transcription_chunks = []
             total_processing_time = 0.0
+            current_word_count = 0
 
             # Initialize in-progress file if provided
             if in_progress_file:
@@ -183,14 +191,29 @@ class OpenAIWhisperTranscriber:
                 logger.info(f"Completed chunk {i+1}/{len(audio_chunks)}: {len(chunk_result.text)} chars, "
                            f"{chunk_result.processing_time_seconds:.1f}s processing time")
 
+                # MEMORY OPTIMIZATION: Write chunk to database immediately instead of accumulating in memory
+                if memory_efficient and chunk_result.text.strip():
+                    current_word_count = episode_repo.append_transcript_chunk(
+                        episode_guid,
+                        chunk_result.text.strip(),
+                        i+1
+                    )
+                    logger.debug(f"Chunk {i+1} written to database (total words: {current_word_count:,})")
+
                 # Update in-progress file with completed chunks
                 if in_progress_file and chunk_result.text.strip():
                     with open(in_progress_file, 'a', encoding='utf-8') as f:
                         f.write(f"[Chunk {i+1}] {chunk_result.text.strip()}\n\n")
 
-            # Combine all chunks into full transcript
-            full_text = self._combine_chunks(transcription_chunks)
-            word_count = len(full_text.split())
+            # Calculate word count based on mode
+            if memory_efficient:
+                # Memory-efficient mode: word count from database
+                word_count = current_word_count
+                full_text = ""  # Not needed in memory-efficient mode
+            else:
+                # Traditional mode: combine chunks in memory
+                full_text = self._combine_chunks(transcription_chunks)
+                word_count = len(full_text.split())
 
             # Calculate total duration
             total_duration = len(audio_chunks) * self.chunk_duration_seconds
@@ -205,7 +228,7 @@ class OpenAIWhisperTranscriber:
                 total_processing_time_seconds=total_processing_time,
                 word_count=word_count,
                 chunk_count=len(transcription_chunks),
-                transcript_text=full_text,
+                transcript_text=full_text,  # Empty in memory-efficient mode
                 generated_at=start_time
             )
 
@@ -216,8 +239,13 @@ class OpenAIWhisperTranscriber:
                        f"{len(transcription_chunks)} chunks, "
                        f"{speed_ratio:.1f}x realtime speed")
 
-            # Write final complete transcript to in-progress file
-            if in_progress_file:
+            # Finalize transcript in database if using memory-efficient mode
+            if memory_efficient:
+                episode_repo.finalize_transcript(episode_guid)
+                logger.info(f"Transcript finalized in database (memory-efficient mode)")
+
+            # Write final complete transcript to in-progress file (traditional mode only)
+            if in_progress_file and not memory_efficient:
                 with open(in_progress_file, 'w', encoding='utf-8') as f:
                     f.write(full_text)
                 logger.info(f"Complete transcript written to in-progress file: {in_progress_file}")

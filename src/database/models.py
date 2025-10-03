@@ -509,6 +509,60 @@ class EpisodeRepository:
                 logger.error(f"Failed to update audio download for episode {episode_guid}: {e}")
                 raise
 
+    def append_transcript_chunk(self, episode_guid: str, chunk_text: str, chunk_number: int) -> int:
+        """
+        Append transcript chunk to existing transcript content (memory-efficient incremental writes).
+        Returns updated word count.
+        """
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.episode_guid == episode_guid).first()
+
+                if not episode_model:
+                    raise ValueError(f"Episode not found: {episode_guid}")
+
+                # Append chunk to existing transcript with space separator
+                if episode_model.transcript_content:
+                    episode_model.transcript_content += " " + chunk_text
+                else:
+                    episode_model.transcript_content = chunk_text
+
+                # Update word count
+                word_count = len(episode_model.transcript_content.split())
+                episode_model.transcript_word_count = word_count
+                episode_model.updated_at = datetime.now(UTC)
+
+                # Update status to 'transcribed' on first chunk
+                if chunk_number == 1:
+                    episode_model.status = 'processing'
+                    episode_model.transcript_generated_at = datetime.now(UTC)
+
+                session.commit()
+                return word_count
+
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to append transcript chunk for episode {episode_guid}: {e}")
+                raise
+
+    def finalize_transcript(self, episode_guid: str):
+        """Mark transcript as complete after all chunks appended"""
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.episode_guid == episode_guid).first()
+
+                if episode_model:
+                    episode_model.status = 'transcribed'
+                    episode_model.updated_at = datetime.now(UTC)
+                    session.commit()
+
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to finalize transcript for episode {episode_guid}: {e}")
+                raise
+
     def update_transcript(self, episode_guid: str, transcript_path: str, word_count: int, transcript_content: Optional[str] = None):
         """Update transcript information"""
         with self.db.get_session() as session:

@@ -756,35 +756,40 @@ class AudioProcessor_Runner:
             # Convert paths to strings for Whisper API
             chunk_paths_str = [str(path) for path in chunk_paths]
 
-            # Transcribe using thread-local instance
-            transcription_result = thread_transcriber.transcribe_episode(chunk_paths_str, episode_guid)
+            # Transcribe using thread-local instance with MEMORY-EFFICIENT MODE
+            # Pass episode_repo to enable incremental database writes (constant O(1) memory)
+            transcription_result = thread_transcriber.transcribe_episode(
+                chunk_paths_str,
+                episode_guid,
+                episode_repo=self.episode_repo
+            )
 
-            # Combine transcripts
-            all_transcripts = [chunk.text for chunk in transcription_result.chunks]
-            combined_transcript = "\n\n".join([t for t in all_transcripts if t])
-            total_words = len(combined_transcript.split())
-            total_chars = len(combined_transcript)
+            # In memory-efficient mode, transcript_text is empty (already in database)
+            # Word count comes from database incremental writes
+            total_words = transcription_result.word_count
 
-            # Store transcript in database (no file creation)
+            # Prepend metadata header to existing transcript content in database
             feed_name = episode_data.get('feed_name', 'Unknown')
-            feed_prefix = feed_name.split()[0].lower()
-            short_guid = episode_guid[:6]
-            transcript_filename = f"{feed_prefix}-{short_guid}.txt"
-
-            # Create transcript with metadata header
-            transcript_with_metadata = (
+            metadata_header = (
                 f"# Complete Transcript\n"
                 f"# Episode: {db_episode.title}\n"
                 f"# Feed: {feed_name}\n"
                 f"# GUID: {episode_guid}\n"
                 f"# Processed: {datetime.now().isoformat()}\n"
                 f"# Chunks: {len(chunk_paths)}\n"
-                f"# Words: {total_words:,}\n"
-                f"# Characters: {total_chars:,}\n\n"
-                f"{combined_transcript}"
+                f"# Words: {total_words:,}\n\n"
             )
 
-            # Update database with transcript content only (no file path)
+            # Read existing transcript from database and prepend header
+            db_episode_refreshed = self.episode_repo.get_by_episode_guid(episode_guid)
+            if db_episode_refreshed and db_episode_refreshed.transcript_content:
+                transcript_with_metadata = metadata_header + db_episode_refreshed.transcript_content
+            else:
+                # Fallback if transcript not in database (shouldn't happen in memory-efficient mode)
+                self.logger.warning(f"Expected transcript in database but not found - using empty transcript")
+                transcript_with_metadata = metadata_header + "[Transcript not available]"
+
+            # Update database with final transcript including metadata header
             self.episode_repo.update_transcript(episode_guid, None, total_words, transcript_with_metadata)
 
             # Cleanup audio files
@@ -974,6 +979,38 @@ def main():
                 # Use parallel processing by default, unless --no-parallel flag is set
                 use_parallel = not args.no_parallel
                 result = runner.process_episodes_optimized(max_episodes, parallel=use_parallel)
+
+        # Display audio phase summary
+        if result['success'] and result.get('episodes_processed', 0) > 0:
+            runner.logger.info("=" * 60)
+            runner.logger.info("AUDIO PHASE SUMMARY")
+            runner.logger.info("=" * 60)
+
+            relevant_count = result.get('relevant_episodes_found', 0)
+            not_relevant_count = result.get('not_relevant_episodes_found', 0)
+            total_evaluated = result.get('total_episodes_evaluated', 0)
+
+            # Display processed episodes with scores
+            for ep in result.get('episodes', []):
+                title = ep.get('title', 'Unknown')
+                scores = ep.get('scores', {})
+
+                # Format scores for display
+                if scores:
+                    scores_str = ', '.join([f"{topic}: {score:.2f}" for topic, score in scores.items()])
+                    scores_display = f"Scores: {{{scores_str}}}"
+                else:
+                    scores_display = "Scores: none"
+
+                status = "scored" if ep.get('is_relevant') else "not_relevant"
+                runner.logger.info(f"  Episode: \"{title}\"")
+                runner.logger.info(f"    {scores_display} - Status: {status}")
+
+            runner.logger.info("\n" + "=" * 60)
+            runner.logger.info(f"Total: {total_evaluated} episode{'s' if total_evaluated != 1 else ''} processed")
+            runner.logger.info(f"  ✅ Relevant: {relevant_count}")
+            runner.logger.info(f"  ❌ Not Relevant: {not_relevant_count}")
+            runner.logger.info("=" * 60)
 
         # Output JSON
         if args.output:

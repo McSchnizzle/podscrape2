@@ -116,66 +116,33 @@ class ScriptGenerator:
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
     
     def _load_topic_instructions(self) -> Dict[str, TopicInstruction]:
-        """Load topic instructions from digest_instructions/ directory"""
+        """Load topic instructions from database (single source of truth)"""
         instructions: Dict[str, TopicInstruction] = {}
-        instructions_dir = Path('digest_instructions')
-        instructions_dir_exists = instructions_dir.exists()
-        if not instructions_dir_exists:
-            logger.debug("digest_instructions directory not found; relying on database-backed instructions")
-        
+
         for topic in self.topics:
             if not topic.get('active', True):
                 continue
-            
+
+            # Database-first architecture: all instructions must be in database
             instructions_md = topic.get('instructions_md')
-            if instructions_md:
-                instructions[topic['name']] = TopicInstruction(
-                    name=topic['name'],
-                    filename=topic.get('instruction_file') or f"{topic.get('slug') or topic['name'].replace(' ', '_')}.md",
-                    content=instructions_md,
-                    voice_id=topic.get('voice_id', ''),
-                    active=topic.get('active', True),
-                    description=topic.get('description', ''),
-                    voice_settings=topic.get('voice_settings'),
-                    topic_id=topic.get('id'),
-                    source='database'
-                )
-                logger.info(f"Loaded instructions for topic (database): {topic['name']}")
-                continue
+            if not instructions_md or not instructions_md.strip():
+                logger.error(f"Topic '{topic['name']}' has no instructions_md in database - system requires database content")
+                raise ScriptGenerationError(f"Topic '{topic['name']}' missing instructions_md in database")
 
-            instruction_file = topic.get('instruction_file')
-            if not instruction_file:
-                logger.warning(f"No instruction source for topic: {topic['name']}")
-                continue
+            instructions[topic['name']] = TopicInstruction(
+                name=topic['name'],
+                filename=topic.get('instruction_file') or f"{topic.get('slug') or topic['name'].replace(' ', '_')}.md",
+                content=instructions_md,
+                voice_id=topic.get('voice_id', ''),
+                active=topic.get('active', True),
+                description=topic.get('description', ''),
+                voice_settings=topic.get('voice_settings'),
+                topic_id=topic.get('id'),
+                source='database'
+            )
+            logger.info(f"Loaded instructions from database: {topic['name']} ({len(instructions_md)} chars)")
 
-            instruction_path = instructions_dir / instruction_file if instructions_dir_exists else None
-            if not instruction_path or not instruction_path.exists():
-                logger.warning(f"Instruction file not found: {instruction_path}")
-                continue
-
-            try:
-                with open(instruction_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-
-                instructions[topic['name']] = TopicInstruction(
-                    name=topic['name'],
-                    filename=instruction_file,
-                    content=content,
-                    voice_id=topic.get('voice_id', ''),
-                    active=topic.get('active', True),
-                    description=topic.get('description', ''),
-                    voice_settings=topic.get('voice_settings'),
-                    topic_id=topic.get('id'),
-                    source='filesystem'
-                )
-
-                logger.info(f"Loaded instructions for topic (filesystem): {topic['name']}")
-
-            except Exception as e:
-                logger.error(f"Failed to load instructions for {topic['name']}: {e}")
-                continue
-
-        logger.info(f"Loaded instructions for {len(instructions)} topics")
+        logger.info(f"Loaded instructions for {len(instructions)} topics (database-first architecture)")
         return instructions
 
     def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int, limit_type: str) -> int:

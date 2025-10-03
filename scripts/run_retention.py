@@ -28,7 +28,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.publishing.retention_manager import RetentionManager
+from src.publishing.retention_manager import create_retention_manager
 from src.config.web_config import WebConfigManager
 
 # Configure logging
@@ -53,16 +53,10 @@ def run_retention_phase() -> dict:
         logger.info("Phase 6: Retention Management")
         logger.info("=" * 80)
 
-        # Initialize retention manager
+        # Initialize retention manager using factory function
+        # Factory function automatically reads retention settings from WebConfig
         logger.info("Initializing RetentionManager...")
-        web_config = WebConfigManager()
-        retention_manager = RetentionManager(web_config=web_config)
-
-        # Get retention policies from web config
-        mp3_retention_days = web_config.get_setting("retention", "mp3_retention_days", 14)
-        db_retention_days = web_config.get_setting("retention", "db_retention_days", 30)
-
-        logger.info(f"Retention policies: MP3={mp3_retention_days} days, DB={db_retention_days} days")
+        retention_manager = create_retention_manager()
 
         # Run cleanup
         logger.info("Running retention cleanup...")
@@ -114,10 +108,6 @@ def run_retention_phase() -> dict:
                 "total_files": total_files,
                 "total_bytes": total_bytes,
                 "total_mb": round(total_mb, 2)
-            },
-            "retention_policies": {
-                "mp3_retention_days": mp3_retention_days,
-                "db_retention_days": db_retention_days
             },
             "duration_seconds": round(duration, 2),
             "started_at": start_time.isoformat(),
