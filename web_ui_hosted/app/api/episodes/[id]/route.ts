@@ -30,8 +30,8 @@ export async function POST(
         message: 'Episode reset to scored status'
       });
     } else if (action === 'reset_to_pending') {
-      // Reset episode to 'pending' status
-      await db.updateEpisodeStatus(episodeId, 'pending');
+      // Reset episode to 'pending' status, clear scores, and remove from digests
+      const result = await db.resetEpisodeToPending(episodeId);
 
       // Invalidate episodes cache
       revalidateTag('episodes-data');
@@ -39,7 +39,8 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        message: 'Episode reset to pending status'
+        message: result.message,
+        digestsAffected: result.digestsAffected
       });
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

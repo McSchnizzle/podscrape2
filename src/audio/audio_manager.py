@@ -291,7 +291,7 @@ class AudioManager:
     def resolve_existing_mp3_path(path_or_name: str) -> Optional[Path]:
         """Resolve a possibly relative MP3 path or bare filename to an existing file path.
 
-        Searches common locations: data/completed-tts/current/ then data/completed-tts/.
+        Searches common location: data/completed-tts/.
         Returns a Path if found, otherwise None.
         """
         if not path_or_name:
@@ -300,8 +300,7 @@ class AudioManager:
         if candidate.is_file():
             return candidate
         base = Path('data') / 'completed-tts'
-        for folder in [base / 'current', base]:
-            cand = folder / candidate.name
-            if cand.is_file():
-                return cand
+        cand = base / candidate.name
+        if cand.is_file():
+            return cand
         return None

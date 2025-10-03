@@ -354,6 +354,16 @@ class PublishingPipelineRunner:
                         digest['github_url'] = github_url
                         uploaded_count += 1
                         self.logger.info(f"  ✅ Updated database for {digest['topic']}")
+
+                        # Delete local MP3 file now that it's successfully uploaded to GitHub
+                        mp3_path = digest.get('mp3_path')
+                        if mp3_path and Path(mp3_path).exists():
+                            try:
+                                Path(mp3_path).unlink()
+                                self.logger.info(f"  🗑️  Deleted local MP3: {Path(mp3_path).name}")
+                            except Exception as delete_error:
+                                self.logger.warning(f"  ⚠️  Failed to delete local MP3 {mp3_path}: {delete_error}")
+
                     except Exception as db_error:
                         self.logger.error(f"  ❌ Failed to update database for {digest['topic']}: {db_error}")
                         failed_count += 1

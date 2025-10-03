@@ -78,7 +78,7 @@ export default function EpisodesPage() {
   };
 
   const handleEpisodeAction = async (episodeId: number, action: string) => {
-    if (action === 'reset_to_pending' && !confirm('This will delete transcript files and reset to discovered status. Are you sure?')) {
+    if (action === 'reset_to_pending' && !confirm('This will reset to pending status, clear all scores, and remove from any digests. Are you sure?')) {
       return;
     }
 
@@ -263,9 +263,9 @@ export default function EpisodesPage() {
                       <button
                         onClick={() => handleEpisodeAction(episode.id, 'reset_to_pending')}
                         className="text-orange-700 text-xs hover:underline"
-                        title="Reset to discovered status and delete transcript files"
+                        title="Reset to pending status, clear scores, and remove from digests"
                       >
-                        Reset to Discovered
+                        Reset to Pending
                       </button>
                     </td>
                   </tr>

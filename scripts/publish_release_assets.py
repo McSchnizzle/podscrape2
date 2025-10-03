@@ -196,7 +196,7 @@ Examples:
   python3 scripts/publish_release_assets.py --cleanup --keep-days 7
 
   # Publish all current MP3s and cleanup old releases
-  python3 scripts/publish_release_assets.py --publish-today data/completed-tts/current/ --cleanup
+  python3 scripts/publish_release_assets.py --publish-today data/completed-tts/ --cleanup
         """
     )
 
@@ -242,7 +242,7 @@ Examples:
 
         # Handle publish-today
         if args.publish_today is not None:
-            search_paths = args.publish_today or ['data/completed-tts/current/']
+            search_paths = args.publish_today or ['data/completed-tts/']
             mp3_files = find_mp3_files(search_paths)
 
             if mp3_files:

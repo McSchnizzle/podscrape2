@@ -19,45 +19,46 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## HIGH (P1) - Core Functionality Issues: 3 REMAINING
+## HIGH (P1) - Core Functionality Issues: 1 REMAINING
 
-### 1. --log Parameter in Orchestrator
+### 1. ~~--log Parameter in Orchestrator~~ ⚠️ SKIPPED
 - **File**: `run_full_pipeline_orchestrator.py`
-- **Issue**: Pass log_file parameter to setup_phase_logging
-- **Fix**: Remove redundant self.log_file assignment, test Web UI log file specification
-- **Priority**: LOW - Feature enhancement
-- **Status**: ❌ Not fixed
+- **Reason**: Orchestrator not used by validated pipeline - only for local dev/testing
+- **Decision**: The validated-full-pipeline.yml calls individual phase scripts directly, not the orchestrator
+- **Priority**: Not pursuing - orchestrator is development tool only
+- **Status**: ⚠️ Intentionally skipped (v1.50)
 
-### 2. Missing Secrets in Workflow
-- **Issue**: Use standard GITHUB_TOKEN instead of requiring GH_TOKEN
-- **Fix**: Remove duplicate secret requirements, update secret validation
-- **Priority**: LOW - Simplification
-- **Status**: ❌ Not fixed
+### 2. ~~GitHub Secret Naming~~ ✅ RESOLVED
+- **Resolution**: Current implementation is already correct
+- **Architecture**: GitHub secret `GH_TOKEN` (required, GitHub reserves `GITHUB_*` prefix) → Environment variable `GITHUB_TOKEN` (what code reads)
+- **No changes needed**: Workflows correctly map `secrets.GH_TOKEN` to `GITHUB_TOKEN` env var
+- **Status**: ✅ Verified correct (v1.50)
 
-### 3. Retention Manager Initialization
-- **File**: `src/publishing/retention_manager.py`
-- **Issue**: Defer retention manager initialization until needed
-- **Fix**: Add try/catch with graceful degradation, make GitHub CLI optional
-- **Priority**: MEDIUM - Error handling
-- **Status**: ❌ Not fixed
+### 3. ~~Retention Manager Initialization~~ ✅ COMPLETED
+- **File**: `src/publishing/retention_manager.py:52-80`
+- **Fix Applied**: Added try/catch with graceful degradation around GitHub publisher initialization
+- **Behavior**: RetentionManager now continues without GitHub publisher if unavailable, logs warning and skips GitHub release cleanup
+- **Note**: GitHub CLI only needed for local development; validated pipeline uses `GITHUB_TOKEN` env var
+- **Status**: ✅ Fixed (v1.50)
 
 ---
 
-## MEDIUM (P2) - Performance & Optimization: 6 REMAINING
+## MEDIUM (P2) - Performance & Optimization: 5 REMAINING
 
-### 1. Batch API Requests
+### 1. ~~Batch API Requests~~ ⚠️ NOT PURSUING
 - **Files**: Audio generation, voice fetching, content scoring loops
-- **Issue**: Individual API calls in loops instead of batching
-- **Fix**: Implement request batching or connection pooling
-- **Expected Gain**: Reduced API overhead and improved throughput
-- **Status**: ❌ Not implemented
+- **Analysis**:
+  - Scoring: Sequential processing required to determine when enough relevant episodes found
+  - TTS: ElevenLabs has no batch API; volume doesn't justify complexity of concurrent requests
+- **Decision**: Current sequential approach is appropriate for use case
+- **Status**: ⚠️ Not pursuing (v1.50)
 
-### 2. Remove Synchronous Sleep Calls
-- **Files**: `src/audio/audio_generator.py:119,273` and others
-- **Issue**: `time.sleep()` calls block entire process
-- **Fix**: Replace with async/await patterns or token bucket rate limiting
-- **Expected Gain**: Better resource utilization and responsiveness
-- **Status**: ❌ Not implemented
+### 2. ~~Remove Synchronous Sleep Calls~~ ⚠️ SKIPPED
+- **Files**: `src/audio/audio_generator.py:119-121`
+- **Analysis**: Sleep calls are for ElevenLabs API rate limiting with low volume usage
+- **Reason**: Given current volume (few digests/day), async conversion provides no meaningful benefit
+- **Decision**: Current synchronous rate limiting is appropriate for use case
+- **Status**: ⚠️ Intentionally skipped (v1.50)
 
 ### 3. Orchestrator Memory Management
 - **File**: `run_full_pipeline_orchestrator.py`
@@ -124,22 +125,38 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Expected Gain**: Better voice-topic matching, configurable per topic
 - **Status**: ❌ Not implemented
 
-### 6. Simplify MP3 Storage - Remove 'current' Subdirectory
-- **Files**: `src/audio/audio_manager.py`, `src/audio/complete_audio_processor.py`, `src/publishing/github_publisher.py`
-- **Issue**: Unnecessary `data/completed-tts/current/` subdirectory adds complexity
-- **Proposed Simplification**:
-  - Store all MP3s directly in `data/completed-tts/` (no subdirectories)
-  - Remove AudioManager.organize_audio_files() calls
-  - Update GitHub publisher to look in base `completed-tts/` directory
+### 6. ~~Simplify MP3 Storage - Remove 'current' Subdirectory~~ ✅ COMPLETED
+- **Files Updated**:
+  - `.github/workflows/validated-full-pipeline.yml` - all references to `current/` removed
+  - `.github/workflows/tts-simulator-commit.yml` - all references to `current/` removed
+  - `scripts/publish_release_assets.py` - default path changed to `data/completed-tts/`
+  - `src/audio/audio_manager.py` - resolve_existing_mp3_path() simplified
+- **Changes**:
+  - All MP3s now stored directly in `data/completed-tts/` (no subdirectories)
+  - Workflows updated to work with base directory
+  - File comparison and publishing logic simplified
+- **Note**: AudioManager still has current/archive/temp logic for backwards compatibility but workflows no longer use it
 - **Benefits**: Simpler architecture, fewer code paths, easier to maintain
+- **Status**: ✅ Fixed (v1.50)
+
+### 7. Remove MD File Fallback from Digest Generation
+- **File**: `src/generation/script_generator.py:118-173`
+- **Issue**: Script generator still has fallback logic to read from `digest_instructions/*.md` files
+- **Current State**: Instructions already in database (`topics.instructions_md` field) with Script Lab as editor
+- **Required Changes**:
+  - Remove filesystem fallback logic (lines 146-173)
+  - Keep only database instruction loading (lines 131-144)
+  - Update logging to indicate database-only source
+  - Delete `digest_instructions/` directory after migration verified
+- **Benefits**: Single source of truth, simpler code, no file sync issues
 - **Status**: ❌ Not implemented
 
-### 7. Database Retention and Cleanup System
+### 8. Database Retention and Cleanup System
 - **Goal**: Implement automated database cleanup to prevent database bloat
 - **Implementation**: Delete episodes/digests based on configurable retention periods
 - **Status**: 🔄 Partially implemented - needs completion
 
-### 8. Enhanced Discovery Phase Logging
+### 9. Enhanced Discovery Phase Logging
 - **File**: `scripts/run_discovery.py`
 - **Issue**: No detailed summary of episodes added to database during discovery
 - **Enhancement**: Add comprehensive logging at end of discovery phase
@@ -147,7 +164,7 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Benefits**: Better visibility into discovery effectiveness
 - **Status**: ❌ Not implemented
 
-### 9. Enhanced Audio Phase Processing Logging
+### 10. Enhanced Audio Phase Processing Logging
 - **File**: `scripts/run_audio.py`
 - **Issue**: No detailed summary of episode processing results and scoring
 - **Enhancement**: Add comprehensive logging at end of audio phase
@@ -155,52 +172,52 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Benefits**: Better understanding of scoring results
 - **Status**: ❌ Not implemented
 
-### 10. Topic-Specific RSS Feeds
+### 11. Topic-Specific RSS Feeds
 - **Goal**: Replace single `daily-digest.xml` with topic-specific feeds
 - **Implementation**: Generate separate RSS feeds for each topic
 - **Benefits**: Users can subscribe to individual topics separately
 - **Status**: ❌ Not implemented
 
-### 11. Analytics & Metrics Dashboard
+### 12. Analytics & Metrics Dashboard
 - **Goal**: Create comprehensive analytics dashboard for feed processing pipeline
 - **Features**: Feed performance metrics, episode status distribution, topic coverage
 - **Benefits**: Clear visibility into feed quality and processing efficiency
 - **Status**: ❌ Not implemented
 
-### 12. Structured Logging & Monitoring
+### 13. Structured Logging & Monitoring
 - **Issue**: Add structured logging throughout, implement log rotation
 - **Fix**: Add metrics collection, performance tracking, alerting for failures
 - **Status**: ❌ Not implemented
 
-### 13. Code Quality Improvements
+### 14. Code Quality Improvements
 - **Issue**: Remove unused imports, consolidate workflow duplication
 - **Fix**: Standardize error handling, add pre-commit hooks
 - **Status**: ❌ Not implemented
 
-### 14. Testing & Validation
+### 15. Testing & Validation
 - **Issue**: Add orchestrator tests, fix test environment issues
 - **Fix**: Create comprehensive test suite with real RSS feeds
 - **Status**: ❌ Not implemented
 
-### 15. Enhanced Dashboard with Recent Run Details
+### 16. Enhanced Dashboard with Recent Run Details
 - **Issue**: Dashboard lacks detailed information about recent pipeline run from GitHub logs
 - **Fix**: Pull GitHub Action logs and display detailed run information
 - **Expected Gain**: Better visibility into pipeline execution
 - **Status**: ❌ Not implemented
 
-### 16. Pipeline Phase Validation & Health Checks
+### 17. Pipeline Phase Validation & Health Checks
 - **Issue**: No systematic validation that each phase operates according to web settings
 - **Fix**: Add health checks for each phase, validate against web settings
 - **Expected Gain**: Proactive detection of configuration issues
 - **Status**: ❌ Not implemented
 
-### 17. Weekly Summary Digest
+### 18. Weekly Summary Digest
 - **Issue**: No weekly aggregation of relevant episodes and trend analysis
 - **Fix**: Create Sunday weekly summary digest with topic-based episode reviews
 - **Expected Gain**: Weekly insights and trend analysis across topics
 - **Status**: ❌ Not implemented
 
-### 18. JSON Output Parsing Improvements
+### 19. JSON Output Parsing Improvements
 - **File**: `run_full_pipeline_orchestrator.py`
 - **Issue**: Could improve multi-line JSON parsing robustness
 - **Current State**: Already implements buffering and multi-line parsing (lines 189-280)
@@ -215,11 +232,11 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ### By Priority:
 - **P0 (Critical)**: 0 remaining 🎉
-- **P1 (High)**: 3 remaining (core functionality)
-- **P2 (Medium)**: 6 remaining (performance & optimization)
+- **P1 (High)**: 0 remaining 🎉
+- **P2 (Medium)**: 3 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 27 tasks
+### **Total Remaining**: 21 tasks
 
 ### **Session 11 Completed (v1.30)**:
 - ✅ Fixed discovery phase duplicate episode creation bug (P0)
@@ -246,10 +263,37 @@ This document lists ONLY the remaining tasks that need to be completed.
   - RSS now queries database on-demand with 5-minute edge caching
   - **Result**: Instant updates, always accurate, 20-50ms response times
 
+### **Session 14 Completed (v1.50)**:
+- ✅ Retention Manager Initialization Improvement (P1)
+  - Added graceful degradation to `RetentionManager.__init__()` in `src/publishing/retention_manager.py`
+  - GitHub publisher initialization now wrapped in try/catch
+  - System continues without GitHub release cleanup if publisher unavailable
+  - Appropriate warning logged when GitHub integration unavailable
+- ✅ Verified GitHub Secret Architecture (P1)
+  - Confirmed current implementation is correct (`GH_TOKEN` secret → `GITHUB_TOKEN` env var)
+  - No changes needed; GitHub reserves `GITHUB_*` prefix for system variables
+- ⚠️ Evaluated Batch API Requests (P2)
+  - Analyzed scoring and TTS phases for batching opportunities
+  - Decision: Not pursuing - sequential processing required for scoring logic
+  - ElevenLabs has no batch API; current volume doesn't justify complexity
+- ⚠️ Skipped Orchestrator --log Parameter (P1)
+  - Orchestrator not used by validated pipeline - only for local dev/testing
+  - Not worth pursuing as production workflow calls phase scripts directly
+- ⚠️ Skipped Async Sleep Calls (P2)
+  - Sleep calls are for ElevenLabs API rate limiting
+  - Current volume doesn't justify async refactoring complexity
+- ✅ Simplified MP3 Storage - Removed 'current' Subdirectory (P3)
+  - Updated workflows to store MP3s directly in `data/completed-tts/`
+  - Removed all references to `current/` subdirectory from workflows and scripts
+  - Simpler file handling, easier maintenance
+- 📝 Added Task: Remove MD File Fallback from Digest Generation (P3)
+  - Instructions already in database via Script Lab
+  - Need to remove legacy filesystem fallback logic from script_generator.py
+
 ### Recommended Next Steps:
-1. **P1 Priority**: Fix --log parameter and workflow secret handling
-2. **P2 Priority**: Batch API requests for better throughput
-3. **P3 Priority**: Simplify MP3 storage and remove 'current' subdirectory
+1. **P3 Priority**: Remove MD file fallback from digest generation (single source of truth)
+2. **P2 Priority**: Orchestrator memory management (rolling buffer for stdout_lines)
+3. **P2 Priority**: Database connection optimization (connection pooling)
 
 ---
 

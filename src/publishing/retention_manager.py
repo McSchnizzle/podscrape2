@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
 File Retention Manager for RSS Podcast Digest System
-Manages automated cleanup of local files and GitHub releases based on retention policies
+
+Manages automated cleanup of local files and GitHub releases based on retention policies.
+
+Local MP3 Cleanup Strategy:
+- Publishing pipeline deletes local MP3s immediately after successful GitHub upload
+- Retention manager serves as safety net for orphaned files (failed uploads, detection issues)
+- Retention days configured via web_settings table (retention.local_mp3_days, default: 14)
 """
 
 import os
@@ -62,8 +68,31 @@ class RetentionManager:
             database_manager: Database manager for episode/digest cleanup (optional)
         """
         self.retention_policies = retention_policies or self._get_default_policies()
-        self.github_publisher = github_publisher or create_github_publisher()
-        self.github_release_retention_days = github_release_days or 14
+
+        # Initialize GitHub publisher with graceful degradation
+        if github_publisher:
+            self.github_publisher = github_publisher
+        else:
+            try:
+                self.github_publisher = create_github_publisher()
+                logger.info("GitHub publisher initialized for release cleanup")
+            except Exception as e:
+                logger.warning(f"GitHub publisher not available: {e}. GitHub release cleanup will be skipped.")
+                self.github_publisher = None
+
+        # Load GitHub release retention from web_settings
+        if github_release_days is None:
+            try:
+                from ..config.web_config import WebConfigManager
+                wc = WebConfigManager()
+                self.github_release_retention_days = int(wc.get_setting('retention', 'github_release_days', 14))
+                logger.info(f"GitHub release retention: {self.github_release_retention_days} days (from web_settings)")
+            except Exception as e:
+                logger.warning(f"Could not load GitHub release retention from web_settings, using default: {e}")
+                self.github_release_retention_days = 14
+        else:
+            self.github_release_retention_days = github_release_days
+
         self.database_manager = database_manager
 
         logger.info(f"Retention Manager initialized with {len(self.retention_policies)} policies")
@@ -91,6 +120,8 @@ class RetentionManager:
                 path_pattern=str(project_root / "data" / "completed-tts"),
                 retention_days=local_mp3_days,
                 file_pattern="*.mp3"
+                # NOTE: Publishing pipeline deletes MP3s immediately after GitHub upload
+                # This policy is a safety net for orphaned files (failed uploads, etc.)
             ),
             RetentionPolicy(
                 name="Audio Cache",
@@ -190,15 +221,15 @@ class RetentionManager:
         try:
             with self.database_manager.get_session() as session:
                 try:
-                    # Count episodes to be deleted
+                    # Count episodes to be deleted (based on published_date, not updated_at)
                     episodes_query = session.query(EpisodeModel).filter(
-                        EpisodeModel.updated_at < episode_cutoff
+                        EpisodeModel.published_date < episode_cutoff
                     )
                     episodes_count = episodes_query.count()
 
-                    # Count digests to be deleted
+                    # Count digests to be deleted (based on digest_date, not generated_at)
                     digests_query = session.query(DigestModel).filter(
-                        DigestModel.generated_at < digest_cutoff
+                        DigestModel.digest_date < digest_cutoff.date()
                     )
                     digests_count = digests_query.count()
 

@@ -143,10 +143,10 @@ jobs:
           set -euo pipefail
           TARGET_BRANCH=${TARGET_BRANCH:-main}
           source "${VENV_PATH}/bin/activate"
-          mkdir -p data/completed-tts/current
+          mkdir -p data/completed-tts
           mkdir -p artifacts/tts-persist
           BASELINE=artifacts/tts-persist/before.txt
-          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
+          find data/completed-tts -maxdepth 1 -type f -name '*.mp3' -print | sort > "$BASELINE" || true
           echo "before_file=$(realpath "$BASELINE")" >> "$GITHUB_OUTPUT"
 
       - name: Phase 4 - TTS Audio Generation
@@ -176,11 +176,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/tts-persist
-          mkdir -p data/completed-tts/current
-
-          if compgen -G "data/completed-tts/*.mp3" > /dev/null; then
-            mv data/completed-tts/*.mp3 data/completed-tts/current/ 2>/dev/null || true
-          fi
+          mkdir -p data/completed-tts
 
           BASELINE=${BASELINE_FILE:-}
           if [ -z "$BASELINE" ] || [ ! -f "$BASELINE" ]; then
@@ -189,7 +185,7 @@ jobs:
           fi
 
           AFTER=$(mktemp)
-          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$AFTER"
+          find data/completed-tts -maxdepth 1 -type f -name '*.mp3' -print | sort > "$AFTER"
 
           NEW_LIST=artifacts/tts-persist/new_files.txt
           comm -13 "$BASELINE" "$AFTER" > "$NEW_LIST"
@@ -256,8 +252,8 @@ jobs:
           done
           # Copy generated MP3 files to artifacts
           mkdir -p artifacts/mp3-files
-          if [ -d "data/completed-tts/current" ] && [ "$(ls -A data/completed-tts/current 2>/dev/null)" ]; then
-            cp data/completed-tts/current/*.mp3 artifacts/mp3-files/ 2>/dev/null || true
+          if [ -d "data/completed-tts" ] && [ "$(ls -A data/completed-tts/*.mp3 2>/dev/null)" ]; then
+            cp data/completed-tts/*.mp3 artifacts/mp3-files/ 2>/dev/null || true
           fi
 
       - name: Upload TTS artifacts

@@ -72,12 +72,12 @@ jobs:
           fi
 
           baseline=$(mktemp)
-          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$baseline" || true
+          find data/completed-tts -maxdepth 1 -type f -name '*.mp3' -print | sort > "$baseline" || true
 
           python3 scripts/simulate_tts_output.py --timestamp "$TIMESTAMP" --topics "${TOPICS[@]}" --duration-seconds 600
 
           generated=$(mktemp)
-          find data/completed-tts/current -maxdepth 1 -type f -name '*.mp3' -print | sort > "$generated"
+          find data/completed-tts -maxdepth 1 -type f -name '*.mp3' -print | sort > "$generated"
           NEW_LIST=artifacts/simulated-tts/new_files.txt
           mkdir -p artifacts/simulated-tts
           comm -13 "$baseline" "$generated" > "$NEW_LIST"
@@ -156,7 +156,7 @@ jobs:
           set -euo pipefail
           BRANCH=${TARGET_BRANCH:-simulated-tts}
           git checkout -B "$BRANCH"
-          git add data/completed-tts/current/*.mp3 \
+          git add data/completed-tts/*.mp3 \
             data/rss/daily-digest.xml data/rss/test-feed.xml \
             public/daily-digest.xml public/test-feed.xml
           if git diff --cached --quiet; then

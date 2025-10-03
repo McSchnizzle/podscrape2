@@ -700,4 +700,69 @@ export class DatabaseClient {
       throw error
     }
   }
+
+  async resetEpisodeToPending(id: number) {
+    try {
+      // 1. Clear scores and reset status to pending
+      const { error: updateError } = await supabase
+        .from('episodes')
+        .update({
+          status: 'pending',
+          scores: null,
+          scored_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+
+      if (updateError) throw updateError
+
+      // 2. Find all digests containing this episode
+      const { data: links, error: linksError } = await supabase
+        .from('digest_episode_links')
+        .select('digest_id')
+        .eq('episode_id', id)
+
+      if (linksError) throw linksError
+
+      const digestIds = links?.map(link => link.digest_id) || []
+
+      // 3. Delete digest_episode_links for this episode
+      const { error: deleteLinksError } = await supabase
+        .from('digest_episode_links')
+        .delete()
+        .eq('episode_id', id)
+
+      if (deleteLinksError) throw deleteLinksError
+
+      // 4. For each affected digest, check if it has any other episodes
+      //    If not, delete the digest
+      for (const digestId of digestIds) {
+        const { data: remainingLinks, error: checkError } = await supabase
+          .from('digest_episode_links')
+          .select('episode_id')
+          .eq('digest_id', digestId)
+
+        if (checkError) throw checkError
+
+        // If no other episodes in this digest, delete it
+        if (!remainingLinks || remainingLinks.length === 0) {
+          const { error: deleteDigestError } = await supabase
+            .from('digests')
+            .delete()
+            .eq('id', digestId)
+
+          if (deleteDigestError) throw deleteDigestError
+        }
+      }
+
+      return {
+        success: true,
+        digestsAffected: digestIds.length,
+        message: `Episode reset to pending. ${digestIds.length} digest(s) updated.`
+      }
+    } catch (error) {
+      console.error('Failed to reset episode to pending:', error)
+      throw error
+    }
+  }
 }
