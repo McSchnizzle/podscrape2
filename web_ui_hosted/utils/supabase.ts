@@ -724,7 +724,7 @@ export class DatabaseClient {
 
       if (linksError) throw linksError
 
-      const digestIds = links?.map(link => link.digest_id) || []
+      const digestIds = links?.map((link: { digest_id: number }) => link.digest_id) || []
 
       // 3. Delete digest_episode_links for this episode
       const { error: deleteLinksError } = await supabase
