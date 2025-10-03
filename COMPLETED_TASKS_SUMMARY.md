@@ -1,7 +1,7 @@
 # Completed Tasks Summary - RSS Podcast Digest System
 
 **Generated**: 2025-10-03
-**Version**: v1.50
+**Version**: v1.51
 
 This document lists all completed tasks from the master-tasklist.md, organized by priority level.
 
@@ -294,10 +294,10 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 ## 📊 OVERALL COMPLETION STATISTICS
 
 ### By Priority Level:
-- **P0 (Critical)**: 13/13 completed (100%) 🎉
-- **P1 (High)**: 4/8 completed (50%)
+- **P0 (Critical)**: 15/15 completed (100%) 🎉
+- **P1 (High)**: 7/8 completed (87.5%)
 - **P2 (Medium)**: 6 major items completed
-- **P3 (Low)**: 1 item completed
+- **P3 (Low)**: 2 items completed
 
 ### By Category:
 - **Security & Stability**: 9 items fixed
@@ -323,6 +323,7 @@ This document lists all completed tasks from the master-tasklist.md, organized b
 - **Session 11**: ✅ COMPLETE (1 critical bug fix + planning for 2 new P0 tasks)
 - **Session 12**: ✅ COMPLETE (1 critical parallel processing fix)
 - **Session 13**: ✅ COMPLETE (1 P0 RSS publishing architecture overhaul)
+- **Session 14/15**: ✅ COMPLETE (MP3 lifecycle & retention management + Episodes page improvements)
 
 ---
 
@@ -765,4 +766,271 @@ Instead of generating static RSS files and committing to git, implemented Next.j
 
 ---
 
-*This document represents a comprehensive review of all completed work on the RSS Podcast Digest System through version 1.50.*
+## 🔧 SESSION 14/15 (2025-10-03) - MP3 Lifecycle & Retention Management
+
+### ✅ COMPLETED FIXES:
+
+#### 1. MP3 Cleanup Strategy Implementation (P0)
+
+**Problem**: Local MP3 files retained indefinitely after GitHub upload, wasting disk space.
+
+**User Request**: "once an mp3 has successfully been put in the gh release and the database is updated with github_url, then that corresponding local mp3 should be deleted from the completed-tts folder"
+
+**Solution Implemented**:
+
+**Publishing Phase - Immediate MP3 Deletion** (`scripts/run_publishing.py`):
+- Added deletion logic after successful GitHub upload (lines 358-365)
+- MP3 deleted immediately after database update with github_url
+- Local completed-tts directory now acts as staging area only
+- Logs deletion with file name for visibility
+
+```python
+# Delete local MP3 file now that it's successfully uploaded to GitHub
+mp3_path = digest.get('mp3_path')
+if mp3_path and Path(mp3_path).exists():
+    try:
+        Path(mp3_path).unlink()
+        self.logger.info(f"  🗑️  Deleted local MP3: {Path(mp3_path).name}")
+    except Exception as delete_error:
+        self.logger.warning(f"  ⚠️  Failed to delete local MP3 {mp3_path}: {delete_error}")
+```
+
+**One-Time Cleanup Script** (`scripts/cleanup_released_mp3s.py`):
+- Created script to clean up already-released MP3s (132 lines)
+- Scans database for digests with github_url set
+- Deletes corresponding local MP3 files
+- Supports dry-run mode for safety
+- Respects retention settings from web_settings table
+
+**Execution Results**:
+- Freed 319.55 MB of disk space
+- Deleted 22 MP3 files already uploaded to GitHub releases
+- All files properly resolved using AudioManager path logic
+
+**Files Modified**:
+- `scripts/run_publishing.py` (lines 358-365)
+- `scripts/cleanup_released_mp3s.py` (NEW - 132 lines)
+
+**Architecture Benefit**: Local storage now truly a staging area - files deleted once safely in GitHub releases
+
+---
+
+#### 2. Retention Manager Bug Fixes (P0 - CRITICAL)
+
+**Problem**: Episodes older than 14 days still appearing in database despite retention policy.
+
+**Root Cause**: Retention manager using wrong date fields for cleanup decisions:
+- Used `updated_at` instead of `published_date` for episodes
+- Used `generated_at` instead of `digest_date` for digests
+- Episodes from August 27 showed updated_at of Sept 29 due to re-scoring
+- Retention kept them because updated_at was recent
+
+**User Discovery**: Screenshot showing episodes from August 27 (36 days old) still in Episodes page
+
+**Solution Implemented** (`src/publishing/retention_manager.py`):
+
+**Fixed Date Field Logic**:
+```python
+# BEFORE (WRONG):
+episodes_query = session.query(EpisodeModel).filter(
+    EpisodeModel.updated_at < episode_cutoff
+)
+digests_query = session.query(DigestModel).filter(
+    DigestModel.generated_at < digest_cutoff
+)
+
+# AFTER (CORRECT):
+episodes_query = session.query(EpisodeModel).filter(
+    EpisodeModel.published_date < episode_cutoff  # Uses episode publication date
+)
+digests_query = session.query(DigestModel).filter(
+    DigestModel.digest_date < digest_cutoff.date()  # Uses digest date
+)
+```
+
+**Web Settings Integration**:
+- Added web_settings integration for GitHub release retention (lines 83-94)
+- Reads `retention.github_release_days` from database
+- Falls back to 14 days if setting unavailable
+- Comprehensive retention system now fully database-driven
+
+**Execution Results**:
+- Successfully deleted 82 episodes published >14 days ago
+- Database now maintains proper 14-day window
+- Retention policy working as designed
+
+**Files Modified**:
+- `src/publishing/retention_manager.py` (lines 83-94, 224-233)
+
+**Impact**: CRITICAL - Database retention now works correctly, preventing database bloat while respecting user configuration
+
+---
+
+#### 3. Episodes Page "Reset to Pending" Feature (P1)
+
+**Problem**: Episodes page had "Reset to Discovered" action that didn't properly clean up scores and digests.
+
+**User Request**: "change 'reset to discovered' to be 'reset to pending' and make sure that when that is clicked, it deletes the score data from the database as well as any digests that the episode is associated with"
+
+**Solution Implemented**:
+
+**Backend Database Operations** (`web_ui_hosted/utils/supabase.ts`):
+- Created comprehensive `resetEpisodeToPending()` method (lines 704-767)
+- Clears episode scores and resets status to 'pending'
+- Finds all digests containing the episode
+- Removes episode from digest_episode_links
+- Deletes orphaned digests (digests with no other episodes)
+- Returns count of affected digests
+
+```typescript
+async resetEpisodeToPending(id: number) {
+  // 1. Clear scores and reset status to pending
+  // 2. Find all digests containing this episode
+  // 3. Delete digest_episode_links for this episode
+  // 4. For each affected digest, check if it has any other episodes
+  //    If not, delete the digest
+
+  return {
+    success: true,
+    digestsAffected: digestIds.length,
+    message: `Episode reset to pending. ${digestIds.length} digest(s) updated.`
+  }
+}
+```
+
+**Frontend UI Updates** (`web_ui_hosted/app/episodes/page.tsx`):
+- Updated button text from "Reset to Discovered" to "Reset to Pending"
+- Enhanced confirmation dialog with clear warning
+- Shows affected digest count in success message
+
+**API Route** (`web_ui_hosted/app/api/episodes/[id]/route.ts`):
+- Updated to call new resetEpisodeToPending method
+- Returns comprehensive result with digests affected
+- Invalidates episodes cache for immediate UI update
+
+**Files Modified**:
+- `web_ui_hosted/utils/supabase.ts` (lines 704-767)
+- `web_ui_hosted/app/episodes/page.tsx` (lines 81, 263-269)
+- `web_ui_hosted/app/api/episodes/[id]/route.ts` (lines 32-44)
+
+**Impact**: Episodes can now be cleanly reset to pending status with proper digest cleanup
+
+---
+
+#### 4. Architecture Cleanup - Removed 'current' Subdirectory (P3)
+
+**Problem**: MP3 storage used unnecessary `current/` subdirectory adding complexity.
+
+**Solution Implemented**:
+- Updated all workflows to use `data/completed-tts/` directly
+- Removed references from validated-full-pipeline.yml and tts-simulator-commit.yml
+- Updated publish_release_assets.py default path
+- Simplified audio_manager.py resolve_existing_mp3_path()
+- Moved 56 MP3 files from current/ to base directory
+- Removed current/ directory completely
+
+**Files Modified**:
+- `.github/workflows/validated-full-pipeline.yml`
+- `.github/workflows/tts-simulator-commit.yml`
+- `scripts/publish_release_assets.py`
+- `src/audio/audio_manager.py`
+
+**Benefits**: Simpler architecture, fewer code paths, easier maintenance
+
+---
+
+#### 5. TypeScript Type Safety Fix
+
+**Problem**: Vercel build failed with TypeScript compilation error:
+```
+Type error: Parameter 'link' implicitly has an 'any' type.
+./utils/supabase.ts:727:36
+```
+
+**Root Cause**: TypeScript couldn't infer type of link parameter in map function
+
+**Solution**: Added explicit type annotation
+```typescript
+// Before:
+const digestIds = links?.map(link => link.digest_id) || []
+
+// After:
+const digestIds = links?.map((link: { digest_id: number }) => link.digest_id) || []
+```
+
+**Critical Lesson Learned**: **"please test your code before you commit"**
+- User correctly pointed out need to run `npx tsc --noEmit` and `npm run build` before committing
+- Acknowledged sloppy workflow
+- Committed to always test before committing going forward
+
+**Files Modified**:
+- `web_ui_hosted/utils/supabase.ts` (line 727)
+
+---
+
+### 🎯 Session Summary
+
+**Priority**: P0/P1 (Critical/High) - Core data lifecycle and retention management
+
+**Files Modified**: 8
+- `scripts/run_publishing.py` - Immediate MP3 deletion
+- `scripts/cleanup_released_mp3s.py` - One-time cleanup script (NEW)
+- `src/publishing/retention_manager.py` - Fixed date field bugs, web_settings integration
+- `web_ui_hosted/utils/supabase.ts` - resetEpisodeToPending(), TypeScript fix
+- `web_ui_hosted/app/episodes/page.tsx` - UI updates
+- `web_ui_hosted/app/api/episodes/[id]/route.ts` - API updates
+- `.github/workflows/validated-full-pipeline.yml` - Removed current/ references
+- `.github/workflows/tts-simulator-commit.yml` - Removed current/ references
+- `scripts/publish_release_assets.py` - Updated default path
+- `src/audio/audio_manager.py` - Simplified path resolution
+
+**Cleanup Results**:
+- Freed 319.55 MB from already-released MP3s (22 files)
+- Deleted 82 episodes published >14 days ago from database
+- All retention policies now database-driven via web_settings
+
+**Testing Status**: ✅ Validated with production testing
+- MP3 cleanup script executed successfully
+- Database retention working correctly (14-day window)
+- Episodes page "Reset to Pending" functional
+- TypeScript compilation passing
+
+**Alignment with Project Principles**:
+- ✅ **Database-First Architecture**: All retention policies from web_settings
+- ✅ **FAIL FAST, FAIL LOUD**: Proper date field usage prevents silent retention failures
+- ✅ **Clean Data Lifecycle**: MP3s deleted immediately after GitHub upload
+- ✅ **Evidence-Based**: All fixes validated with actual data cleanup
+- ✅ **Testing Requirements**: Learned critical lesson - always test before committing
+
+**Critical Lessons**:
+- **Test Before Commit**: Always run `npx tsc --noEmit` and `npm run build` before committing TypeScript changes
+- **Use Correct Date Fields**: published_date for episodes, digest_date for digests (NOT updated_at/generated_at)
+- **Staging Area Pattern**: Local storage should be temporary - delete after upload to permanent storage
+
+---
+
+### 🚫 TASKS MARKED AS SKIPPED/NOT PURSUING:
+
+#### 1. --log Parameter in Orchestrator (P1) ⚠️ SKIPPED
+- **Reason**: Orchestrator not used by validated pipeline - only for local dev/testing
+- **Decision**: Validated-full-pipeline.yml calls individual phase scripts directly
+- **Status**: ⚠️ Intentionally skipped (v1.50)
+
+#### 2. GitHub Secret Naming (P1) ✅ RESOLVED
+- **Resolution**: Current implementation already correct
+- **Architecture**: GitHub secret `GH_TOKEN` (required) → Environment variable `GITHUB_TOKEN` (what code reads)
+- **Status**: ✅ Verified correct (v1.50)
+
+#### 3. Batch API Requests (P2) ⚠️ NOT PURSUING
+- **Analysis**: Sequential processing required for scoring logic; ElevenLabs has no batch API
+- **Decision**: Current volume doesn't justify complexity
+- **Status**: ⚠️ Not pursuing (v1.50)
+
+#### 4. Remove Synchronous Sleep Calls (P2) ⚠️ SKIPPED
+- **Reason**: Sleep calls for ElevenLabs API rate limiting with low volume
+- **Decision**: Async conversion provides no meaningful benefit
+- **Status**: ⚠️ Intentionally skipped (v1.50)
+
+---
+
+*This document represents a comprehensive review of all completed work on the RSS Podcast Digest System through version 1.51.*

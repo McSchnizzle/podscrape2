@@ -118,19 +118,49 @@ class MetadataGenerator:
         
         return ' '.join(content_lines)
     
-    def generate_metadata_for_script(self, script_path: str, topic: str, 
-                                   digest_date: date) -> EpisodeMetadata:
-        """Generate episode metadata from script content"""
-        logger.info(f"Generating metadata for script: {Path(script_path).name}")
-        
-        # Extract script content
-        script_content = self._extract_script_content(script_path)
-        content_length = len(script_content)
-        
+    def _clean_script_content(self, content: str) -> str:
+        """Clean script content (remove markdown headers, metadata blocks)"""
+        lines = content.split('\n')
+        content_lines = []
+        skip_metadata = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Skip markdown headers at the start
+            if stripped.startswith('#'):
+                continue
+
+            # Skip metadata blocks
+            if stripped.startswith('---') and stripped.endswith('---'):
+                skip_metadata = not skip_metadata
+                continue
+            if skip_metadata:
+                continue
+
+            # Skip empty lines at start
+            if not content_lines and not stripped:
+                continue
+
+            # Add content line
+            if stripped:
+                content_lines.append(stripped)
+
+        return ' '.join(content_lines)
+
+    def generate_metadata_from_content(self, script_content: str, topic: str,
+                                      digest_date: date) -> EpisodeMetadata:
+        """Generate episode metadata from script content (database-first)"""
+        logger.info(f"Generating metadata for {topic} digest")
+
+        # Clean script content (remove markdown headers, metadata blocks)
+        cleaned_content = self._clean_script_content(script_content)
+        content_length = len(cleaned_content)
+
         # Truncate if too long for API (generous limit for GPT-5-mini context)
         if content_length > 15000:
-            script_content = script_content[:15000] + "..."
-            logger.info(f"Truncated script content from {content_length} to {len(script_content)} characters")
+            cleaned_content = cleaned_content[:15000] + "..."
+            logger.info(f"Truncated script content from {content_length} to {len(cleaned_content)} characters")
         
         # Generate metadata using configured AI model
         system_prompt = f"""You are a professional podcast producer creating metadata for a daily digest podcast.
@@ -150,7 +180,7 @@ Make the title and summary appealing to busy professionals who want quick, valua
 
         user_prompt = f"""Create podcast metadata for this {topic} daily digest:
 
-CONTENT: {script_content}
+CONTENT: {cleaned_content}
 
 Generate metadata that accurately reflects the content and would attract the target audience."""
 
@@ -231,9 +261,20 @@ Generate metadata that accurately reflects the content and would attract the tar
             
         except Exception as e:
             logger.error(f"{self.ai_model} metadata generation failed: {e}")
-            
-            # Fallback to generated metadata
-            return self._generate_fallback_metadata(script_path, topic, digest_date)
+
+            # Fallback to generated metadata (using content-based fallback)
+            return self._generate_fallback_metadata_from_content(cleaned_content, topic, digest_date)
+
+    def generate_metadata_for_script(self, script_path: str, topic: str,
+                                   digest_date: date) -> EpisodeMetadata:
+        """Generate episode metadata from script file (legacy - prefer generate_metadata_from_content)"""
+        logger.info(f"Generating metadata for script: {Path(script_path).name}")
+
+        # Extract script content from file
+        script_content = self._extract_script_content(script_path)
+
+        # Use the content-based method
+        return self.generate_metadata_from_content(script_content, topic, digest_date)
     
     def _get_default_value(self, field: str, topic: str, digest_date: date) -> str:
         """Get default value for missing metadata fields"""
@@ -245,22 +286,40 @@ Generate metadata that accurately reflects the content and would attract the tar
         }
         return defaults.get(field, "Unknown")
     
-    def _generate_fallback_metadata(self, script_path: str, topic: str, 
-                                  digest_date: date) -> EpisodeMetadata:
-        """Generate basic metadata when AI model fails"""
+    def _generate_fallback_metadata_from_content(self, content: str, topic: str,
+                                                 digest_date: date) -> EpisodeMetadata:
+        """Generate basic metadata from content when AI model fails (database-first)"""
         logger.info("Using fallback metadata generation")
-        
-        # Try to extract some keywords from script content
+
+        # Simple keyword extraction from content
         try:
-            content = self._extract_script_content(script_path)
-            # Simple keyword extraction (could be enhanced)
             words = content.lower().split()
             common_words = set(['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'is', 'are', 'was', 'were', 'been', 'have', 'has', 'had', 'will', 'would', 'could', 'should'])
             keywords = [w for w in set(words) if len(w) > 4 and w not in common_words][:5]
             keyword_str = ', '.join(keywords) if keywords else topic.lower()
         except:
             keyword_str = topic.lower()
-        
+
+        return EpisodeMetadata(
+            title=f"{topic} Digest - {digest_date.strftime('%b %d, %Y')}",
+            summary=f"Today's essential {topic.lower()} insights and developments in a quick, digestible format.",
+            keywords=keyword_str,
+            category="Technology" if "tech" in topic.lower() or "ai" in topic.lower() else "Society"
+        )
+
+    def _generate_fallback_metadata(self, script_path: str, topic: str,
+                                  digest_date: date) -> EpisodeMetadata:
+        """Generate basic metadata when AI model fails (legacy file-based)"""
+        logger.info("Using fallback metadata generation (file-based)")
+
+        # Extract content from file and use content-based fallback
+        try:
+            content = self._extract_script_content(script_path)
+            return self._generate_fallback_metadata_from_content(content, topic, digest_date)
+        except:
+            # If file read fails, use minimal fallback
+            keyword_str = topic.lower()
+
         return EpisodeMetadata(
             title=f"{topic} Digest - {digest_date.strftime('%b %d, %Y')}",
             summary=f"Today's essential {topic.lower()} insights and developments in a quick, digestible format.",
@@ -269,20 +328,17 @@ Generate metadata that accurately reflects the content and would attract the tar
         )
     
     def generate_metadata_for_digest(self, digest, script_path: str = None) -> EpisodeMetadata:
-        """Generate metadata for a digest object"""
-        
-        # Use provided script path or get from digest
-        if script_path:
-            target_script_path = script_path
-        elif digest.script_path:
-            target_script_path = digest.script_path
-        else:
-            raise MetadataGenerationError(f"No script path available for digest {digest.id}")
-        
-        return self.generate_metadata_for_script(
-            target_script_path, 
-            digest.topic, 
-            digest.digest_date
+        """Generate metadata for a digest object using database content"""
+
+        # Use script content from database (database-first architecture)
+        if not digest.script_content:
+            raise MetadataGenerationError(f"No script content in database for digest {digest.id}")
+
+        # Call the new method that accepts content directly
+        return self.generate_metadata_from_content(
+            script_content=digest.script_content,
+            topic=digest.topic,
+            digest_date=digest.digest_date
         )
     
     def update_digest_metadata(self, digest_repo, digest_id: int, metadata: EpisodeMetadata) -> None:

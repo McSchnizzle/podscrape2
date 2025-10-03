@@ -554,6 +554,27 @@ class PipelineOrchestrator:
                 self.logger.info(f"📡 Publishing completed successfully")
                 self._record_phase_event('publishing', 'completed', None)
 
+            # Phase 6: Retention Management
+            # Cleans up old files, database records, and GitHub releases
+            # Retention policies configured via web UI (web_settings table)
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 6: RETENTION MANAGEMENT")
+            self.logger.info("="*80)
+
+            self._record_phase_event('retention', 'starting', None)
+
+            retention_result = self.run_phase_script('scripts/run_retention.py')
+
+            if not retention_result.get('success'):
+                self.logger.warning(f"Retention phase had issues: {retention_result.get('error')}")
+                self._record_phase_event('retention', 'failed', {
+                    'error': retention_result.get('error')
+                })
+            else:
+                cleanup_stats = retention_result.get('cleanup_stats', {})
+                self.logger.info(f"🧹 Retention completed: {cleanup_stats.get('total_files', 0)} files, {cleanup_stats.get('total_mb', 0)} MB freed")
+                self._record_phase_event('retention', 'completed', cleanup_stats)
+
             # Final summary
             return self._log_success(
                 start_time,
@@ -591,7 +612,7 @@ class PipelineOrchestrator:
 
         self._finalize_pipeline_run('success', summary)
 
-        # Note: Retention cleanup now happens at beginning of discovery phase
+        # Note: Retention cleanup is handled by dedicated Phase 6
         self.logger.info(f"\n📋 Log File: {self.log_file}")
         self.logger.info("🚀 Pipeline orchestration completed successfully!")
 
@@ -611,10 +632,10 @@ class PipelineOrchestrator:
         return {'success': False, 'error': error_message}
 
 def main():
-    parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline (orchestrator)')
+    parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline (orchestrator) - 6 phases')
     parser.add_argument('--log', help='Log file path', default=None)
     parser.add_argument('--phase', help='Stop after phase',
-                       choices=['discovery','audio','digest','tts'], default=None)
+                       choices=['discovery','audio','digest','tts','publishing','retention'], default=None)
 
     # Enhanced Phase 1 CLI flags
     parser.add_argument('--dry-run', action='store_true',

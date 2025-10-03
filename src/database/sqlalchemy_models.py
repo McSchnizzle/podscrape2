@@ -77,6 +77,54 @@ class Episode(Base):
         Index("ix_episodes_scored", "scored_at"),
     )
 
+    # State validation methods (Phase 6)
+    def validate_state(self) -> tuple[bool, list[str]]:
+        """
+        Validate episode state consistency.
+
+        Returns:
+            tuple: (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Valid states
+        valid_states = ["pending", "processing", "transcribed", "scored", "failed"]
+        if self.status not in valid_states:
+            errors.append(f"Invalid status: {self.status}")
+
+        # Required fields per state
+        if self.status == "pending":
+            if not self.title:
+                errors.append("pending state requires title")
+            if not self.audio_url:
+                errors.append("pending state requires audio_url")
+
+        elif self.status == "processing":
+            # Processing can have partial state - just check basics
+            pass
+
+        elif self.status == "transcribed":
+            if not self.transcript_content:
+                errors.append("transcribed state requires transcript_content")
+            if not self.transcript_generated_at:
+                errors.append("transcribed state requires transcript_generated_at")
+
+        elif self.status == "scored":
+            if not self.scores:
+                errors.append("scored state requires scores")
+            if not self.scored_at:
+                errors.append("scored state requires scored_at")
+
+        elif self.status == "failed":
+            if self.failure_count == 0:
+                errors.append("failed state requires failure_count > 0")
+
+        # Check state transition validity
+        if self.status == "scored" and not self.transcript_content:
+            errors.append("scored state requires episode to be transcribed first")
+
+        return (len(errors) == 0, errors)
+
 
 class Digest(Base):
     __tablename__ = "digests"
@@ -104,6 +152,77 @@ class Digest(Base):
         Index("ix_digests_date", "digest_date"),
         Index("ix_digests_timestamp", "digest_timestamp"),
     )
+
+    # State validation methods (Phase 6)
+    def validate_state(self) -> tuple[bool, list[str]]:
+        """
+        Validate digest state consistency.
+
+        Returns:
+            tuple: (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Required fields check
+        if not self.topic:
+            errors.append("digest requires topic")
+        if not self.digest_date:
+            errors.append("digest requires digest_date")
+
+        # Script generation state
+        if self.script_content and not self.script_word_count:
+            errors.append("digest with script_content should have script_word_count")
+
+        # TTS generation state
+        if self.mp3_path and not self.mp3_duration_seconds:
+            errors.append("digest with mp3_path should have mp3_duration_seconds")
+        if self.mp3_path and not self.mp3_title:
+            errors.append("digest with mp3_path should have mp3_title")
+        if self.mp3_path and not self.mp3_summary:
+            errors.append("digest with mp3_summary should have mp3_summary")
+
+        # Publishing state
+        if self.github_url and not self.mp3_path:
+            errors.append("digest with github_url should have mp3_path")
+        if self.published_at and not self.github_url:
+            errors.append("digest with published_at should have github_url")
+
+        # Episode linkage
+        if self.episode_count > 0 and not self.episode_ids:
+            errors.append("digest with episode_count > 0 should have episode_ids")
+        if self.episode_ids and self.episode_count != len(self.episode_ids):
+            errors.append(f"episode_count ({self.episode_count}) doesn't match episode_ids length ({len(self.episode_ids)})")
+
+        return (len(errors) == 0, errors)
+
+    def is_ready_for_tts(self) -> tuple[bool, list[str]]:
+        """Check if digest is ready for TTS generation."""
+        errors = []
+
+        if not self.script_content:
+            errors.append("missing script_content")
+        if self.episode_count == 0:
+            errors.append("no episodes (episode_count = 0)")
+
+        return (len(errors) == 0, errors)
+
+    def is_ready_for_publishing(self) -> tuple[bool, list[str]]:
+        """Check if digest is ready for publishing to GitHub."""
+        errors = []
+
+        if not self.mp3_path:
+            errors.append("missing mp3_path")
+        if not self.mp3_title:
+            errors.append("missing mp3_title")
+        if not self.mp3_summary:
+            errors.append("missing mp3_summary")
+
+        # Check MP3 file exists
+        from pathlib import Path
+        if self.mp3_path and not Path(self.mp3_path).exists():
+            errors.append(f"mp3_path points to non-existent file: {self.mp3_path}")
+
+        return (len(errors) == 0, errors)
 
 
 class Topic(Base):

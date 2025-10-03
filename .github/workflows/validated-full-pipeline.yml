@@ -241,6 +241,23 @@ jobs:
             echo "⚠️  RSS feed API may need time to propagate or cache to clear"
           fi
 
+      # Phase 6: Retention Management
+      # Cleans up old files, database records, and GitHub releases
+      # Retention policies are configured via web UI (web_settings table):
+      #   - local_mp3_days: Local MP3 files (default: 14 days)
+      #   - audio_cache_days: Audio cache files (default: 3 days)
+      #   - logs_days: Log files (default: 3 days)
+      #   - github_release_days: GitHub releases (default: 14 days)
+      #   - episode_retention_days: Episode database records (default: 14 days)
+      #   - digest_retention_days: Digest database records (default: 14 days)
+      - name: Phase 6 - Retention Management
+        run: |
+          source "${VENV_PATH}/bin/activate"
+          echo "Running: python scripts/run_retention.py --verbose"
+          python scripts/run_retention.py --verbose
+        env:
+          ORCHESTRATED_EXECUTION: "1"
+
       - name: Collect TTS logs and MP3 files
         if: always()
         run: |

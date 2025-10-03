@@ -154,24 +154,8 @@ class DiscoveryRunner:
     def discover_episodes(self):
         """Find unprocessed episodes"""
 
-        # Run retention cleanup at beginning of discovery phase
-        if create_retention_manager:
-            try:
-                self.logger.info("🧹 Running retention cleanup before episode discovery...")
-                retention_manager = create_retention_manager()
-                cleanup_stats = retention_manager.run_cleanup(dry_run=self.dry_run)
-
-                if cleanup_stats.files_deleted > 0 or cleanup_stats.episodes_deleted > 0 or cleanup_stats.digests_deleted > 0:
-                    self.logger.info(f"   Cleaned up {cleanup_stats.files_deleted} files, "
-                                   f"{cleanup_stats.episodes_deleted} episodes, "
-                                   f"{cleanup_stats.digests_deleted} digests, "
-                                   f"{cleanup_stats.github_releases_deleted} GitHub releases")
-                    if cleanup_stats.bytes_freed > 0:
-                        self.logger.info(f"   Freed {cleanup_stats.bytes_freed / (1024*1024):.1f} MB")
-                else:
-                    self.logger.info("   No cleanup needed")
-            except Exception as e:
-                self.logger.warning(f"⚠️  Retention cleanup failed (continuing with discovery): {e}")
+        # Retention cleanup now handled by dedicated Phase 6: scripts/run_retention.py
+        # This provides single source of truth for all retention operations
 
         # Handle specific episode GUID
         if self.episode_guid:

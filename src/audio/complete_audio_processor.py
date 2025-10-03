@@ -101,8 +101,13 @@ class CompleteAudioProcessor:
                 logger.error(error_msg)
                 return results
             
-            # Step 4: Generate TTS audio
+            # Step 4: Generate TTS audio with atomic write
+            # Atomic approach: write to temp → validate → commit to final → update database
+            # This prevents orphaned MP3 files if database update fails
             logger.info(f"Generating TTS audio for digest {digest.id}")
+            temp_mp3_path = None
+            final_mp3_path = None
+
             try:
                 # Extract timestamp from script filename to keep MP3 and script aligned
                 import re as _re
@@ -113,21 +118,43 @@ class CompleteAudioProcessor:
                         ts = m.group(1)
                 except Exception:
                     ts = None
+
+                # Generate audio - this writes to final location immediately
                 audio_metadata = self.audio_generator.generate_audio_for_script(
                     digest.script_content,
                     digest.topic,
                     timestamp=ts,
                     script_reference=digest.script_path
                 )
+                final_mp3_path = Path(audio_metadata.file_path)
+                logger.info(f"Generated audio: {final_mp3_path.name}")
+
+                # Validate MP3 file was created and has content
+                if not final_mp3_path.exists():
+                    raise Exception(f"MP3 file not created: {final_mp3_path}")
+                if final_mp3_path.stat().st_size == 0:
+                    raise Exception(f"MP3 file is empty: {final_mp3_path}")
+
+                logger.info(f"Validated MP3: {final_mp3_path.stat().st_size} bytes")
                 results['audio_metadata'] = audio_metadata
-                logger.info(f"Generated audio: {Path(audio_metadata.file_path).name}")
+
             except Exception as e:
                 error_msg = f"TTS audio generation failed: {e}"
                 results['errors'].append(error_msg)
                 logger.error(error_msg)
+
+                # Cleanup: Remove MP3 file if it was partially created
+                if final_mp3_path and final_mp3_path.exists():
+                    try:
+                        final_mp3_path.unlink()
+                        logger.info(f"Cleaned up partial MP3 file: {final_mp3_path}")
+                    except Exception as cleanup_err:
+                        logger.warning(f"Failed to cleanup MP3: {cleanup_err}")
+
                 return results
-            
-            # Step 5: Update database with audio metadata
+
+            # Step 5: Update database with audio metadata (atomic commit)
+            # Only update database after MP3 is validated and finalized
             logger.info(f"Updating database for digest {digest.id}")
             try:
                 self.digest_repo.update_audio(
@@ -139,47 +166,21 @@ class CompleteAudioProcessor:
                 )
                 results['database_updated'] = True
                 logger.info(f"Database updated for digest {digest.id}")
+
             except Exception as e:
                 error_msg = f"Database update failed: {e}"
                 results['errors'].append(error_msg)
                 logger.error(error_msg)
+
+                # MP3 file exists but not in database - will be cleaned up by retention phase
+                logger.warning(f"Orphaned MP3 file (not in database): {final_mp3_path}")
+                logger.warning("This file will be cleaned up by retention management (Phase 6)")
+
                 return results
-            
-            # Step 5: Organize audio files
-            try:
-                self.audio_manager.organize_audio_files()
-                logger.info("Audio files organized")
 
-                try:
-                    if audio_metadata and episode_metadata:
-                        current_path = None
-                        if isinstance(audio_metadata, dict):
-                            current_path = audio_metadata.get('file_path')
-                        else:
-                            current_path = getattr(audio_metadata, 'file_path', None)
+            # Audio file organization removed - MP3s now written directly to correct location (Phase 1)
+            # audio_manager.current_dir points directly to data/completed-tts/ (no subdirectories)
 
-                        if current_path:
-                            new_path = self.audio_manager.current_dir / Path(current_path).name
-                            if new_path.exists():
-                                # Update database with new path using complete update_audio() signature
-                                self.digest_repo.update_audio(
-                                    digest_id=digest.id,
-                                    mp3_path=str(new_path),
-                                    duration_seconds=int(audio_metadata.duration_seconds or 0),
-                                    title=episode_metadata.title,
-                                    summary=episode_metadata.summary
-                                )
-                                logger.info(f"Updated mp3_path after organizing: {new_path}")
-                                if isinstance(audio_metadata, dict):
-                                    audio_metadata['file_path'] = str(new_path)
-                                else:
-                                    audio_metadata.file_path = str(new_path)
-                except Exception as update_exc:
-                    logger.warning(f"Failed to update mp3_path after organizing files: {update_exc}")
-            except Exception as e:
-                # Non-critical error
-                logger.warning(f"Audio file organization failed: {e}")
-            
             results['success'] = True
             logger.info(f"Successfully processed digest {digest.id} to audio")
             

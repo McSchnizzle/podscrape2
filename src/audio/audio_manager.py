@@ -35,15 +35,10 @@ class AudioManager:
     def __init__(self, base_audio_dir: str = "data/completed-tts"):
         self.base_audio_dir = Path(base_audio_dir)
         self.base_audio_dir.mkdir(exist_ok=True)
-        
-        # Create subdirectories for organization
-        self.current_dir = self.base_audio_dir / "current"
-        self.archive_dir = self.base_audio_dir / "archive"
-        self.temp_dir = self.base_audio_dir / "temp"
-        
-        self.current_dir.mkdir(exist_ok=True)
-        self.archive_dir.mkdir(exist_ok=True)
-        self.temp_dir.mkdir(exist_ok=True)
+
+        # Write MP3s directly to base directory (no subdirectories)
+        # Publishing workflow looks for files at top level with -maxdepth 1
+        self.current_dir = self.base_audio_dir  # Point directly to base, not current/ subdirectory
     
     def get_audio_files(self, directory: str = "current") -> List[AudioFileInfo]:
         """Get list of audio files with metadata"""
@@ -65,15 +60,10 @@ class AudioManager:
     
     def _get_directory(self, directory: str) -> Path:
         """Get directory path by name"""
-        if directory == "current":
-            return self.current_dir
-        elif directory == "archive":
-            return self.archive_dir
-        elif directory == "temp":
-            return self.temp_dir
-        elif directory == "base":
+        if directory in ("current", "base"):
             return self.base_audio_dir
         else:
+            # Support custom subdirectories if needed
             return self.base_audio_dir / directory
     
     def _parse_audio_filename(self, audio_file: Path) -> Optional[AudioFileInfo]:
@@ -154,41 +144,17 @@ class AudioManager:
             'skipped': 0
         }
         
-        current_files = self.get_audio_files("current")
-        
-        for file_info in current_files:
-            if file_info.date_created < cutoff_date:
-                try:
-                    source_path = Path(file_info.filepath)
-                    target_path = self.archive_dir / source_path.name
-                    
-                    if not target_path.exists():
-                        shutil.move(str(source_path), str(target_path))
-                        results['archived'] += 1
-                        logger.info(f"Archived {source_path.name}")
-                    else:
-                        results['skipped'] += 1
-                        logger.info(f"Archive file already exists: {target_path.name}")
-                except Exception as e:
-                    logger.error(f"Failed to archive {file_info.filename}: {e}")
-                    results['errors'] += 1
-        
+        # DEPRECATED: Archiving is now handled by RetentionManager (scripts/run_retention.py)
+        # This method is kept for backward compatibility but does nothing
+        logger.info("Archiving skipped - handled by RetentionManager in Phase 6")
         return results
     
     def cleanup_temp_files(self) -> int:
         """Clean up temporary files"""
-        cleaned_count = 0
-        
-        for temp_file in self.temp_dir.glob("*"):
-            try:
-                if temp_file.is_file():
-                    temp_file.unlink()
-                    cleaned_count += 1
-                    logger.info(f"Deleted temp file: {temp_file.name}")
-            except Exception as e:
-                logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
-        
-        return cleaned_count
+        # DEPRECATED: Temp file cleanup now handled by RetentionManager (scripts/run_retention.py)
+        # This method is kept for backward compatibility but does nothing
+        logger.info("Temp file cleanup skipped - handled by RetentionManager in Phase 6")
+        return 0
     
     def get_storage_stats(self) -> Dict[str, any]:
         """Get storage statistics for audio files"""
@@ -199,7 +165,8 @@ class AudioManager:
             'total_size_mb': 0.0
         }
         
-        for dir_name in ['current', 'archive', 'temp', 'base']:
+        # Only check base directory (current and base point to same location now)
+        for dir_name in ['base']:
             directory = self._get_directory(dir_name)
             files = list(directory.glob("*.mp3"))
             

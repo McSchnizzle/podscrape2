@@ -435,230 +435,14 @@ class PublishingPipelineRunner:
         except Exception as e:
             self.logger.error(f"  ❌ Failed to verify digest: {e}")
             return False
-    
-    def generate_rss_feed(self, digests: List[Dict[str, Any]]) -> Optional[str]:
-        """Generate RSS feed from published digests"""
-        try:
-            self.logger.info("Generating RSS feed...")
-            
-            # Filter to only published digests
-            published_digests = [d for d in digests if d.get('github_url')]
-            self.logger.info(f"Creating RSS feed with {len(published_digests)} published episodes")
-            
-            if not published_digests:
-                self.logger.warning("No published digests found - cannot generate RSS feed")
-                return None
-            
-            if self.dry_run:
-                self.logger.info("DRY RUN: Would generate RSS feed")
-                return "<?xml version='1.0'?><!-- DRY RUN RSS FEED -->"
-            
-            # Convert digests to PodcastEpisode format
-            episodes = []
-            for digest in published_digests:
-                # Extract MP3 URL from GitHub release
-                # For now, construct the URL based on the GitHub release pattern
-                repo = os.getenv('GITHUB_REPOSITORY', 'user/repo')
-                date_str = digest['digest_date']
-                mp3_filename = Path(digest['mp3_path']).name
-                
-                # GitHub release asset URL pattern
-                mp3_url = f"https://github.com/{repo}/releases/download/daily-{date_str}/{mp3_filename}"
-                
-                # Create unique GUID by including MP3 filename (which contains timestamp)
-                mp3_basename = Path(digest['mp3_path']).stem  # Gets filename without extension
-                guid = f"digest-{digest['digest_date']}-{digest['topic'].lower().replace(' ', '-')}-{mp3_basename}"
 
-                episode = PodcastEpisode(
-                    title=digest['mp3_title'] or f"{digest['topic']} - {digest['digest_date']}",
-                    description=digest['mp3_summary'] or f"Daily digest for {digest['topic']}",
-                    audio_url=mp3_url,
-                    pub_date=generate_unique_pubdate(digest['digest_date'], digest['topic'], digest['created_at'], mp3_path=digest['mp3_path']),
-                    duration_seconds=digest['mp3_duration_seconds'] or 0,
-                    file_size=Path(digest['mp3_path']).stat().st_size if Path(digest['mp3_path']).exists() else 0,
-                    guid=guid
-                )
-                episodes.append(episode)
-            
-            # Generate RSS XML
-            rss_content = self.rss_generator.generate_rss_feed(episodes)
-            
-            # Save RSS feed locally
-            rss_file = Path("web_ui_hosted") / "public" / "daily-digest.xml"
-            rss_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(rss_file, 'w', encoding='utf-8') as f:
-                f.write(rss_content)
-            
-            self.logger.info(f"✅ RSS feed generated: {rss_file}")
-            # RSS file is already saved to the correct location (web_ui_hosted/public/)
-            # This is the only location that matters for Vercel deployment
-            self.logger.info(f"✅ RSS saved to Vercel deployment location: {rss_file}")
-            return rss_content
-            
-        except Exception as e:
-            self.logger.error(f"❌ Failed to generate RSS feed: {e}")
-            return None
-    
-    def deploy_to_vercel(self, rss_content: str) -> bool:
-        """Deploy RSS feed to Vercel"""
-        try:
-            self.logger.info("Deploying to Vercel...")
-            
-            if self.dry_run:
-                self.logger.info("DRY RUN: Would deploy to Vercel")
-                return True
-            
-            if self.vercel_deployer is None:
-                self.logger.info("Skipping Vercel deploy (deployer not initialized)")
-                return True
-
-            # Deploy using Vercel CLI
-            result = self.vercel_deployer.deploy_rss_feed(rss_content, production=True)
-            
-            if result.success:
-                self.logger.info(f"✅ Deployed to Vercel: {result.url}")
-                
-                # Validate deployment
-                if self.vercel_deployer.validate_deployment():
-                    self.logger.info("✅ Deployment validation passed")
-                    
-                    # RSS publication tracking not needed in new schema - deployment success is sufficient
-                    
-                    return True
-                else:
-                    self.logger.error("⚠️  Deployment validation failed")
-                    return False
-            else:
-                self.logger.error(f"❌ Vercel deployment failed: {result.error}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"❌ Failed to deploy to Vercel: {e}")
-            return False
-
-    def commit_rss_to_main(self, rss_content: str) -> bool:
-        """Commit RSS feed to main branch to trigger Vercel deployment"""
-        try:
-            self.logger.info("📝 Committing RSS feed to main branch...")
-
-            if self.dry_run:
-                self.logger.info("DRY RUN: Would commit RSS feed")
-                return True
-
-            # Save RSS content to web_ui_hosted/public/daily-digest.xml (the only location that matters)
-            rss_paths = [
-                Path("web_ui_hosted/public/daily-digest.xml")
-            ]
-
-            for rss_path in rss_paths:
-                rss_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(rss_path, 'w', encoding='utf-8') as f:
-                    f.write(rss_content)
-                self.logger.info(f"   📄 Saved RSS to {rss_path}")
-
-            # Git operations
-            import subprocess
-
-            # Get remote URL
-            github_token = os.getenv('GITHUB_TOKEN')
-            github_repo = os.getenv('GITHUB_REPOSITORY')
-
-            if github_token and github_repo:
-                remote_url = f"https://x-access-token:{github_token}@github.com/{github_repo}.git"
-                remote_name = remote_url
-            else:
-                remote_name = 'origin'
-
-            # Step 1: Fetch latest changes from remote
-            self.logger.info("   🔄 Fetching latest changes from remote...")
-            fetch_result = subprocess.run(['git', 'fetch', remote_name],
-                                         capture_output=True, text=True, timeout=60)
-            if fetch_result.returncode != 0:
-                self.logger.warning(f"Git fetch had issues: {fetch_result.stderr}")
-
-            # Step 2: Check if there are any uncommitted changes beyond our RSS file
-            status_result = subprocess.run(['git', 'status', '--porcelain'],
-                                          capture_output=True, text=True, timeout=30)
-            uncommitted_files = [line for line in status_result.stdout.strip().split('\n') 
-                                if line and 'daily-digest.xml' not in line]
-            
-            if uncommitted_files:
-                self.logger.warning(f"⚠️  Uncommitted changes detected (will be stashed): {len(uncommitted_files)} files")
-                # Stash any other uncommitted changes
-                stash_result = subprocess.run(['git', 'stash', 'push', '-u', '-m', 'RSS publish: stashing other changes'],
-                                             capture_output=True, text=True, timeout=30)
-                stashed = stash_result.returncode == 0
-            else:
-                stashed = False
-
-            try:
-                # Step 3: Pull latest changes with rebase strategy
-                self.logger.info("   🔄 Pulling latest changes...")
-                if github_token and github_repo:
-                    pull_result = subprocess.run(['git', 'pull', '--rebase', remote_url, 'main'],
-                                                capture_output=True, text=True, timeout=60)
-                else:
-                    pull_result = subprocess.run(['git', 'pull', '--rebase', 'origin', 'main'],
-                                                capture_output=True, text=True, timeout=60)
-                
-                if pull_result.returncode != 0 and "up to date" not in pull_result.stderr.lower():
-                    self.logger.warning(f"Git pull --rebase had issues: {pull_result.stderr}")
-                    # Try to abort rebase if it's in progress
-                    subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True, timeout=10)
-
-                # Step 4: Add the RSS file
-                result = subprocess.run(['git', 'add', 'web_ui_hosted/public/daily-digest.xml'],
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    self.logger.error(f"Git add failed: {result.stderr}")
-                    return False
-
-                # Step 5: Commit with timestamp
-                timestamp = get_pacific_now().strftime("%Y-%m-%d %H:%M:%S %Z")
-                commit_message = f"Update RSS feed - {timestamp}\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
-
-                result = subprocess.run(['git', 'commit', '-m', commit_message],
-                                      capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    if "nothing to commit" in result.stdout or "nothing to commit" in result.stderr:
-                        self.logger.info("   ℹ️  No changes to commit (RSS feed unchanged)")
-                        return True
-                    else:
-                        self.logger.error(f"Git commit failed: {result.stderr}")
-                        return False
-
-                # Step 6: Push to remote
-                self.logger.info("   📤 Pushing to remote...")
-                if github_token and github_repo:
-                    result = subprocess.run(['git', 'push', remote_url, 'main'],
-                                          capture_output=True, text=True, timeout=60)
-                else:
-                    result = subprocess.run(['git', 'push', 'origin', 'main'],
-                                          capture_output=True, text=True, timeout=60)
-
-                if result.returncode != 0:
-                    self.logger.error(f"Git push failed: {result.stderr}")
-                    return False
-
-                self.logger.info("   ✅ RSS feed committed and pushed to main")
-                self.logger.info("   🚀 Vercel will automatically deploy the updated RSS feed")
-                return True
-
-            finally:
-                # Step 7: Pop stash if we stashed earlier
-                if stashed:
-                    self.logger.info("   🔄 Restoring stashed changes...")
-                    pop_result = subprocess.run(['git', 'stash', 'pop'],
-                                               capture_output=True, text=True, timeout=30)
-                    if pop_result.returncode != 0:
-                        self.logger.warning(f"⚠️  Failed to pop stash: {pop_result.stderr}")
-                        self.logger.warning("   Run 'git stash pop' manually to restore your changes")
-
-        except Exception as e:
-            self.logger.error(f"❌ Failed to commit RSS to main: {e}")
-            return False
-
+    # REMOVED: Dead RSS generation code (~220 lines)
+    # Since v1.49, RSS feed is dynamically generated by Next.js API route at /api/rss/daily-digest
+    # The following methods are no longer needed:
+    # - generate_rss_feed() - RSS is now generated from database by API route
+    # - deploy_to_vercel() - No static file deployment needed
+    # - commit_rss_to_main() - No git commits needed for RSS updates
+    # Database-first architecture: Digests with github_url are automatically served via RSS API
     def run_complete_pipeline(self, days_back: int = 30) -> bool:
         """Run the complete publishing pipeline"""
 
@@ -686,30 +470,22 @@ class PublishingPipelineRunner:
                            f"❌ {upload_stats['failed']} failed, "
                            f"⏭️  {upload_stats['skipped']} skipped")
 
-            # 3. Verify and repair digests - should now pass since github_url is set by upload step
-            # This also handles edge cases where GitHub release exists but database wasn't updated
-            self.logger.info(f"\n✅ STEP 3: Verify GitHub Status")
-            verified = 0
-            not_ready = 0
-            for digest in digests:
-                if self.publish_digest(digest):
-                    verified += 1
-                else:
-                    not_ready += 1
-            self.logger.info(f"Verified {verified} digests ready for RSS (not ready: {not_ready})")
+            # Verification removed (Phase 5) - atomic TTS (Phase 4) ensures MP3/database consistency
+            # Step 2 upload already sets github_url for all successful uploads
+            # Database-first architecture: digests with github_url are automatically served via RSS API
 
-            # 4. RSS Feed is now generated dynamically by Next.js API route
+            # 3. RSS Feed is now generated dynamically by Next.js API route
             # The API route at /api/rss/daily-digest reads directly from database
             # No static file generation or git commits needed!
-            self.logger.info(f"\n✅ STEP 4: RSS Feed Status")
+            self.logger.info(f"\n✅ STEP 3: RSS Feed Status")
             self.logger.info("RSS feed is dynamically generated by API route: /api/rss/daily-digest")
             self.logger.info("Feed URL: https://podcast.paulrbrown.org/daily-digest.xml")
             self.logger.info("Episodes are served directly from database with 5-minute edge caching")
             self.logger.info(f"Published {len([d for d in digests if d.get('github_url')])} episodes to RSS feed (via database)")
 
-            # 5. Update digest status to 'published' for all digests in RSS feed
+            # 4. Update digest status to 'published' for all digests in RSS feed
             if not self.dry_run:
-                self.logger.info(f"\n📝 STEP 5: Update Digest Status")
+                self.logger.info(f"\n📝 STEP 4: Update Digest Status")
                 for digest in digests:
                     if digest.get('github_url'):
                         try:
@@ -721,14 +497,9 @@ class PublishingPipelineRunner:
                             self.logger.warning(f"Failed to update status for digest {digest['id']}: {e}")
                 self.logger.info(f"✅ Updated status to 'published' for {len([d for d in digests if d.get('github_url')])} digests")
 
-            # 6. Cleanup old files (optional) - only when not running under orchestrator or CI
-            if not self.dry_run and not self._is_github_actions and not os.getenv('ORCHESTRATED_EXECUTION'):
-                try:
-                    self.retention_manager.cleanup_all()
-                    self.logger.info("✅ Cleanup completed")
-                except Exception as e:
-                    self.logger.warning(f"⚠️  Cleanup failed: {e}")
-            
+            # Retention cleanup now handled by dedicated Phase 6: scripts/run_retention.py
+            # This provides single source of truth for all retention operations
+
             duration = (get_pacific_now() - start_time).total_seconds()
 
             # Log completion

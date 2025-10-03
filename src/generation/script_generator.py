@@ -418,6 +418,14 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.info(f"Marking {len(episodes)} episodes as digested")
             self.mark_digest_episodes_as_digested(digest)
 
+        # Delete local script file now that content is safely in database (database-first architecture)
+        if script_path and Path(script_path).exists():
+            try:
+                Path(script_path).unlink()
+                logger.info(f"Deleted temporary script file (content in database): {Path(script_path).name}")
+            except Exception as e:
+                logger.warning(f"Failed to delete script file {script_path}: {e}")
+
         return digest
     
     def create_daily_digests(self, digest_date: date, 
