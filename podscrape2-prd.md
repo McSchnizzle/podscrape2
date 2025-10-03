@@ -1,18 +1,20 @@
 # RSS Podcast Transcript Digest — Product Brief
 
-**Production Status**: Fully operational automated daily digest system with PostgreSQL database, OpenAI Whisper transcription, and comprehensive orchestrator.
+**Production Status**: Fully operational v1.52 with 6-phase pipeline, PostgreSQL (Supabase), OpenAI Whisper, and Next.js Web UI.
 
-An automated daily digest system that ingests podcast episodes from RSS feeds, transcribes audio using local OpenAI Whisper, scores content for topic relevancy, generates topic scripts, produces MP3s, and publishes a canonical RSS feed.
+An automated daily digest system that ingests podcast episodes from RSS feeds, transcribes audio using local OpenAI Whisper with memory-efficient incremental writes, scores content for topic relevancy, generates topic scripts from database-stored instructions, produces MP3s, and publishes via dynamic RSS API.
 
-Canonical RSS: https://podcast.paulrbrown.org/daily-digest.xml
+**Current Version**: v1.52 (October 2025)
+**RSS Feed**: https://podcast.paulrbrown.org/daily-digest.xml (Dynamic API)
 
-## What It Does
-- **Discovery**: Find new episodes from configured RSS feeds with health monitoring
-- **Processing**: Download and chunk audio; transcribe with local OpenAI Whisper (cross-platform)
-- **Intelligence**: Score against topics using GPT-5-mini; generate digest scripts with GPT-5
-- **Production**: Create MP3s with ElevenLabs TTS using topic-specific voices
-- **Publishing**: Deploy via GitHub Releases (MP3s) and Vercel (RSS feed)
-- **Management**: Optional Web UI for configuration and monitoring
+## What It Does (6-Phase Architecture)
+1. **Discovery**: Find new episodes from configured RSS feeds with health monitoring
+2. **Audio**: Download/chunk audio; transcribe with OpenAI Whisper (memory-efficient); score with GPT-5-mini
+3. **Digest**: Generate topic-based scripts using GPT-5 and database-stored instructions
+4. **TTS**: Create MP3s with ElevenLabs using topic-specific voices
+5. **Publishing**: Upload to GitHub Releases; update database for dynamic RSS API
+6. **Retention**: Automated cleanup of old MP3s, releases, logs, and database records
+- **Management**: Next.js Web UI hosted at podcast.paulrbrown.org for configuration and monitoring
 
 ## Architecture (Concise)
 
@@ -29,31 +31,36 @@ digests: id, topic, digest_date, script_path, mp3_path, mp3_title,
          mp3_summary, episode_ids (JSON), github_url, timestamps
 ```
 
-**Production Architecture**: PostgreSQL (Supabase) with professional backups, local OpenAI Whisper transcription, comprehensive orchestrator with standardized logging and retention management.
+**Production Architecture**: PostgreSQL (Supabase) with RLS and professional backups, local OpenAI Whisper with memory-efficient transcription, 6-phase orchestrator with standardized logging, and Next.js Web UI with dynamic RSS API.
 
-Key folders: data/ (logs, transcripts, scripts, completed-tts), scripts/ (phase scripts), public/ (daily-digest.xml)
+**Key Updates** (v1.49-v1.52):
+- Dynamic RSS API (no static files) since v1.49
+- Memory-efficient transcription with O(1) memory usage (v1.52)
+- Database-first architecture (no filesystem fallbacks, v1.52)
+- Dedicated retention phase with configurable periods (v1.51)
 
-## Web UI (Phases A–C)
+Key folders: data/ (logs, transcripts - staging only), scripts/ (6 phase scripts), web_ui_hosted/ (Next.js app)
 
-An optional local Web UI (Flask on 127.0.0.1:5001) provides configuration and operations while keeping the CLI pipelines unchanged when the UI is not running.
+## Web UI (Next.js on Vercel)
+
+Next.js Web UI hosted at podcast.paulrbrown.org provides configuration, monitoring, and operations.
 
 ### Capabilities
-- **Settings** (DB‑backed via `web_settings` + `WebConfigManager`):
-  - content_filtering.score_threshold
-  - content_filtering.max_episodes_per_digest
-  - audio_processing.chunk_duration_minutes
-  - audio_processing.transcribe_all_chunks / max_chunks_per_episode
-  - Settings are read by the pipeline (scorer, script generator, transcriber/audio)
+- **Settings** (Database-backed via `web_settings` table):
+  - Content filtering (score_threshold, max_episodes_per_digest)
+  - Audio processing (chunk_duration_minutes, transcribe settings)
+  - Retention periods (local_mp3_days, github_release_days, logs_days, etc.)
+  - Settings are read by the pipeline via `WebConfigManager`
 - **Feeds**:
   - List feeds (feed_url, title, active, last_checked, consecutive_failures)
   - Add feed (URL validation, duplicate guard, title autofill via FeedParser)
   - Toggle active; soft delete
-  - “Check feed” verifies TLS and audio enclosure reachability (no pipeline run)
+  - "Check feed" verifies TLS and audio enclosure reachability (no pipeline run)
   - Latest episode title + published date displayed per RSS feed
-- **Topics**:
-  - List/edit topics from Supabase `topics` table (Web UI Topics page)
-  - Edit voice_id, instruction_file (upload/validate under `digest_instructions/`), description, active
-  - Persist via `ConfigManager.save_topics()`; ContentScorer uses `ConfigManager` with `WebConfigManager` override
+- **Topics** (Database-First Architecture):
+  - List/edit topics from PostgreSQL `topics` table
+  - Edit voice_id, instructions_md (stored in database, no files), description, active
+  - All topic configuration in database, no filesystem dependencies (v1.52)
 - **Dashboard**:
   - Mirrors key settings from DB
   - Last Run distillation (recent scored episodes with correct feed + qualifying topics; latest digests from DB including episode titles and MP3 durations)
@@ -61,29 +68,43 @@ An optional local Web UI (Flask on 127.0.0.1:5001) provides configuration and op
   - Retry failed episodes; Run Publishing / Run Full Pipeline controls
   - Tail endpoint for latest log; we removed separate publishing log creation (noise)
 
-### Notable Choices
-- The UI does not trigger GPT/TTS except for manual “Run Full Pipeline”.
-- All settings live in SQLite (web_settings); `ConfigManager` reads `score_threshold` from WebConfig when present.
-- ContentScorer now loads topics and threshold via `ConfigManager` (with WebConfig override) to align with the Web UI.
-- Episodes used in digests are marked `digested` after daily digests complete to prevent reuse. A one‑time repair aligns legacy entries.
+### Notable Architectural Choices (v1.49-v1.52)
+- **Dynamic RSS API**: RSS XML generated on-demand from database (no static files, v1.49)
+- **Database-First**: All configuration in PostgreSQL, no filesystem fallbacks (v1.52)
+- **Memory-Efficient Transcription**: Incremental database writes for O(1) memory usage (v1.52)
+- **Immediate MP3 Cleanup**: Local MP3s deleted after GitHub upload (v1.51)
+- **6-Phase Pipeline**: Dedicated retention phase for systematic cleanup (v1.51)
+- **Row Level Security**: Full RLS enabled on all Supabase tables for security
 
 ### Operations
-- Start UI: `bash scripts/run_web_ui.sh` (PORT override supported)
-- UI tests: `cd ui-tests && npm install && npx playwright install && npx playwright test`
+- **Production**: Hosted at https://podcast.paulrbrown.org (Next.js on Vercel)
+- **Local Development**: `cd web_ui_hosted && npm run dev` (localhost:3000)
+- **UI Tests**: `cd ui-tests && npm install && npx playwright install && npx playwright test`
 
 ### Acceptance
 - Dashboard reflects latest pipeline status (scored episodes, digests, RSS items, pending/failed episodes)
 - Feeds and Topics changes persist and affect the pipeline
 - “Check feed” surfaces networking/format issues that would block downloads
 
-## Status & Next
+## Status & Roadmap
 
-Status: Core pipeline, publishing, and Web UI complete through Phase C.
+**Current Status**: v1.52 - Production system with 6-phase pipeline, database-first architecture, and dynamic RSS API
 
-Next:
-- Phase D: Publishing UI (publish/unpublish, asset status), retention controls
-- Phase E: Orchestration (lookback logic, manual dates, weekly summaries, scheduling)
-- Phase F: Ops/docs (end‑to‑end tests, concise docs)
+**Completed (v1.01-v1.52)**:
+- Core 6-phase pipeline (Discovery, Audio, Digest, TTS, Publishing, Retention)
+- PostgreSQL database with Row Level Security (RLS)
+- Memory-efficient transcription (O(1) memory usage)
+- Dynamic RSS API (Next.js route, no static files)
+- Database-first architecture (no filesystem fallbacks)
+- Next.js Web UI hosted on Vercel
+- Automated retention management with configurable periods
+
+**Remaining** (See master-tasklist.md):
+- 15 P3 (Low Priority) tasks including:
+  - Database connection optimization (connection pooling)
+  - Analytics & metrics dashboard
+  - Weekly summary digest feature
+  - Enhanced monitoring and alerting
 
 1. **Feed Manager** (`feed_manager.py`)
    - Add/remove RSS podcast feeds
@@ -95,19 +116,21 @@ Next:
    - Split audio into 10-minute chunks for processing
    - Manage audio file caching and cleanup
 
-3. **Transcript Generator** (`transcript_generator.py`)
-   - Transcribe audio chunks using Nvidia Parakeet ASR
-   - Concatenate chunk transcripts into complete episodes
+3. **Transcript Generator** (`openai_whisper_transcriber.py`)
+   - Transcribe audio chunks using local OpenAI Whisper
+   - Memory-efficient mode with incremental database writes (v1.52)
+   - O(1) constant memory usage regardless of transcript size
    - Quality validation and error handling
 
-4. **Content Scorer** (`content_scorer.py`)
-   - Score episodes against all topics using GPT-5-mini Responses API
+4. **Content Scorer** (integrated in `run_audio.py` since v1.28)
+   - Score episodes against all topics using GPT-5-mini
    - Structured JSON output with relevancy scores 0.0-1.0
-   - Batch processing for efficiency
+   - Integrated into Audio phase for efficiency
 
 5. **Script Generator** (`script_generator.py`)
    - Combine high-scoring episodes (≥0.65) per topic
-   - Follow topic-specific instructions from digest_instructions/
+   - Load topic instructions from database `instructions_md` field (v1.52)
+   - Database-first architecture (no filesystem fallbacks)
    - Use GPT-5 with 25,000 word limit per script
 
 6. **TTS Generator** (`tts_generator.py`)
@@ -115,33 +138,40 @@ Next:
    - Configurable voice settings per topic
    - Generate titles/summaries using GPT-5-nano
 
-7. **Publisher** (`publisher.py`)
-   - Upload MP3s to GitHub repository
-   - Update RSS XML feed for podcast.paulrbrown.org
-   - Manage retention: 7 days local, 14 days GitHub
+7. **Publisher** (`run_publishing.py`)
+   - Upload MP3s to GitHub repository (GitHub Releases)
+   - Update database with github_url for dynamic RSS API
+   - Delete local MP3s immediately after successful upload
 
-8. **Main Orchestrator** (`daily_digest.py`)
-   - Coordinate entire pipeline
-   - Handle Monday (72hr) vs weekday (24hr) lookback
-   - Support manual trigger with date parameters
+8. **Retention Manager** (`run_retention.py` - v1.51+)
+   - Dedicated Phase 6 for all cleanup operations
+   - Configurable retention periods via web_settings table
+   - Cleanup: GitHub releases, database records, logs, audio cache
+
+9. **Main Orchestrator** (`run_full_pipeline_orchestrator.py`)
+   - Coordinate entire 6-phase pipeline
+   - Comprehensive logging with phase summaries (v1.52)
+   - Support phase-specific execution (e.g., --phase audio)
 
 ## Key Features & Requirements
 
 ### Content Processing
-- **Source**: RSS podcast feeds specified by user
+- **Source**: RSS podcast feeds from PostgreSQL `feeds` table
 - **Filtering**: Minimum 3-minute duration, exclude short segments
-- **Transcription**: Nvidia Parakeet ASR with 10-minute audio chunking
+- **Transcription**: Local OpenAI Whisper with 3-minute audio chunking
+- **Memory Efficiency**: Incremental database writes for O(1) memory usage (v1.52)
 - **Scoring**: Each episode scored against all topics (0.0-1.0 scale)
 - **Threshold**: Only episodes scoring ≥0.65 included in digests
 - **Deduplication**: Prevent reprocessing of same episode_guid
 
 ### Quality Controls
-- **Transcript Validation**: Verify transcript quality and completeness from ASR
+- **Transcript Validation**: Verify transcript quality and completeness from OpenAI Whisper
 - **Failure Handling**: 3-retry limit, mark failed episodes permanently
 - **Feed Health**: Flag feeds with 3+ consecutive days of failures
 - **Content Limits**: Maximum 25,000 words per script
 - **Audio Quality**: Optimize for Bluetooth earbuds (good mobile quality)
-- **Chunking Strategy**: Process audio in 10-minute segments for optimal ASR performance
+- **Chunking Strategy**: Process audio in 3-minute segments for optimal ASR performance
+- **Memory Management**: O(1) constant memory usage via incremental database writes (v1.52)
 
 ### Automation Features
 - **Daily Execution**: Cron job at 6 AM daily
@@ -151,10 +181,15 @@ Next:
 - **Comprehensive Logging**: File-based logging with minimal console output
 
 ### Publishing & Distribution
-- **GitHub Integration**: Automated MP3 upload and release management
-- **RSS Compliance**: Full RSS 2.0 specification with podcast extensions
- - **Vercel Hosting**: Static RSS XML served at podcast.paulrbrown.org/daily-digest.xml
-- **Retention Management**: Automated cleanup after retention periods
+- **GitHub Integration**: Automated MP3 upload to GitHub Releases with daily tags
+- **Dynamic RSS API**: Next.js API route generates RSS 2.0 XML on-demand from database (v1.49)
+  - URL: podcast.paulrbrown.org/daily-digest.xml (rewrite to /api/rss/daily-digest)
+  - 5-minute edge cache, no static files, database is single source of truth
+- **Vercel Hosting**: Next.js app with API routes hosted on Vercel
+- **Retention Management**: Dedicated Phase 6 with configurable retention periods (v1.51)
+  - Local MP3s: Deleted immediately after GitHub upload
+  - GitHub releases: Configurable (default 14 days)
+  - Database records: Configurable (default 14 days)
 - **Metadata Rich**: Include timestamps, summaries, and topic categorization
 
 ## API Integrations
@@ -162,7 +197,8 @@ Next:
 ### Audio Processing
 - **RSS Feeds**: Standard RSS 2.0 with podcast extensions for episode discovery
 - **HTTP Downloads**: Direct audio file downloads from podcast CDNs
-- **Nvidia Parakeet ASR**: Open-source ASR model via Hugging Face Transformers
+- **OpenAI Whisper**: Local cross-platform transcription (no API costs)
+- **ffmpeg**: Audio chunking and format conversion
 
 ### AI Services
 - **OpenAI GPT-5-mini**: Content scoring with Responses API and JSON schema
@@ -173,8 +209,8 @@ Next:
 - **ElevenLabs**: High-quality TTS conversion with voice customization
 
 ### Publishing Services
-- **GitHub API**: Repository management and file uploads
-- **Vercel**: Static hosting for RSS feed delivery
+- **GitHub API**: Repository management, file uploads, and release management
+- **Vercel**: Next.js app hosting with API routes for dynamic RSS generation
 
 ## Configuration Management
 
@@ -186,10 +222,11 @@ GITHUB_TOKEN=your-github-token-here
 GITHUB_REPOSITORY=your-username/your-repo-name
 ```
 
-### Configuration Files
-- **config/feeds.json**: RSS podcast feed management
-- **Supabase topics**: Topic configuration, voice settings, instructions
-- **digest_instructions/*.md**: Topic-specific generation instructions
+### Configuration (Database-First Architecture, v1.52)
+- **PostgreSQL `feeds` table**: RSS podcast feed management
+- **PostgreSQL `topics` table**: Topic configuration, voice settings, instructions_md
+- **PostgreSQL `web_settings` table**: All system settings including retention periods
+- **No filesystem configuration files**: All config in database (digest_instructions/ removed v1.52)
 
 ## Success Metrics
 

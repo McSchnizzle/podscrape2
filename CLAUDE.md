@@ -6,17 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an automated RSS podcast digest system that follows this flow:
 ```
-RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription (Parakeet MLX) →
-AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Vercel RSS)
+RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription (OpenAI Whisper) →
+AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dynamic RSS API) → Retention
 ```
+
+**Current Version**: v1.52 (October 2025)
+**Pipeline Architecture**: 6 phases (Discovery, Audio, Digest, TTS, Publishing, Retention)
 
 ### Core Data Flow
 - **RSS Feeds**: Monitored for new episodes via `src/podcast/feed_parser.py`
 - **Audio Processing**: Downloads, chunks (3-min), transcribes with OpenAI Whisper (cross-platform)
 - **Content Scoring**: Uses GPT-5-mini to score transcripts against configured topics (threshold: 0.65)
-- **Script Generation**: Creates topic-based digest scripts using GPT-5 and topic instruction files
+- **Script Generation**: Creates topic-based digest scripts using GPT-5 and database-stored topic instructions (database-first architecture)
 - **Audio Generation**: Converts scripts to MP3 using ElevenLabs TTS with topic-specific voices
-- **Publishing**: Uploads to GitHub Releases, generates RSS feed, deploys to Vercel
+- **Publishing**: Uploads to GitHub Releases, updates database for dynamic RSS API (no static files since v1.49)
+- **Retention**: Automatic cleanup of old MP3s, GitHub releases, logs, and database records based on configured retention periods
 
 ### Database Architecture (PostgreSQL via Supabase)
 - **episodes**: Core episode data, transcripts, AI scores, processing status
@@ -65,15 +69,15 @@ python3 run_full_pipeline.py
 python3 run_publishing_pipeline.py
 
 # Stop after specific phase for debugging
-python3 run_full_pipeline_orchestrator.py --phase audio  # discovery, audio, scoring, digest, tts, publishing
+python3 run_full_pipeline_orchestrator.py --phase audio  # discovery, audio, digest, tts, publishing, retention
 
 # Individual phase scripts (production-ready)
 python3 scripts/run_discovery.py    # RSS feed discovery
-python3 scripts/run_audio.py        # Download + transcribe
-python3 scripts/run_scoring.py      # AI content scoring
+python3 scripts/run_audio.py        # Download + transcribe + score (integrated since v1.28)
 python3 scripts/run_digest.py       # Script generation
 python3 scripts/run_tts.py          # Audio generation
-python3 scripts/run_publishing.py   # GitHub + RSS + Vercel
+python3 scripts/run_publishing.py   # GitHub release uploads + database updates
+python3 scripts/run_retention.py    # Cleanup old files and database records
 ```
 
 ### Web UI (Next.js)
@@ -169,15 +173,17 @@ python3 -m alembic current       # Check current migration status
 
 Real data reveals actual RSS behavior, network issues, and audio CDN problems that mocks hide.
 
-### Configuration Management
-- **Topics**: Managed in `config/topics.json` with voice mappings and instruction files
-- **Topic Instructions**: Stored in `digest_instructions/` directory as markdown files
+### Configuration Management (Database-First Architecture)
+- **Topics**: Stored in PostgreSQL `topics` table with voice mappings and instructions_md (no filesystem fallbacks since v1.52)
+- **Topic Instructions**: Stored as `instructions_md` field in database `topics` table (digest_instructions/ directory deleted in v1.52)
 - **Web Settings**: Database-backed via `web_settings` table and `WebConfigManager`
 - **Environment**: API keys in `.env` file (OpenAI, ElevenLabs, GitHub tokens)
+- **Feeds**: Stored in PostgreSQL `feeds` table (no JSON files)
 
 ### Audio Processing Architecture
 - **Chunking**: Audio split into 3-minute chunks for optimal ASR performance
 - **Transcription**: OpenAI Whisper (local, cross-platform) with configurable model size
+- **Memory Efficiency**: Incremental database writes per chunk for O(1) constant memory usage (v1.52)
 - **TTS**: ElevenLabs with topic-specific voice IDs and settings
 - **Cleanup**: Automatic cleanup of intermediate audio files after processing
 
@@ -185,37 +191,44 @@ Real data reveals actual RSS behavior, network issues, and audio CDN problems th
 
 ### Source Code Organization (`src/`)
 ```
-config/          # Configuration management (topics, web settings, environment)
-database/        # SQLite models + SQLAlchemy migration-ready models
-podcast/         # RSS parsing, audio processing, Parakeet transcription
-scoring/         # GPT-based content scoring against topics
-generation/      # Script generation using topic instructions + GPT
+config/          # Configuration management (web settings, environment)
+database/        # SQLAlchemy models for PostgreSQL + legacy SQLite support
+podcast/         # RSS parsing, audio processing, OpenAI Whisper transcription
+generation/      # Script generation using database-stored instructions + GPT
 audio/           # TTS generation, metadata, audio management
-publishing/      # GitHub uploads, RSS generation, Vercel deployment
+publishing/      # GitHub uploads, database updates for dynamic RSS API
+utils/           # Shared utilities, logging, error handling
 ```
 
 ### Data Architecture (`data/`)
 ```
-database/        # SQLite files (main: digest.db)
-transcripts/     # Raw transcript files from Parakeet MLX
-scripts/         # Generated digest scripts (markdown format)
-completed-tts/   # Final MP3 files organized by date
-logs/           # Pipeline execution logs
-rss/            # Generated RSS feed (daily-digest.xml)
+database/        # Legacy SQLite files (digest.db) - PostgreSQL primary since v1.28
+transcripts/     # Raw transcript files from OpenAI Whisper
+scripts/         # Temporary digest scripts (deleted after database upload since v1.51)
+completed-tts/   # Staging area for MP3 files (deleted after GitHub upload since v1.51)
+logs/           # Pipeline execution logs (automatic retention management)
 ```
 
+**Note**: RSS feed is now dynamically generated via API route (no static files since v1.49)
+
 ### Web UI (`web_ui_hosted/`)
-Next.js application providing hosted configuration interface:
-- Settings management (score thresholds, audio processing options)
-- Feed management (add/edit RSS feeds, health checking)
-- Topic configuration (voice IDs, instruction files)
-- Dashboard (recent episodes, system status, pipeline controls)
+Next.js application providing hosted configuration interface at podcast.paulrbrown.org:
+- Settings management (score thresholds, audio processing options, retention periods)
+- Feed management (add/edit RSS feeds, health checking, active/inactive toggles)
+- Topic configuration (voice IDs, instructions_md editing via database)
+- Dashboard (recent episodes, system status, pipeline controls, phase summaries)
 
 ### Publishing Architecture
-- **GitHub Releases**: Daily tags (`daily-YYYY-MM-DD`) with MP3 assets
-- **RSS Generation**: Standards-compliant podcast RSS with proper metadata
-- **Vercel Deployment**: Automatic deployment to `podcast.paulrbrown.org/daily-digest.xml`
-- **Retention**: Automatic cleanup of old files (7-14 day retention)
+- **GitHub Releases**: Daily tags (`daily-YYYY-MM-DD`) with MP3 assets uploaded and stored
+- **Dynamic RSS API**: Next.js API route generates RSS 2.0 XML from database on-demand (v1.49)
+  - URL: `podcast.paulrbrown.org/daily-digest.xml` → `/api/rss/daily-digest`
+  - 5-minute edge cache, no static files, database is single source of truth
+- **Vercel Hosting**: Automatic deployment of Next.js app with API routes
+- **Retention Phase**: Dedicated cleanup phase (v1.51) with configurable periods:
+  - Local MP3s: Deleted immediately after GitHub upload
+  - GitHub releases: 14 days (configurable)
+  - Database records: 14 days (configurable)
+  - Logs: 3 days (configurable)
 
 ## Integration Points
 
@@ -314,8 +327,9 @@ gh release list --repo $GITHUB_REPOSITORY
 curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
 ```
 
-### Configuration Changes
-- **Topics**: Edit `config/topics.json` directly or via Web UI
-- **Instruction Files**: Add/edit markdown files in `digest_instructions/`
-- **Settings**: Use Web UI or direct database manipulation of `web_settings` table
-- **Feeds**: Add via Web UI or database insertion into `feeds` table
+### Configuration Changes (Database-First Architecture)
+- **Topics**: Edit via Web UI Topics page or direct PostgreSQL `topics` table manipulation
+- **Topic Instructions**: Edit `instructions_md` field in `topics` table (no filesystem files since v1.52)
+- **Settings**: Use Web UI Settings page or direct database manipulation of `web_settings` table
+- **Feeds**: Add via Web UI Feeds page or database insertion into `feeds` table
+- **Retention Periods**: Configure via Web UI or `web_settings` table (local_mp3_days, github_release_days, etc.)

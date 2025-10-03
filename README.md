@@ -1,8 +1,9 @@
 # RSS Podcast Digest System
 
-Production-ready automated system that generates daily, topic-based podcast digests from RSS feeds. Features a comprehensive orchestrator, PostgreSQL database, OpenAI Whisper transcription, and optional Web UI for management.
+Production-ready automated system that generates daily, topic-based podcast digests from RSS feeds. Features a comprehensive orchestrator, PostgreSQL database, OpenAI Whisper transcription, and Next.js Web UI for management.
 
-**Live RSS Feed**: https://podcast.paulrbrown.org/daily-digest.xml
+**Current Version**: v1.52 (October 2025)
+**Live RSS Feed**: https://podcast.paulrbrown.org/daily-digest.xml (Dynamic API)
 
 ## 🎯 Overview
 
@@ -16,17 +17,26 @@ This production system automatically:
 
 ## 🏗️ Architecture
 
+**6-Phase Pipeline** (v1.51+):
 ```
-RSS Feeds → Episode Discovery → Audio Download/Chunking → OpenAI Whisper Transcription → AI Scoring → Script Generation → TTS → GitHub/RSS Publishing
+1. Discovery → 2. Audio (Download/Transcribe/Score) → 3. Digest (Script Gen) →
+4. TTS → 5. Publishing (GitHub + DB) → 6. Retention (Cleanup)
+```
+
+**Data Flow**:
+```
+RSS Feeds → Episode Discovery → Audio Download/Chunking → OpenAI Whisper (Memory-Efficient) →
+AI Scoring → Script Generation (Database-First) → TTS → GitHub Releases → Dynamic RSS API → Retention Cleanup
 ```
 
 ### Core Components
-- **Database**: PostgreSQL (Supabase) with SQLAlchemy models and automatic connection pooling
-- **Orchestrator**: Production-ready pipeline with comprehensive logging and error handling
-- **Transcription**: Local OpenAI Whisper (cross-platform, no API costs)
-- **AI Processing**: GPT-5-mini scoring and GPT-5 script generation
+- **Database**: PostgreSQL (Supabase) with SQLAlchemy models, RLS security, and automatic connection pooling
+- **Orchestrator**: Production-ready 6-phase pipeline with comprehensive logging and error handling
+- **Transcription**: Local OpenAI Whisper with memory-efficient incremental database writes (v1.52)
+- **AI Processing**: GPT-5-mini scoring and GPT-5 script generation (database-first architecture)
 - **Audio/TTS**: ElevenLabs with per-topic voice configuration
-- **Publishing**: GitHub Releases (MP3 assets) + Vercel (RSS feed)
+- **Publishing**: GitHub Releases (MP3 assets) + Dynamic RSS API (v1.49)
+- **Retention**: Automated cleanup phase with configurable retention periods (v1.51)
 - **Web UI**: Next.js app hosted at podcast.paulrbrown.org for management and monitoring
 
 ## 📁 Project Structure
@@ -43,29 +53,24 @@ podscrape2/
 │   └── publishing/        # GitHub and RSS publishing
 ├── web_ui_hosted/         # Next.js Web UI (hosted on Vercel)
 ├── ui-tests/              # Playwright end-to-end tests for the Web UI
-├── scripts/                # Production phase scripts
-│   ├── run_discovery.py   # RSS feed discovery
-│   ├── run_audio.py       # Download + transcribe
-│   ├── run_scoring.py     # AI content scoring
-│   ├── run_digest.py      # Script generation
-│   ├── run_tts.py         # Audio generation
-│   └── run_publishing.py  # GitHub + RSS + Vercel
+├── scripts/                # Production phase scripts (6-phase architecture)
+│   ├── run_discovery.py   # Phase 1: RSS feed discovery
+│   ├── run_audio.py       # Phase 2: Download + transcribe + score
+│   ├── run_digest.py      # Phase 3: Script generation
+│   ├── run_tts.py         # Phase 4: Audio generation
+│   ├── run_publishing.py  # Phase 5: GitHub uploads + database updates
+│   └── run_retention.py   # Phase 6: Cleanup old files and records
 ├── data/
-│   ├── database/          # Legacy SQLite files
-│   ├── transcripts/       # Raw transcript files
-│   ├── scripts/           # Generated digest scripts
-│   ├── completed-tts/     # Generated MP3 files
-│   └── logs/              # Execution logs
+│   ├── database/          # Legacy SQLite files (PostgreSQL primary since v1.28)
+│   ├── transcripts/       # Raw transcript files from OpenAI Whisper
+│   ├── scripts/           # Temporary digest scripts (deleted after DB upload)
+│   ├── completed-tts/     # Staging area for MP3s (deleted after GitHub upload)
+│   └── logs/              # Execution logs (automatic retention management)
 ├── config/
-│   ├── channels.json      # YouTube channel configuration
-│   └── topics.json        # Topic and voice settings
-├── digest_instructions/   # Topic-specific generation instructions
-├── music_cache/          # Audio assets for music beds
+│   └── (legacy files - all config now in PostgreSQL database)
 ├── tests/                # Phase-specific test suites
 ├── docs/
-│   ├── podscrape2-prd.md # Product Requirements Document
-│   └── completed-phases1-7.md  # Completed work log (Phases 1–7)
-│   └── tasklist2.md      # Remaining work (Web UI + Automation)
+│   └── archive/          # Historical documentation
 ├── run_full_pipeline_orchestrator.py  # Production orchestrator
 ├── run_full_pipeline.py               # Legacy single-phase runner
 └── run_publishing_pipeline.py         # Publishing-only pipeline
@@ -148,23 +153,23 @@ WHISPER_MODEL=base                               # OpenAI Whisper model size
 # Or check feeds programmatically
 python3 scripts/run_discovery.py --dry-run --verbose
 
-# Individual phase execution
-python3 scripts/run_discovery.py   # Discover new episodes
-python3 scripts/run_audio.py       # Download and transcribe
-python3 scripts/run_scoring.py     # Score content
-python3 scripts/run_digest.py      # Generate scripts
-python3 scripts/run_tts.py         # Create audio
-python3 scripts/run_publishing.py  # Publish to GitHub/RSS
+# Individual phase execution (6-phase architecture)
+python3 scripts/run_discovery.py   # Phase 1: Discover new episodes
+python3 scripts/run_audio.py       # Phase 2: Download, transcribe, and score
+python3 scripts/run_digest.py      # Phase 3: Generate scripts
+python3 scripts/run_tts.py         # Phase 4: Create audio
+python3 scripts/run_publishing.py  # Phase 5: Publish to GitHub + update DB
+python3 scripts/run_retention.py   # Phase 6: Cleanup old files/records
 ```
 
-#### Topic Management (Supabase)
-- Topics, instructions, and voice settings now live in the Supabase `topics` table.
-- To migrate legacy JSON/topic files:
-  ```bash
-  python3 scripts/migrate_topics_to_supabase.py --dry-run   # preview
-  python3 scripts/migrate_topics_to_supabase.py             # import into Supabase
-  ```
-- Edit topics from the hosted Web UI (Topics page) or locally via Supabase SQL/editor.
+#### Topic Management (Database-First Architecture)
+- **All topic configuration lives in PostgreSQL `topics` table** (v1.52)
+- Topic instructions stored as `instructions_md` field in database (no filesystem files)
+- Voice settings, descriptions, and active status all in database
+- **Management Options**:
+  - Web UI Topics page: https://podcast.paulrbrown.org/topics (recommended)
+  - Direct PostgreSQL table manipulation via Supabase SQL editor
+  - No JSON files or markdown files in filesystem (digest_instructions/ removed v1.52)
 
 ## 🔄 Daily Operation
 
@@ -206,24 +211,24 @@ python src/database/status.py
 
 The Next.js Web UI is hosted at https://podcast.paulrbrown.org and provides:
 
-- **Settings**: DB‑backed controls for:
-  - content_filtering.score_threshold
-  - content_filtering.max_episodes_per_digest
-  - audio_processing.chunk_duration_minutes
-  - audio_processing.transcribe_all_chunks / max_chunks_per_episode
+- **Settings**: Database-backed controls for:
+  - Content filtering (score_threshold, max_episodes_per_digest)
+  - Audio processing (chunk_duration_minutes, transcribe settings)
+  - Retention periods (local_mp3_days, github_release_days, logs_days, etc.)
 - **Feeds**:
-  - List/group (RSS vs YouTube), latest episode + published date (RSS)
-  - Add (URL validation, duplicate guard, title autofill), toggle active, soft delete
-  - “Check feed” verifies TLS and audio enclosure reachability (no pipeline run)
+  - List/group active RSS feeds, latest episode + published date
+  - Add feeds (URL validation, duplicate guard, title autofill), toggle active, soft delete
+  - "Check feed" verifies TLS and audio enclosure reachability (no pipeline run)
 - **Topics**:
-  - Edit voice_id, instruction_file (upload/validate under `digest_instructions/`), description, active
+  - Edit voice_id, instructions_md (database-stored, no files), description, active
+  - All topic configuration stored in PostgreSQL, no filesystem dependencies
 - **Dashboard**:
-  - Key settings; 6 most recent RSS items
-  - Last Run summary (recent scored episodes with correct feed + qualifying topics; created digests and MP3 durations)
-  - Transcribed but not yet digested (accurate); retry failed episodes
-  - Run Publishing / Run Full Pipeline / per‑phase buttons
-  - Live Status: auto‑starts log streaming with phase badges
-  - System Health: ffmpeg, gh CLI + auth, parakeet‑mlx, API keys
+  - Key settings display; Recent RSS episodes with phase summaries
+  - Last Run summary (scored episodes, created digests, MP3 durations)
+  - Transcribed but not yet digested episodes; retry failed episodes
+  - Run Publishing / Run Full Pipeline / per-phase execution buttons
+  - Live Status: auto-starts log streaming with real-time phase badges
+  - System Health: ffmpeg, gh CLI + auth, OpenAI Whisper, API keys, database connectivity
 
 Run the UI locally:
 ```bash
@@ -255,15 +260,13 @@ python tests/test_performance.py
 
 ## 📊 Content Flow
 
-### Daily Pipeline
-1. **Discovery**: Find new episodes from RSS podcast feeds
-2. **Filtering**: Exclude episodes <3 minutes, download audio
-3. **Transcription**: Process audio chunks with local OpenAI Whisper
-4. **Scoring**: Score each episode against all topics (GPT-5-mini)
-5. **Selection**: Include episodes scoring ≥0.65 for each topic
-6. **Generation**: Create topic-based digest scripts (GPT-5)
-7. **Audio**: Convert scripts to MP3 (ElevenLabs TTS)
-8. **Publishing**: Upload to GitHub Releases and update RSS feed
+### Daily Pipeline (6-Phase Architecture)
+1. **Discovery**: Find new episodes from RSS podcast feeds, update database
+2. **Audio**: Download audio, chunk into 3-min segments, transcribe with OpenAI Whisper (memory-efficient), score with GPT-5-mini
+3. **Digest**: Generate topic-based digest scripts using GPT-5 and database-stored instructions
+4. **TTS**: Convert scripts to MP3 using ElevenLabs with topic-specific voices
+5. **Publishing**: Upload MP3s to GitHub Releases, update database with github_url for dynamic RSS API
+6. **Retention**: Cleanup old MP3s, GitHub releases, logs, and database records per configured retention periods
 
 ### Content Scoring
 - Each episode scored against all topics (0.0-1.0 scale)
@@ -280,15 +283,19 @@ python tests/test_performance.py
 
 ## 📱 RSS Feed
 
-**Feed URL**: https://podcast.paulrbrown.org/daily-digest.xml (canonical)
+**Feed URL**: https://podcast.paulrbrown.org/daily-digest.xml (Dynamic API since v1.49)
 
-Note: As of Sep 2025, the project standardized on `daily-digest.xml` (retiring `daily-digest2.xml`). A redirect from `/daily-digest2.xml` to `/daily-digest.xml` is configured in `vercel.json` for backward compatibility.
+**Architecture**:
+- Next.js API route (`/api/rss/daily-digest`) generates RSS 2.0 XML on-demand from database
+- URL rewrite maps `/daily-digest.xml` → `/api/rss/daily-digest` (configured in vercel.json)
+- 5-minute edge cache for performance; database is single source of truth
+- No static files; RSS reflects database state within 5 minutes of publishing
 
 ### Features
 - RSS 2.0 with podcast extensions
-- Daily episodes organized by topic
-- Rich metadata; compatible with major podcast clients
-- 14‑day retention management
+- Daily episodes organized by topic (AI & Tech, Social Movements, Psychedelics & Consciousness)
+- Rich metadata; compatible with major podcast clients (Apple Podcasts, Spotify, etc.)
+- Configurable retention management (default: 14 days for episodes/digests)
 
 ### Episode Naming
 - **MP3**: `{topic}_{YYYYMMDD}_{HHMMSS}.mp3`
@@ -297,12 +304,14 @@ Note: As of Sep 2025, the project standardized on `daily-digest.xml` (retiring `
 
 ## 🔧 Maintenance
 
-### File Retention (WebConfig Driven)
-- **Local MP3s**: 7 days automatic cleanup via orchestrator
-- **GitHub Releases**: 14 days automatic cleanup
-- **Database**: PostgreSQL with Supabase professional backups
-- **Logs**: 3 days automatic cleanup with WebConfig override
-- **Scripts/Transcripts**: 14 days automatic cleanup
+### Retention Management (Dedicated Phase 6, v1.51+)
+- **Local MP3s**: Deleted immediately after successful GitHub upload (no retention period)
+- **GitHub Releases**: Configurable retention (default: 14 days) via `github_release_days` setting
+- **Database Records**: Configurable retention (default: 14 days) via `episode_retention_days` and `digest_retention_days`
+- **Logs**: Configurable retention (default: 3 days) via `logs_days` setting
+- **Audio Cache**: Configurable retention (default: 3 days) via `audio_cache_days` setting
+- **Database Backups**: Professional daily backups with 7+ day retention via Supabase
+- **Configuration**: All retention periods managed in `web_settings` table, editable via Web UI
 
 ### Health Monitoring
 - Channel failure tracking
@@ -327,17 +336,19 @@ python src/utils/clear_cache.py
 
 ## 🛠️ Development
 
-### Phase-Based Development
-See `completed-phases1-7.md` for completed phases and `tasklist2.md` for remaining work and Web UI plan.
-
-**Current Status**: Phase 0 - Project Setup  
-**Next Phase**: Phase 1 - Foundation & Data Layer
+### Development Status
+- **Current Version**: v1.52 (October 2025)
+- **Architecture**: 6-phase pipeline (Discovery, Audio, Digest, TTS, Publishing, Retention)
+- **Database**: PostgreSQL (Supabase) with Row Level Security (RLS) enabled
+- **Recent Work**: See `COMPLETED_TASKS_SUMMARY.md` for detailed session history through v1.52
+- **Remaining Work**: See `master-tasklist.md` for P3 (Low) tasks (15 remaining)
 
 ### Contributing
-1. Follow phase-based development approach
-2. Run phase tests before proceeding  
-3. Update `tasklist2.md` with progress
-4. Maintain comprehensive test coverage
+1. Follow database-first architecture principles (no filesystem fallbacks)
+2. Use 6-phase pipeline structure for new features
+3. Update `master-tasklist.md` with progress
+4. Maintain comprehensive test coverage with real RSS feeds (no mocks)
+5. Increment version in `web_ui_hosted/app/version.ts` on every commit
 
 ### Code Style
 - Black formatting with Flake8 linting
@@ -348,11 +359,12 @@ See `completed-phases1-7.md` for completed phases and `tasklist2.md` for remaini
 
 ## 📚 Documentation
 
-- **[Product Requirements](docs/podscrape2-prd.md)**: Complete project specification
-- **[Completed Phases](completed-phases1-7.md)**: Work completed to date
-- **[Remaining Work](tasklist2.md)**: Web UI + automation plan
-- **[Topic Instructions](digest_instructions/)**: AI generation guidelines
-- **[API Integration Guide](docs/gpt5-implementation-learnings.md)**: GPT-5 implementation details
+- **[CLAUDE.md](CLAUDE.md)**: Development guidelines for Claude Code integration
+- **[Product Requirements](podscrape2-prd.md)**: Complete project specification
+- **[Completed Tasks](COMPLETED_TASKS_SUMMARY.md)**: Detailed session history (v1.01-v1.52)
+- **[Remaining Work](master-tasklist.md)**: Current task list (15 P3 tasks remaining)
+- **[Version Guide](VERSION_GUIDE.md)**: Version tracking and commit guidelines
+- **[Archive](docs/archive/)**: Historical documentation and completed phases
 
 ## 🚨 Important Notes
 
@@ -380,10 +392,13 @@ See `completed-phases1-7.md` for completed phases and `tasklist2.md` for remaini
 
 For questions or issues:
 1. Check existing logs in `data/logs/`
-2. Run health check: `python src/utils/health_check.py`
-3. Review phase testing in `completed-phases1-7.md` and remaining items in `tasklist2.md`
-4. Check API key configuration in `.env`
+2. Run environment validation: `python3 scripts/doctor.py`
+3. Review completed work in `COMPLETED_TASKS_SUMMARY.md`
+4. Review remaining tasks in `master-tasklist.md`
+5. Check API key configuration in `.env`
+6. View system health via Web UI: https://podcast.paulrbrown.org
 
-**Project Status**: 🔄 Active Development  
-**Current Phase**: Phase 0 - Project Setup  
-**Target Completion**: September 24, 2025
+**Project Status**: ✅ Production (v1.52)
+**Architecture**: 6-Phase Pipeline (Discovery → Audio → Digest → TTS → Publishing → Retention)
+**Database**: PostgreSQL (Supabase) with RLS
+**RSS Feed**: Dynamic API (https://podcast.paulrbrown.org/daily-digest.xml)
