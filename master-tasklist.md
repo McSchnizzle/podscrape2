@@ -13,9 +13,31 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## CRITICAL (P0) - Security & Breaking Issues: ALL COMPLETE! 🎉
+## CRITICAL (P0) - Security & Breaking Issues: 1 ACTIVE
 
-🎉 **All P0 issues completed**: 12/12 (through v1.29)
+### 1. RSS Publishing Reliability & Performance Fix (IN PROGRESS)
+- **Files**: `.github/workflows/validated-full-pipeline.yml`, `web_ui_hosted/app/api/rss/daily-digest/route.ts`, `scripts/run_publishing.py`
+- **Issue**: Validated full pipeline creates GitHub releases but RSS feed never updates on podcast.paulrbrown.org
+  - Root cause: Python script's git operations fail silently in subprocess
+  - Current workaround: Run publishing-only workflow manually after full pipeline
+  - Secondary issue: RSS updates require 2-4 minute Vercel full redeployments
+- **Fix (Two Phases)**:
+  - **Phase 1 (Quick Fix)**: Update validated-full-pipeline.yml to handle git operations explicitly in workflow (like publishing-only.yml does)
+    - Copy proven git add/commit/push logic from publishing-only.yml
+    - Update sleep timer to 120s for Vercel deployment
+    - Add RSS verification step
+  - **Phase 2 (Better Solution)**: Create dynamic Next.js API route for RSS feed
+    - Create `/api/rss/daily-digest/route.ts` that queries Supabase database directly
+    - Configure Vercel rewrite: `/daily-digest.xml` → `/api/rss/daily-digest`
+    - Add Vercel edge caching (5 min cache, stale-while-revalidate)
+    - Remove RSS file generation from publishing pipeline
+    - Remove git commit/push operations for RSS files
+    - Remove Vercel deployment wait times
+- **Benefits**:
+  - Immediate: Validated full pipeline works reliably without manual intervention
+  - Long-term: Instant RSS updates (no deployment), always accurate (reads database), fast for users (20-50ms edge cache)
+- **Priority**: CRITICAL - Core pipeline functionality broken
+- **Status**: 🔄 In Progress
 
 ---
 
@@ -226,12 +248,12 @@ This document lists ONLY the remaining tasks that need to be completed.
 ## Summary Statistics
 
 ### By Priority:
-- **P0 (Critical)**: 0 remaining (ALL COMPLETE! 🎉)
+- **P0 (Critical)**: 1 in progress (RSS publishing reliability)
 - **P1 (High)**: 2 remaining (core functionality)
 - **P2 (Medium)**: 6 remaining (performance & optimization)
 - **P3 (Low)**: 18 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 26 tasks
+### **Total Remaining**: 27 tasks (1 P0 in progress + 26 other tasks)
 
 ### **Session 11 Completed (v1.30)**:
 - ✅ Fixed discovery phase duplicate episode creation bug (P0)
@@ -249,10 +271,17 @@ This document lists ONLY the remaining tasks that need to be completed.
   - Improved empty queue handling
   - Enhanced database connection management
 
+### **Session 13 In Progress (v1.48+)**:
+- 🔄 RSS Publishing Reliability & Performance Fix (P0)
+  - **Phase 1**: Quick fix for validated-full-pipeline.yml git operations
+  - **Phase 2**: Dynamic RSS API route to eliminate deployment delays
+  - Eliminates 2-4 minute deployment waits, provides instant updates
+  - RSS always reflects current database state with edge caching
+
 ### Recommended Next Steps:
-1. **P1 Priority**: Fix --log parameter and workflow secret handling
-2. **P2 Priority**: Batch API requests for better throughput
-3. **P2 Priority**: Remove synchronous sleep calls and optimize memory
+1. **P0 Priority (IN PROGRESS)**: RSS publishing reliability fix
+2. **P1 Priority**: Fix --log parameter and workflow secret handling
+3. **P2 Priority**: Batch API requests for better throughput
 
 ---
 

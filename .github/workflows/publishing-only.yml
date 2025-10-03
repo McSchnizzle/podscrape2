@@ -94,6 +94,13 @@ jobs:
           echo "=== Checking recent GitHub releases ==="
           gh release list --repo "$GITHUB_REPOSITORY" --limit 10
 
+      # Publishing Pipeline - Upload MP3s to GitHub and update database
+      # ARCHITECTURE NOTE (v1.49): RSS feed is now generated dynamically by Next.js API!
+      #   - API route queries database directly: web_ui_hosted/app/api/rss/daily-digest/route.ts
+      #   - Public URL: https://podcast.paulrbrown.org/daily-digest.xml (via vercel.json rewrite)
+      #   - Benefits: Instant updates (no git commits), always accurate (reads from database)
+      #   - This workflow only: uploads MP3s to GitHub, updates database status
+      #   - No RSS file generation, no git commits, no Vercel deployment wait needed
       - name: Run Publishing Pipeline
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
@@ -107,35 +114,24 @@ jobs:
 
           python scripts/run_publishing.py --verbose --days-back "${DAYS_BACK:-7}"
 
-          echo "=== Copying RSS files ==="
-          cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
+          echo ""
+          echo "✅ Publishing complete!"
+          echo "📡 RSS feed is generated dynamically by Next.js API route"
+          echo "🌐 Feed URL: https://podcast.paulrbrown.org/daily-digest.xml"
+          echo "⚡ Episodes served directly from database with edge caching"
 
-          echo "=== Checking for changes to commit ==="
-          git add web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
-
-          if git diff --cached --quiet; then
-            echo "No repository changes to commit after publishing."
-          else
-            echo "=== Committing RSS feed updates ==="
-            COMMIT_MSG="Update RSS feeds with existing releases - $(date -u +'%Y-%m-%d %H:%M:%S')"
-            git commit -m "$COMMIT_MSG"
-
-            echo "=== Pulling latest changes ==="
-            git pull --rebase "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-
-            echo "=== Pushing changes ==="
-            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TARGET_BRANCH"
-
-            echo "✅ RSS feeds updated and pushed successfully"
-          fi
-
-      - name: Verify RSS Feed Update
+      - name: Verify RSS Feed API
         run: |
-          echo "=== Verifying RSS feed deployment ==="
-          echo "RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml"
+          echo "=== Verifying RSS feed API ==="
+          echo "RSS feed is available at: https://podcast.paulrbrown.org/daily-digest.xml"
+          echo ""
 
-          # Give Vercel time to deploy
-          sleep 30
-
-          # Check if RSS contains recent episodes
-          curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
+          # Check if RSS API is responding
+          if curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20 | grep -q "<rss"; then
+            echo "✅ RSS feed API responding successfully"
+            echo ""
+            echo "Recent episodes:"
+            curl -s https://podcast.paulrbrown.org/daily-digest.xml | grep "<title>" | head -5
+          else
+            echo "⚠️  RSS feed API may need time to propagate"
+          fi

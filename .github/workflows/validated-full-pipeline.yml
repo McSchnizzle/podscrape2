@@ -159,6 +159,13 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
+      # Phase 5: Publishing - Upload MP3s to GitHub and update database
+      # ARCHITECTURE NOTE (v1.49): RSS feed is now generated dynamically by Next.js API!
+      #   - API route queries database directly: web_ui_hosted/app/api/rss/daily-digest/route.ts
+      #   - Public URL: https://podcast.paulrbrown.org/daily-digest.xml (via vercel.json rewrite)
+      #   - Benefits: Instant updates (no git commits), always accurate (reads from database)
+      #   - This phase only: uploads MP3s to GitHub, updates database status
+      #   - No RSS file generation, no git commits, no Vercel deployment wait needed
       - name: Phase 5 - Publishing
         if: success() && inputs.dry_run != 'true'
         env:
@@ -223,9 +230,20 @@ jobs:
           echo "Verifying GitHub Release was created..."
           sleep 5  # Give GitHub API time to propagate
 
-          echo "Running RSS publishing (handles its own git operations)..."
+          echo "Running RSS publishing (uploads MP3s to GitHub, updates database)..."
           python scripts/run_publishing.py --verbose
-          cp web_ui_hosted/public/daily-digest.xml web_ui_hosted/public/test-feed.xml
+
+          echo "✅ Publishing complete!"
+          echo "📡 RSS feed is generated dynamically by Next.js API route"
+          echo "🌐 Feed URL: https://podcast.paulrbrown.org/daily-digest.xml"
+          echo "⚡ Episodes served directly from database with edge caching"
+          echo ""
+          echo "Verifying RSS feed API is accessible..."
+          if curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20 | grep -q "<rss"; then
+            echo "✅ RSS feed API responding successfully"
+          else
+            echo "⚠️  RSS feed API may need time to propagate or cache to clear"
+          fi
 
       - name: Collect TTS logs and MP3 files
         if: always()
