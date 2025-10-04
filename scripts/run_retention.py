@@ -61,58 +61,55 @@ def run_retention_phase() -> dict:
         # Run cleanup
         logger.info("Running retention cleanup...")
         cleanup_stats = retention_manager.run_cleanup()
+        has_errors = bool(cleanup_stats.errors)
 
-        # Calculate totals
-        total_files = (
-            cleanup_stats.mp3_files_deleted +
-            cleanup_stats.script_files_deleted +
-            cleanup_stats.transcript_files_deleted
-        )
-        total_bytes = (
-            cleanup_stats.mp3_bytes_freed +
-            cleanup_stats.script_bytes_freed +
-            cleanup_stats.transcript_bytes_freed
-        )
-        total_mb = total_bytes / (1024 * 1024)
+        # Calculate totals with graceful fallback for legacy CleanupStats structure
+        total_files = getattr(cleanup_stats, "total_files", cleanup_stats.files_deleted)
+        total_bytes = getattr(cleanup_stats, "total_bytes", cleanup_stats.bytes_freed)
+        total_mb = total_bytes / (1024 * 1024) if total_bytes else 0
 
-        # Log results
         logger.info("=" * 80)
         logger.info("Retention Cleanup Results:")
-        logger.info(f"  MP3 files deleted: {cleanup_stats.mp3_files_deleted} ({cleanup_stats.mp3_bytes_freed / (1024*1024):.2f} MB)")
-        logger.info(f"  Script files deleted: {cleanup_stats.script_files_deleted} ({cleanup_stats.script_bytes_freed / (1024*1024):.2f} MB)")
-        logger.info(f"  Transcript files deleted: {cleanup_stats.transcript_files_deleted} ({cleanup_stats.transcript_bytes_freed / (1024*1024):.2f} MB)")
+        logger.info(f"  Files deleted: {cleanup_stats.files_deleted}")
+        logger.info(f"  Directories deleted: {cleanup_stats.directories_deleted}")
         logger.info(f"  Database episodes deleted: {cleanup_stats.episodes_deleted}")
         logger.info(f"  Database digests deleted: {cleanup_stats.digests_deleted}")
         logger.info(f"  GitHub releases deleted: {cleanup_stats.github_releases_deleted}")
-        logger.info(f"  Total files cleaned: {total_files}")
-        logger.info(f"  Total space freed: {total_mb:.2f} MB")
+        logger.info(f"  Space freed: {total_mb:.2f} MB")
         logger.info("=" * 80)
+
+        if has_errors:
+            logger.warning(f"Retention cleanup completed with {len(cleanup_stats.errors)} error(s)")
+            for err in cleanup_stats.errors:
+                logger.warning(f"  - {err}")
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
         # Build result
         result = {
-            "status": "success",
+            "success": not has_errors,
+            "status": "success" if not has_errors else "warning",
             "phase": "retention",
             "cleanup_stats": {
-                "mp3_files_deleted": cleanup_stats.mp3_files_deleted,
-                "mp3_bytes_freed": cleanup_stats.mp3_bytes_freed,
-                "script_files_deleted": cleanup_stats.script_files_deleted,
-                "script_bytes_freed": cleanup_stats.script_bytes_freed,
-                "transcript_files_deleted": cleanup_stats.transcript_files_deleted,
-                "transcript_bytes_freed": cleanup_stats.transcript_bytes_freed,
+                "files_deleted": cleanup_stats.files_deleted,
+                "directories_deleted": cleanup_stats.directories_deleted,
+                "bytes_freed": cleanup_stats.bytes_freed,
                 "episodes_deleted": cleanup_stats.episodes_deleted,
                 "digests_deleted": cleanup_stats.digests_deleted,
                 "github_releases_deleted": cleanup_stats.github_releases_deleted,
                 "total_files": total_files,
                 "total_bytes": total_bytes,
-                "total_mb": round(total_mb, 2)
+                "total_mb": round(total_mb, 2),
+                "errors": cleanup_stats.errors,
             },
             "duration_seconds": round(duration, 2),
             "started_at": start_time.isoformat(),
             "completed_at": end_time.isoformat()
         }
+
+        if has_errors:
+            result["error"] = f"Retention encountered {len(cleanup_stats.errors)} error(s)"
 
         return result
 
@@ -122,6 +119,7 @@ def run_retention_phase() -> dict:
         duration = (end_time - start_time).total_seconds()
 
         return {
+            "success": False,
             "status": "error",
             "phase": "retention",
             "error": str(e),

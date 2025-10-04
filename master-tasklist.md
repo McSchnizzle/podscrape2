@@ -34,9 +34,14 @@ This document lists ONLY the remaining tasks that need to be completed.
 
 ---
 
-## MEDIUM (P2) - Performance & Optimization: 0 REMAINING 🎉
+## MEDIUM (P2) - Performance & Optimization: 1 REMAINING
 
-**All P2 tasks completed!** 🎉
+### 1. Phase 2.5 Compact Transcript Stage
+- **Goal**: Add a compacting pass between phases 2 and 3 that trims transcripts while preserving digest-relevant content
+- **Issue**: Long transcripts exceed token budgets and trigger truncation during the digest phase
+- **Fix**: Implement summarization/compaction logic that reduces token count without losing required details
+- **Expected Gain**: Higher fidelity digests with lower token consumption and fewer dropped sections
+- **Status**: ❌ Not implemented
 
 **Latest Completion (v1.52)**: Memory optimization for large transcripts
 - Implemented incremental database writes per chunk
@@ -148,10 +153,10 @@ This document lists ONLY the remaining tasks that need to be completed.
 ### By Priority:
 - **P0 (Critical)**: 0 remaining 🎉
 - **P1 (High)**: 0 remaining 🎉
-- **P2 (Medium)**: 0 remaining 🎉 (v1.52 memory optimization completed!)
+- **P2 (Medium)**: 1 remaining
 - **P3 (Low)**: 15 remaining (architecture & nice-to-have)
 
-### **Total Remaining**: 15 tasks
+### **Total Remaining**: 16 tasks
 
 ### Recently Completed (v1.52 - Session 17):
 - **Memory Optimization for Large Transcripts** (P2)
