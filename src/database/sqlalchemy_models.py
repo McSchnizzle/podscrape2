@@ -302,3 +302,24 @@ class PipelineRun(Base):
         Index("ix_pipeline_runs_started", "started_at"),
         Index("ix_pipeline_runs_workflow", "workflow_run_id"),
     )
+
+
+class PipelineLog(Base):
+    __tablename__ = "pipeline_logs"
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(128), nullable=False)
+    phase = Column(String(64), nullable=False)
+    timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(UTC))
+    level = Column(String(16), nullable=False)
+    logger_name = Column(String(256), nullable=False)
+    module = Column(String(256))
+    function = Column(String(256))
+    line = Column(Integer)
+    message = Column(Text, nullable=False)
+    extra = Column(JSON)
+
+    __table_args__ = (
+        Index("ix_pipeline_logs_run_phase_time", "run_id", "phase", "timestamp"),
+        Index("ix_pipeline_logs_level", "level"),
+    )

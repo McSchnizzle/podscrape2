@@ -2,38 +2,64 @@
 
 import { useEffect, useState } from 'react'
 
-interface PipelineStatusPayload {
+import { SummaryCard } from '@/components/PipelineStatus'
+
+interface MaintenanceStatus {
   stats: {
     episodesProcessedToday: number
     digestsGeneratedToday: number
     lastSuccessfulRun: string | null
     totalEpisodes: number
   }
-  pipelineRuns?: Array<{
-    id: string
-    status?: string
-    conclusion?: string
-    workflow_name?: string
-    trigger?: string
-    started_at?: string
-    finished_at?: string
-  }>
+  backlog: {
+    awaitingScoring: number
+    awaitingDigest: number
+    awaitingTts: number
+    awaitingPublish: number
+  }
+  runSummary?: {
+    runId: string
+    startedAt: string
+    finishedAt: string | null
+    durationSeconds: number | null
+    warnings: number
+    errors: number
+    phases: Array<{ phase: string; message: string; level: string; timestamp: string }>
+  } | null
+  recentRuns?: Array<{ runId: string; startedAt: string; finishedAt: string | null; durationSeconds: number | null }>
 }
 
-interface Activity {
+interface ActivityEntry {
   id: string
-  type: string
+  phase: string
   message: string
+  level: string
   time: string
-  status: string
-  conclusion: string
-  htmlUrl: string
-  createdAt: string
+  timestamp: string
+  runId: string
+}
+
+const phaseIcon = (phase: string) => {
+  switch (phase) {
+    case 'discovery': return '🔍'
+    case 'audio': return '🎧'
+    case 'digest': return '📝'
+    case 'tts': return '🎙️'
+    case 'publishing': return '📡'
+    case 'retention': return '🧹'
+    default: return '⚙️'
+  }
+}
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
 export default function MaintenancePage() {
-  const [status, setStatus] = useState<PipelineStatusPayload | null>(null)
-  const [activities, setActivities] = useState<Activity[]>([])
+  const [status, setStatus] = useState<MaintenanceStatus | null>(null)
+  const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [triggeringPipeline, setTriggeringPipeline] = useState(false)
 
@@ -45,7 +71,7 @@ export default function MaintenancePage() {
     try {
       const [statusResponse, activityResponse] = await Promise.all([
         fetch('/api/pipeline/status'),
-        fetch('/api/github/runs')
+        fetch('/api/pipeline/activity')
       ])
 
       if (statusResponse.ok) {
@@ -77,6 +103,7 @@ export default function MaintenancePage() {
         alert(data.error)
       } else {
         alert('Full pipeline workflow triggered. Monitor status in Recent Activity.')
+        setTimeout(loadData, 2000)
       }
     } catch (error) {
       alert('Pipeline trigger failed')
@@ -85,18 +112,12 @@ export default function MaintenancePage() {
     }
   }
 
-  const formatDate = (value?: string | null) => {
-    if (!value) return '—'
-    const parsed = new Date(value)
-    return isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Maintenance</h1>
         <p className="mt-1 text-gray-600">
-          Operations dashboard for Supabase-backed pipeline runs, GitHub workflow activity, and manual controls.
+          Operations dashboard for Supabase-backed pipeline runs and manual controls.
         </p>
       </div>
 
@@ -111,7 +132,7 @@ export default function MaintenancePage() {
             disabled={triggeringPipeline}
             className="btn btn-primary"
           >
-            {triggeringPipeline ? 'Dispatching...' : 'Trigger Full Pipeline'}
+            {triggeringPipeline ? 'Dispatching…' : 'Trigger Full Pipeline'}
           </button>
         </div>
       </div>
@@ -119,100 +140,101 @@ export default function MaintenancePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Supabase Pipeline Runs</h2>
+            <h2 className="text-lg font-medium text-gray-900">Pipeline Backlog</h2>
             <button onClick={loadData} className="btn-secondary text-sm">Refresh</button>
           </div>
-          {loading ? (
-            <div className="py-6 text-center text-gray-500">Loading pipeline runs...</div>
-          ) : status?.pipelineRuns && status.pipelineRuns.length > 0 ? (
-            <div className="space-y-3">
-              {status.pipelineRuns.slice(0, 6).map(run => (
-                <div key={run.id} className="border border-gray-200 rounded-md p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-800">{run.workflow_name || 'Pipeline Run'}</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      run.conclusion === 'success'
-                        ? 'bg-success-100 text-success-700'
-                        : run.conclusion === 'failure'
-                          ? 'bg-error-100 text-error-700'
-                          : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {run.conclusion || run.status || 'unknown'}
-                    </span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
-                    <div>Trigger: {run.trigger || 'manual'}</div>
-                    <div>Started: {formatDate(run.started_at)}</div>
-                    <div>Finished: {formatDate(run.finished_at)}</div>
-                  </div>
-                </div>
-              ))}
+          {status ? (
+            <div className="grid grid-cols-2 gap-4">
+              <BacklogCard label="Awaiting Scoring" value={status.backlog.awaitingScoring} icon="📝" />
+              <BacklogCard label="Awaiting Digest" value={status.backlog.awaitingDigest} icon="🧠" />
+              <BacklogCard label="Awaiting TTS" value={status.backlog.awaitingTts} icon="🎙️" />
+              <BacklogCard label="Awaiting Publish" value={status.backlog.awaitingPublish} icon="📡" />
             </div>
           ) : (
-            <div className="py-6 text-center text-gray-500 text-sm">No Supabase pipeline runs recorded.</div>
+            <div className="py-6 text-center text-gray-500">Backlog metrics unavailable.</div>
           )}
         </div>
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">GitHub Workflow Activity</h2>
+            <h2 className="text-lg font-medium text-gray-900">Latest Pipeline Activity</h2>
             <button onClick={loadData} className="btn-secondary text-sm">Refresh</button>
           </div>
-          {activities.length === 0 ? (
-            <div className="py-6 text-center text-gray-500 text-sm">No recent GitHub Actions runs.</div>
-          ) : (
-            <div className="space-y-3">
-              {activities.slice(0, 6).map(activity => (
-                <div key={activity.id} className="border border-gray-200 rounded-md p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-800">{activity.message}</span>
-                    <span className="text-xs text-gray-500">{activity.time}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs text-gray-600">
-                    <span>Status: {activity.status}</span>
-                    {activity.htmlUrl && (
-                      <a
-                        className="text-primary-600 hover:text-primary-700"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        href={activity.htmlUrl}
-                      >
-                        View logs →
-                      </a>
-                    )}
+          {loading ? (
+            <div className="py-6 text-center text-gray-500">Loading activity…</div>
+          ) : activities.length > 0 ? (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {activities.map((activity) => (
+                <div key={activity.id} className="border border-gray-200 rounded-md p-3 flex items-start space-x-3">
+                  <span>{phaseIcon(activity.phase)}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-gray-800 capitalize">{activity.phase}</span>
+                      <span className="text-xs text-gray-500">{activity.time}</span>
+                    </div>
+                    <div className="text-xs text-gray-600" title={activity.message}>{activity.message}</div>
+                    <div className="text-xs text-gray-400 mt-1">Run {activity.runId} • Level {activity.level}</div>
                   </div>
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="py-6 text-center text-gray-500 text-sm">No recent pipeline activity.</div>
           )}
         </div>
       </div>
 
-      <div className="card">
-        <h2 className="text-lg font-medium text-gray-900 mb-3">System Stats</h2>
+      <div className="card space-y-4">
+        <h2 className="text-lg font-medium text-gray-900">System Stats</h2>
         {status ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-50 rounded-md p-4">
-              <div className="text-sm text-gray-500">Episodes Processed Today</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-900">{status.stats.episodesProcessedToday}</div>
-            </div>
-            <div className="bg-gray-50 rounded-md p-4">
-              <div className="text-sm text-gray-500">Digests Generated Today</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-900">{status.stats.digestsGeneratedToday}</div>
-            </div>
-            <div className="bg-gray-50 rounded-md p-4">
-              <div className="text-sm text-gray-500">Last Successful Run</div>
-              <div className="mt-1 text-lg text-gray-900">{formatDate(status.stats.lastSuccessfulRun)}</div>
-            </div>
-            <div className="bg-gray-50 rounded-md p-4">
-              <div className="text-sm text-gray-500">Total Episodes</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-900">{status.stats.totalEpisodes}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <SummaryCard label="Episodes Today" value={status.stats.episodesProcessedToday} />
+            <SummaryCard label="Digests Today" value={status.stats.digestsGeneratedToday} />
+            <SummaryCard label="Total Episodes" value={status.stats.totalEpisodes} />
+            <div className="border border-gray-200 rounded-md p-4">
+              <div className="text-sm font-semibold text-gray-800">Last Successful Run</div>
+              <div className="mt-2 text-sm text-gray-600">{formatDate(status.stats.lastSuccessfulRun)}</div>
             </div>
           </div>
         ) : (
           <div className="text-sm text-gray-500">Pipeline statistics unavailable.</div>
         )}
+
+        {status?.runSummary && (
+          <div className="border border-gray-200 rounded-md p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-700">
+              <span className="font-semibold text-gray-900">Run {status.runSummary.runId}</span>
+              <span>Started: {formatDate(status.runSummary.startedAt)}</span>
+              <span>Duration: {status.runSummary.durationSeconds ? `${Math.round(status.runSummary.durationSeconds / 60)} min` : '—'}</span>
+              <span className="text-amber-600">Warnings: {status.runSummary.warnings}</span>
+              <span className={status.runSummary.errors > 0 ? 'text-red-600' : 'text-gray-600'}>Errors: {status.runSummary.errors}</span>
+            </div>
+            <div className="space-y-2">
+              {status.runSummary.phases.map((phase) => (
+                <div key={`${phase.phase}-${phase.timestamp}`} className="border border-gray-100 rounded-md px-3 py-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-gray-800 capitalize">{phase.phase}</span>
+                    <span className="text-xs text-gray-500">{new Date(phase.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  <div className="text-xs text-gray-600" title={phase.message}>{phase.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function BacklogCard({ label, value, icon }: { label: string; value: number; icon: string }) {
+  return (
+    <div className="border border-gray-200 rounded-md p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-gray-800">{label}</span>
+        <span className="text-lg">{icon}</span>
+      </div>
+      <div className="mt-2 text-2xl font-bold text-gray-900">{value}</div>
     </div>
   )
 }

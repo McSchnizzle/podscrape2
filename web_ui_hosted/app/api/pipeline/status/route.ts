@@ -1,83 +1,113 @@
 import { NextResponse } from 'next/server'
-import { DatabaseClient } from '@/utils/supabase'
+import { DatabaseClient, PipelineLogRecord } from '@/utils/supabase'
+
+export const dynamic = 'force-dynamic'
+
+const sortByOldest = (logs: PipelineLogRecord[]) =>
+  [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
 export async function GET() {
   try {
-    const githubToken = process.env.GITHUB_TOKEN
-    const githubRepo = process.env.GITHUB_REPOSITORY
+    const db = DatabaseClient.getInstance()
 
-    if (!githubToken || !githubRepo) {
-      return NextResponse.json(
-        { error: 'GitHub configuration missing' },
-        { status: 500 }
-      )
-    }
+    const [stats, backlog, runIds] = await Promise.all([
+      db.getPipelineStats(),
+      db.getEpisodeBacklogStats(),
+      db.getDistinctRunIds(3)
+    ])
 
-    // Get recent workflow runs
-    const response = await fetch(
-      `https://api.github.com/repos/${githubRepo}/actions/runs?per_page=10`,
-      {
-        headers: {
-          'Authorization': `Bearer ${githubToken}`,
-          'Accept': 'application/vnd.github.v3+json',
+    let runSummary: any = null
+    let timeline: Array<{ id: string; phase: string; message: string; level: string; timestamp: string }> = []
+    let recentRuns: Array<{ runId: string; startedAt: string; finishedAt: string | null; durationSeconds: number | null }> = []
+
+    if (runIds.length > 0) {
+      const [latestRunLogs, additionalLogs] = await Promise.all([
+        db.getPipelineLogs(200, runIds[0]),
+        runIds.length > 1 ? db.getPipelineLogs(200, runIds[1]) : Promise.resolve([] as PipelineLogRecord[])
+      ])
+
+      const sortedLatest = sortByOldest(latestRunLogs)
+
+      if (sortedLatest.length > 0) {
+        const startedAt = sortedLatest[0].timestamp
+        const finishedAt = sortedLatest[sortedLatest.length - 1].timestamp
+        const durationSeconds = (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000
+        const warnings = latestRunLogs.filter((log) => log.level === 'WARNING').length
+        const errors = latestRunLogs.filter((log) => ['ERROR', 'CRITICAL'].includes(log.level)).length
+
+        const phasesMap = new Map<string, PipelineLogRecord>()
+        for (const log of latestRunLogs) {
+          if (!phasesMap.has(log.phase) || new Date(log.timestamp) > new Date(phasesMap.get(log.phase)!.timestamp)) {
+            phasesMap.set(log.phase, log)
+          }
+        }
+
+        const phaseSnapshots = Array.from(phasesMap.entries()).map(([phase, log]) => ({
+          phase,
+          message: log.message,
+          level: log.level,
+          timestamp: log.timestamp,
+        }))
+
+        runSummary = {
+          runId: runIds[0],
+          startedAt,
+          finishedAt,
+          durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+          warnings,
+          errors,
+          phases: phaseSnapshots,
+        }
+
+        timeline = sortedLatest.slice(-40).map((log) => ({
+          id: `log-${log.id}`,
+          phase: log.phase,
+          message: log.message,
+          level: log.level,
+          timestamp: log.timestamp,
+        }))
+      }
+
+      const summarizeRun = (runId: string, logs: PipelineLogRecord[]) => {
+        if (logs.length === 0) return null
+        const ordered = sortByOldest(logs)
+        const start = ordered[0].timestamp
+        const finish = ordered[ordered.length - 1].timestamp
+        const seconds = (new Date(finish).getTime() - new Date(start).getTime()) / 1000
+        return {
+          runId,
+          startedAt: start,
+          finishedAt: finish,
+          durationSeconds: Number.isFinite(seconds) ? seconds : null
         }
       }
-    )
 
-    if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`)
+      const summaries = [summarizeRun(runIds[0], latestRunLogs)]
+      if (runIds.length > 1) {
+        summaries.push(summarizeRun(runIds[1], additionalLogs))
+      }
+      recentRuns = summaries.filter(Boolean) as typeof recentRuns
     }
 
-    const data = await response.json()
-    const runs = data.workflow_runs || []
-
-    // Find the most recent full pipeline and publishing runs
-    const fullPipelineRun = runs.find((run: any) =>
-      run.name === 'Full Pipeline'
-    )
-    const publishingRun = runs.find((run: any) =>
-      run.name === 'Publishing Only'
-    )
-
-    // Get the most recent run overall
-    const latestRun = runs[0]
-
-    // Get database stats
-    const db = DatabaseClient.getInstance()
-    const stats = await db.getPipelineStats()
-    const pipelineRuns = await db.getPipelineRuns(5)
+    const [awaitingScoringEpisodes, awaitingDigestEpisodes, recentDigests, recentEpisodes] = await Promise.all([
+      db.getEpisodesAwaitingScoring(6),
+      db.getEpisodesAwaitingDigest(6),
+      db.getLatestDigests(6),
+      db.getRecentEpisodes(6)
+    ])
 
     return NextResponse.json({
-      lastRun: latestRun ? {
-        id: latestRun.id,
-        status: latestRun.status,
-        conclusion: latestRun.conclusion,
-        createdAt: latestRun.created_at,
-        updatedAt: latestRun.updated_at,
-        workflowName: latestRun.name,
-        htmlUrl: latestRun.html_url
-      } : null,
-      fullPipeline: fullPipelineRun ? {
-        id: fullPipelineRun.id,
-        status: fullPipelineRun.status,
-        conclusion: fullPipelineRun.conclusion,
-        createdAt: fullPipelineRun.created_at,
-        htmlUrl: fullPipelineRun.html_url
-      } : null,
-      publishing: publishingRun ? {
-        id: publishingRun.id,
-        status: publishingRun.status,
-        conclusion: publishingRun.conclusion,
-        createdAt: publishingRun.created_at,
-        htmlUrl: publishingRun.html_url
-      } : null,
-      stats: {
-        episodesProcessedToday: stats.episodesProcessedToday || 0,
-        digestsGeneratedToday: stats.digestsGeneratedToday || 0,
-        lastSuccessfulRun: stats.lastSuccessfulRun,
-        totalEpisodes: stats.totalEpisodes || 0
-      },
-      pipelineRuns
+      stats,
+      backlog,
+      runSummary,
+      timeline,
+      recentRuns,
+      queues: {
+        awaitingScoring: awaitingScoringEpisodes,
+        awaitingDigest: awaitingDigestEpisodes,
+        recentDigests,
+        recentEpisodes
+      }
     })
 
   } catch (error) {

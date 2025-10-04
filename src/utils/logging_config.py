@@ -10,10 +10,18 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 import traceback
 import time
+import threading
+import atexit
+
+try:
+    from src.database.models import PipelineLog, get_pipeline_log_repo
+except Exception:  # pragma: no cover - fallback when database layer unavailable
+    PipelineLog = None  # type: ignore
+    get_pipeline_log_repo = None  # type: ignore
 
 class StructuredFormatter(logging.Formatter):
     """Custom formatter that outputs structured JSON logs"""
@@ -80,6 +88,107 @@ class PerformanceLogger:
                 extra={'extra_fields': {'duration_seconds': round(duration, 3)}},
                 exc_info=(exc_type, exc_val, exc_tb)
             )
+
+
+class DatabaseLogHandler(logging.Handler):
+    """Persist log records to the database for workflow observability."""
+
+    def __init__(self, run_id: str, phase: str, buffer_size: int = 25):
+        super().__init__()
+        self.run_id = run_id
+        self.phase = phase
+        self.buffer_size = max(1, buffer_size)
+        self.lock = threading.Lock()
+        self.buffer: list[PipelineLog] = []
+        self.enabled = True
+        self._error_reported = False
+        self.repo = None
+
+        if PipelineLog is None or get_pipeline_log_repo is None:
+            self.enabled = False
+            return
+
+        try:
+            self.repo = get_pipeline_log_repo()
+        except Exception as exc:  # pragma: no cover - defensive
+            self._disable(exc)
+
+        if self.enabled:
+            atexit.register(self.flush)
+
+    def emit(self, record: logging.LogRecord):
+        if not self.enabled or self.repo is None:
+            return
+
+        try:
+            # Only persist informative records; skip verbose DEBUG chatter
+            if record.levelno < logging.INFO:
+                return
+
+            timestamp = datetime.fromtimestamp(record.created)
+            extra_payload: Dict[str, Any] = {}
+            if hasattr(record, 'extra_fields') and isinstance(record.extra_fields, dict):
+                extra_payload.update(record.extra_fields)
+            if record.exc_info:
+                exc_type, exc_value, exc_tb = record.exc_info
+                extra_payload.setdefault('exception', {
+                    'type': exc_type.__name__ if exc_type else None,
+                    'message': str(exc_value) if exc_value else None,
+                    'traceback': traceback.format_exception(*record.exc_info)
+                })
+            if record.stack_info:
+                extra_payload['stack'] = record.stack_info
+
+            log_entry = PipelineLog(
+                run_id=self.run_id,
+                phase=self.phase,
+                timestamp=timestamp,
+                level=record.levelname,
+                logger_name=record.name,
+                module=getattr(record, 'module', None),
+                function=getattr(record, 'funcName', None),
+                line=getattr(record, 'lineno', None),
+                message=record.getMessage(),
+                extra=extra_payload or None,
+            )
+
+            with self.lock:
+                self.buffer.append(log_entry)
+                if len(self.buffer) >= self.buffer_size:
+                    self._flush_locked()
+
+        except Exception as exc:  # pragma: no cover - defensive
+            self._disable(exc)
+
+    def flush(self):
+        if not self.enabled or self.repo is None:
+            return
+        with self.lock:
+            self._flush_locked()
+
+    def close(self):
+        try:
+            self.flush()
+        finally:
+            super().close()
+
+    def _flush_locked(self):
+        if not self.buffer or self.repo is None:
+            return
+        try:
+            self.repo.bulk_insert(self.buffer)
+            self.buffer.clear()
+        except Exception as exc:  # pragma: no cover - defensive
+            self.buffer.clear()
+            self._disable(exc)
+
+    def _disable(self, exc: Exception):
+        if not self.enabled:
+            return
+        self.enabled = False
+        if not self._error_reported:
+            sys.stderr.write(f"[DatabaseLogHandler] disabled: {exc}\n")
+            self._error_reported = True
 
 class LoggingManager:
     """
@@ -320,6 +429,9 @@ class PipelineLogger:
         # Configure logging
         self._setup_logging()
 
+        # Attach optional database handler for workflow runs
+        self.db_handler = self._attach_db_handler()
+
         # Create logger instance
         self.logger = logging.getLogger(f"pipeline.{phase_name}")
 
@@ -365,6 +477,22 @@ class PipelineLogger:
             handlers=handlers,
             force=True
         )
+
+    def _attach_db_handler(self):
+        run_id = os.getenv('PIPELINE_RUN_ID')
+        if not run_id or PipelineLog is None or get_pipeline_log_repo is None:
+            return None
+        db_logging_enabled = os.getenv('PIPELINE_DB_LOGS', '').lower() in {'1', 'true', 'yes'}
+        if not db_logging_enabled:
+            return None
+
+        try:
+            handler = DatabaseLogHandler(run_id, self.phase_name)
+            logging.getLogger().addHandler(handler)
+            return handler
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.getLogger(__name__).warning(f"Database log handler disabled: {exc}")
+            return None
 
     def get_logger(self) -> logging.Logger:
         """Get the configured logger instance"""

@@ -1052,6 +1052,11 @@ const digestIds = links?.map((link: { digest_id: number }) => link.digest_id) ||
 - **Decision**: Async conversion provides no meaningful benefit
 - **Status**: ⚠️ Intentionally skipped (v1.50)
 
+#### 8. Comprehensive Testing & Validation (P3) ⚠️ SKIPPED
+- **Reason**: Full-suite test harness would duplicate GitHub workflow behavior without clear ROI right now
+- **Decision**: Focus testing effort on targeted phase checks instead of broad regression suite
+- **Status**: ⚠️ Intentionally skipped (v1.53)
+
 ---
 
 ---

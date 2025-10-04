@@ -123,27 +123,29 @@ This document lists ONLY the remaining tasks that need to be completed.
 - **Fix**: Standardize error handling, add pre-commit hooks
 - **Status**: ❌ Not implemented
 
-### 12. Testing & Validation
-- **Issue**: Fix test environment issues
-- **Fix**: Create comprehensive test suite with real RSS feeds
-- **Status**: ❌ Not implemented
-
-### 13. Enhanced Dashboard with Recent Run Details
+### 12. Enhanced Dashboard with Recent Run Details
 - **Issue**: Dashboard lacks detailed information about recent pipeline run from GitHub logs
 - **Fix**: Pull GitHub Action logs and display detailed run information
 - **Expected Gain**: Better visibility into pipeline execution
 - **Status**: ❌ Not implemented
 
-### 14. Pipeline Phase Validation & Health Checks
+### 13. Pipeline Phase Validation & Health Checks
 - **Issue**: No systematic validation that each phase operates according to web settings
 - **Fix**: Add health checks for each phase, validate against web settings
 - **Expected Gain**: Proactive detection of configuration issues
 - **Status**: ❌ Not implemented
 
-### 15. Weekly Summary Digest
+### 14. Weekly Summary Digest
 - **Issue**: No weekly aggregation of relevant episodes and trend analysis
 - **Fix**: Create Sunday weekly summary digest with topic-based episode reviews
 - **Expected Gain**: Weekly insights and trend analysis across topics
+- **Status**: ❌ Not implemented
+
+### 15. YouTube Transcript Ingestion Strategy
+- **Goal**: Incorporate YouTube transcripts alongside RSS feeds for richer topic coverage
+- **Issue**: Current pipeline ignores YouTube sources even when transcript data is available
+- **Fix**: Design ingestion + normalization flow that stores YouTube transcripts for scoring/digest phases
+- **Expected Gain**: Broader content pool without manually curated RSS feeds
 - **Status**: ❌ Not implemented
 
 ---

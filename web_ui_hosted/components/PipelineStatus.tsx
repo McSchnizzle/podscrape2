@@ -2,42 +2,78 @@
 
 import { useState, useEffect } from 'react'
 
-interface PipelineStatus {
-  lastRun: {
-    id: number
-    status: string
-    conclusion: string
-    createdAt: string
-    updatedAt: string
-    workflowName: string
-    htmlUrl: string
-  } | null
+interface DashboardResponse {
   stats: {
     episodesProcessedToday: number
     digestsGeneratedToday: number
     lastSuccessfulRun: string | null
     totalEpisodes: number
   }
-  pipelineRuns?: Array<{
-    id: string
-    status?: string
-    conclusion?: string
-    started_at?: string
-    finished_at?: string
-    workflow_name?: string
-    trigger?: string
-    phase?: { history?: Array<{ phase: string; status: string; timestamp: string }> }
-  }>
+  backlog: {
+    awaitingScoring: number
+    awaitingDigest: number
+    awaitingTts: number
+    awaitingPublish: number
+  }
+  runSummary?: {
+    runId: string
+    startedAt: string
+    finishedAt: string | null
+    durationSeconds: number | null
+    warnings: number
+    errors: number
+    phases: Array<{ phase: string; message: string; level: string; timestamp: string }>
+  } | null
+  recentRuns?: Array<{ runId: string; startedAt: string; finishedAt: string | null; durationSeconds: number | null }>
+  timeline?: Array<{ id: string; phase: string; message: string; level: string; timestamp: string }>
+  queues?: {
+    awaitingScoring: any[]
+    awaitingDigest: any[]
+    recentDigests: any[]
+    recentEpisodes: any[]
+  }
+}
+
+const timeAgo = (dateString?: string | null) => {
+  if (!dateString) return 'Never'
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffMinutes = Math.floor(diffMs / (1000 * 60))
+
+  if (diffHours > 24) {
+    const diffDays = Math.floor(diffHours / 24)
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+  }
+  if (diffHours > 0) {
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+  }
+  if (diffMinutes > 0) {
+    return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`
+  }
+  return 'Just now'
+}
+
+const phaseIcon = (phase: string) => {
+  switch (phase) {
+    case 'discovery': return '🔍'
+    case 'audio': return '🎧'
+    case 'digest': return '📝'
+    case 'tts': return '🎙️'
+    case 'publishing': return '📡'
+    case 'retention': return '🧹'
+    default: return '⚙️'
+  }
 }
 
 export function PipelineStatus() {
-  const [status, setStatus] = useState<PipelineStatus | null>(null)
+  const [status, setStatus] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState(false)
 
   useEffect(() => {
     fetchStatus()
-    // Refresh status every 30 seconds
     const interval = setInterval(fetchStatus, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -62,92 +98,22 @@ export function PipelineStatus() {
       const response = await fetch('/api/pipeline/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ daysBack: "7" })
+        body: JSON.stringify({ daysBack: '7' })
       })
 
       if (response.ok) {
-        const data = await response.json()
-        alert('Pipeline triggered successfully! Check the workflow page for progress.')
-        // Refresh status after a short delay
+        alert('Pipeline triggered successfully! Check Recent Activity for progress.')
         setTimeout(fetchStatus, 2000)
       } else {
         const error = await response.json()
         alert(`Failed to trigger pipeline: ${error.error}`)
       }
     } catch (error) {
+      console.error('Pipeline trigger error', error)
       alert('Failed to trigger pipeline')
-      console.error('Pipeline trigger error:', error)
     } finally {
       setTriggering(false)
     }
-  }
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffMinutes = Math.floor(diffMs / (1000 * 60))
-
-    if (diffHours > 24) {
-      const diffDays = Math.floor(diffHours / 24)
-      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
-    } else if (diffHours > 0) {
-      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
-    } else if (diffMinutes > 0) {
-      return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`
-    } else {
-      return 'Just now'
-    }
-  }
-
-  const getStatusBadge = (status: string, conclusion: string) => {
-    if (status === 'in_progress') {
-      return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Running</span>
-    } else if (status === 'completed') {
-      if (conclusion === 'success') {
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium status-success">Success</span>
-      } else if (conclusion === 'failure') {
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Failed</span>
-      } else {
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{conclusion}</span>
-      }
-    } else {
-      return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>
-    }
-  }
-
-  const renderPipelineRuns = () => {
-    if (!status?.pipelineRuns || status.pipelineRuns.length === 0) {
-      return (
-        <div className="text-sm text-gray-500">No Supabase pipeline runs recorded yet.</div>
-      )
-    }
-
-    return (
-      <div className="space-y-3">
-        {status.pipelineRuns.slice(0, 3).map((run) => {
-          const started = run.started_at ? new Date(run.started_at) : null
-          const finished = run.finished_at ? new Date(run.finished_at) : null
-          const duration = started && finished ? `${Math.round((finished.getTime() - started.getTime()) / 60000)} min` : '—'
-          return (
-            <div key={run.id} className="border border-gray-200 rounded-md p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{run.workflow_name || 'Pipeline Run'}</span>
-                <span>
-                  {getStatusBadge(run.status || 'unknown', run.conclusion || 'unknown')}
-                </span>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                <div>Trigger: {run.trigger || 'manual'}</div>
-                <div>Started: {started ? started.toLocaleString() : '—'}</div>
-                <div>Duration: {duration}</div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    )
   }
 
   if (loading) {
@@ -155,60 +121,152 @@ export function PipelineStatus() {
       <div className="card">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline Status</h3>
         <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-gray-200 rounded"></div>
-          <div className="h-4 bg-gray-200 rounded"></div>
-          <div className="h-4 bg-gray-200 rounded"></div>
+          <div className="h-4 bg-gray-200 rounded" />
+          <div className="h-4 bg-gray-200 rounded" />
+          <div className="h-4 bg-gray-200 rounded" />
         </div>
       </div>
     )
   }
 
+  const backlog = status?.backlog ?? { awaitingScoring: 0, awaitingDigest: 0, awaitingTts: 0, awaitingPublish: 0 }
+  const queues = status?.queues ?? { awaitingScoring: [], awaitingDigest: [], recentDigests: [], recentEpisodes: [] }
+
   return (
-    <div className="card">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline Status</h3>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Last Run</span>
-          <span className="text-sm text-gray-500">
-            {status?.lastRun ? formatTimeAgo(status.lastRun.createdAt) : 'Never'}
-          </span>
+    <div className="card space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900">Pipeline Status</h3>
+          <p className="text-sm text-gray-500">Latest run {timeAgo(status?.runSummary?.startedAt)}</p>
         </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Status</span>
-          {status?.lastRun ? (
-            getStatusBadge(status.lastRun.status, status.lastRun.conclusion)
-          ) : (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Unknown</span>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Episodes Today</span>
-          <span className="text-sm text-gray-500">{status?.stats.episodesProcessedToday || 0}</span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Total Episodes</span>
-          <span className="text-sm text-gray-500">{status?.stats.totalEpisodes || 0}</span>
-        </div>
-      </div>
-
-      <div className="mt-6 pt-4 border-t border-gray-200">
         <button
           onClick={triggerPipeline}
           disabled={triggering}
-          className="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn btn-primary whitespace-nowrap"
         >
-          {triggering ? 'Triggering...' : 'Run Pipeline Now'}
+          {triggering ? 'Triggering…' : 'Run Pipeline'}
         </button>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-semibold text-gray-700 mb-2">Supabase Pipeline History</h4>
-        {renderPipelineRuns()}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <SummaryCard label="Episodes Today" value={status?.stats.episodesProcessedToday ?? 0} />
+        <SummaryCard label="Digests Today" value={status?.stats.digestsGeneratedToday ?? 0} />
+        <SummaryCard label="Awaiting Scoring" value={backlog.awaitingScoring} muted />
+        <SummaryCard label="Awaiting Digest" value={backlog.awaitingDigest} muted />
+        <SummaryCard label="Awaiting TTS" value={backlog.awaitingTts} muted />
+        <SummaryCard label="Awaiting Publish" value={backlog.awaitingPublish} muted />
       </div>
+
+      {status?.runSummary && (
+        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase text-gray-500">Current Run</div>
+              <div className="text-sm font-semibold text-gray-900">Run {status.runSummary.runId}</div>
+            </div>
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Started:</span> {new Date(status.runSummary.startedAt).toLocaleString()} •{' '}
+              <span className="font-medium">Duration:</span>{' '}
+              {status.runSummary.durationSeconds ? `${Math.round(status.runSummary.durationSeconds / 60)} min` : '—'}
+            </div>
+            <div className="flex gap-3 text-sm">
+              <span className="text-amber-600">⚠️ {status.runSummary.warnings} warnings</span>
+              <span className={status.runSummary.errors > 0 ? 'text-red-600' : 'text-gray-600'}>
+                ❌ {status.runSummary.errors} errors
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {status.runSummary.phases.map((phase) => (
+              <div key={`${phase.phase}-${phase.timestamp}`} className="flex items-start space-x-3 border border-gray-100 rounded-md p-3">
+                <span className="text-lg">{phaseIcon(phase.phase)}</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-800 capitalize">{phase.phase}</span>
+                    <span className="text-xs text-gray-500">{new Date(phase.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  <div className="text-sm text-gray-600 truncate" title={phase.message}>{phase.message}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(queues.awaitingScoring.length > 0 || queues.awaitingDigest.length > 0 || queues.recentDigests.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <QueueList title="Awaiting Scoring" items={queues.awaitingScoring} empty="No episodes waiting to be scored." />
+          <QueueList title="Awaiting Digest" items={queues.awaitingDigest} empty="No scored episodes waiting for digest." />
+          <QueueList title="Recent Digests" items={queues.recentDigests} empty="No recent digests." digest />
+        </div>
+      )}
+
+      {status?.timeline && status.timeline.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700 mb-2">Latest Run Timeline</h4>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {status.timeline.slice().reverse().map((entry) => (
+              <div key={entry.id} className="text-sm text-gray-700 flex items-start space-x-2">
+                <span>{phaseIcon(entry.phase)}</span>
+                <div>
+                  <div className="font-medium text-gray-800 capitalize">{entry.phase}</div>
+                  <div className="text-xs text-gray-500">{new Date(entry.timestamp).toLocaleTimeString()} • {entry.level}</div>
+                  <div className="text-xs text-gray-600" title={entry.message}>{entry.message}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface SummaryCardProps {
+  label: string
+  value: number
+  muted?: boolean
+}
+
+export function SummaryCard({ label, value, muted }: SummaryCardProps) {
+  return (
+    <div className={`rounded-lg p-3 ${muted ? 'bg-white border border-gray-200' : 'bg-gray-50'}`}>
+      <div className="text-xs uppercase text-gray-500">{label}</div>
+      <div className="text-lg font-semibold text-gray-900">{value}</div>
+    </div>
+  )
+}
+
+interface QueueListProps {
+  title: string
+  items: any[]
+  empty: string
+  digest?: boolean
+}
+
+function QueueList({ title, items, empty, digest = false }: QueueListProps) {
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+      <div className="text-sm font-semibold text-gray-800">{title}</div>
+      {items.length === 0 ? (
+        <div className="text-xs text-gray-500">{empty}</div>
+      ) : (
+        <ul className="space-y-2 text-sm text-gray-700">
+          {items.slice(0, 4).map((item) => (
+            <li key={item.id} className="border border-gray-100 rounded-md px-2 py-2">
+              <div className="font-medium text-gray-800 truncate">{digest ? item.topic : item.title}</div>
+              <div className="text-xs text-gray-500">
+                {digest
+                  ? `Status: ${item.status}`
+                  : item.feeds?.title
+                    ? `Feed: ${item.feeds.title}`
+                    : ''}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

@@ -123,6 +123,20 @@ export interface PipelineRunRecord {
   updated_at: string
 }
 
+export interface PipelineLogRecord {
+  id: number
+  run_id: string
+  phase: string
+  timestamp: string
+  level: string
+  logger_name: string
+  module?: string
+  function?: string
+  line?: number
+  message: string
+  extra?: Record<string, any> | null
+}
+
 export interface DigestEpisodeLinkRecord {
   id: number
   digest_id: number
@@ -318,6 +332,44 @@ export class DatabaseClient {
     return data as PipelineRunRecord[]
   }
 
+  async getPipelineLogs(limit: number = 100, runId?: string): Promise<PipelineLogRecord[]> {
+    let query = supabase
+      .from('pipeline_logs')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(limit)
+
+    if (runId) {
+      query = query.eq('run_id', runId)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+    return (data as PipelineLogRecord[]) || []
+  }
+
+  async getDistinctRunIds(limit: number = 5): Promise<string[]> {
+    const { data, error } = await supabase
+      .from('pipeline_logs')
+      .select('run_id, timestamp')
+      .order('timestamp', { ascending: false })
+      .limit(limit * 5)
+
+    if (error) throw error
+
+    const runIds: string[] = []
+    const seen = new Set<string>()
+    for (const row of data || []) {
+      if (row.run_id && !seen.has(row.run_id)) {
+        seen.add(row.run_id)
+        runIds.push(row.run_id)
+        if (runIds.length >= limit) break
+      }
+    }
+    return runIds
+  }
+
   async getRecentEpisodes(limit: number = 10) {
     const { data, error } = await supabase
       .from('episodes')
@@ -507,6 +559,103 @@ export class DatabaseClient {
         lastSuccessfulRun: null
       }
     }
+  }
+
+  async getEpisodeBacklogStats() {
+    const countStatus = async (status: string) => {
+      const { count, error } = await supabase
+        .from('episodes')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', status)
+
+      if (error) throw error
+      return count || 0
+    }
+
+    const countDigests = async (status: string) => {
+      const { count, error } = await supabase
+        .from('digests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', status)
+
+      if (error) throw error
+      return count || 0
+    }
+
+    const [pending, transcribed, scored, digestsGenerated, digestsAudioGenerated] = await Promise.all([
+      countStatus('pending'),
+      countStatus('transcribed'),
+      countStatus('scored'),
+      countDigests('generated'),
+      countDigests('audio_generated')
+    ])
+
+    return {
+      awaitingScoring: pending + transcribed,
+      awaitingDigest: scored,
+      awaitingTts: digestsGenerated,
+      awaitingPublish: digestsAudioGenerated
+    }
+  }
+
+  async getEpisodesAwaitingScoring(limit: number = 5) {
+    const { data, error } = await supabase
+      .from('episodes')
+      .select(`
+        id,
+        title,
+        episode_guid,
+        status,
+        published_date,
+        created_at,
+        feeds!inner(title)
+      `)
+      .in('status', ['pending', 'transcribed'])
+      .order('published_date', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
+  }
+
+  async getEpisodesAwaitingDigest(limit: number = 5) {
+    const { data, error } = await supabase
+      .from('episodes')
+      .select(`
+        id,
+        title,
+        episode_guid,
+        status,
+        published_date,
+        created_at,
+        feeds!inner(title)
+      `)
+      .eq('status', 'scored')
+      .order('scored_at', { ascending: false, nullsFirst: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
+  }
+
+  async getLatestDigests(limit: number = 5) {
+    const { data, error } = await supabase
+      .from('digests')
+      .select(`
+        id,
+        topic,
+        status,
+        digest_date,
+        created_at,
+        generated_at,
+        published_at,
+        mp3_path
+      `)
+      .order('generated_at', { ascending: false, nullsFirst: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
   }
 
   // Episode operations

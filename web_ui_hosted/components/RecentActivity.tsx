@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react'
 
 interface Activity {
   id: string
-  type: string
+  phase: string
   message: string
+  level: string
   time: string
-  status: string
-  conclusion: string
-  htmlUrl: string
-  createdAt: string
+  timestamp: string
+  runId: string
 }
 
 export function RecentActivity() {
@@ -26,7 +25,7 @@ export function RecentActivity() {
 
   const fetchActivities = async () => {
     try {
-      const response = await fetch('/api/github/runs')
+      const response = await fetch('/api/pipeline/activity')
       if (response.ok) {
         const data = await response.json()
         setActivities(data.activities || [])
@@ -38,24 +37,32 @@ export function RecentActivity() {
     }
   }
 
-  const getActivityIcon = (type: string, status: string, conclusion: string) => {
-    if (status === 'in_progress') {
-      return '🔄'
-    } else if (status === 'completed' && conclusion === 'success') {
-      switch (type) {
-        case 'publishing': return '📤'
-        case 'pipeline': return '⚙️'
-        default: return '✅'
-      }
-    } else if (status === 'completed' && conclusion === 'failure') {
+  const getActivityIcon = (phase: string, level: string) => {
+    if (level === 'ERROR' || level === 'CRITICAL') {
       return '❌'
-    } else {
-      switch (type) {
-        case 'publishing': return '📡'
-        case 'pipeline': return '⚙️'
-        default: return '📋'
-      }
     }
+    if (level === 'WARNING') {
+      return '⚠️'
+    }
+    if (phase === 'publishing') {
+      return '📡'
+    }
+    if (phase === 'retention') {
+      return '🧹'
+    }
+    if (phase === 'tts') {
+      return '🎙️'
+    }
+    if (phase === 'digest') {
+      return '📝'
+    }
+    if (phase === 'audio') {
+      return '🎧'
+    }
+    if (phase === 'discovery') {
+      return '🔍'
+    }
+    return '⚙️'
   }
 
   if (loading) {
@@ -77,29 +84,19 @@ export function RecentActivity() {
 
       <div className="space-y-3">
         {activities.length > 0 ? (
-          activities.slice(0, 4).map((activity) => (
+          activities.slice(0, 6).map((activity) => (
             <div key={activity.id} className="flex items-center space-x-3">
               <span className="text-lg">
-                {getActivityIcon(activity.type, activity.status, activity.conclusion)}
+                {getActivityIcon(activity.phase, activity.level)}
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {activity.message}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {activity.time}
+                  {activity.time} • Run {activity.runId}
                 </p>
               </div>
-              {activity.htmlUrl && (
-                <a
-                  href={activity.htmlUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary-600 hover:text-primary-800"
-                >
-                  View
-                </a>
-              )}
             </div>
           ))
         ) : (
@@ -109,16 +106,6 @@ export function RecentActivity() {
         )}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <a
-          href={`https://github.com/${process.env.NEXT_PUBLIC_GITHUB_REPOSITORY || 'McSchnizzle/podscrape2'}/actions`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-primary-600 hover:text-primary-800"
-        >
-          View all activity →
-        </a>
-      </div>
     </div>
   )
 }

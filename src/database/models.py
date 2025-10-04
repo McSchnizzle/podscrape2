@@ -22,6 +22,7 @@ from .sqlalchemy_models import (
     TopicInstructionVersion as TopicInstructionModel,
     DigestEpisodeLink as DigestEpisodeLinkModel,
     PipelineRun as PipelineRunModel,
+    PipelineLog as PipelineLogModel,
 )
 from src.config.env import require_database_url
 
@@ -145,6 +146,21 @@ class PipelineRun:
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+@dataclass
+class PipelineLog:
+    run_id: str
+    phase: str
+    timestamp: datetime
+    level: str
+    logger_name: str
+    module: Optional[str] = None
+    function: Optional[str] = None
+    line: Optional[int] = None
+    message: str = ""
+    extra: Optional[Dict[str, Any]] = None
+    id: Optional[int] = None
 
 class DatabaseManager:
     """
@@ -1212,6 +1228,81 @@ def get_database_manager() -> DatabaseManager:
     """Factory function to get database manager"""
     return DatabaseManager()
 
+
+class PipelineLogRepository:
+    """Repository for pipeline log storage and retrieval."""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+        try:
+            PipelineLogModel.__table__.create(self.db.engine, checkfirst=True)
+        except Exception as exc:
+            logger.warning(f"Could not ensure pipeline_logs table exists: {exc}")
+
+    def bulk_insert(self, logs: List[PipelineLog]):
+        if not logs:
+            return
+        with self.db.get_session() as session:
+            try:
+                orm_logs = [
+                    PipelineLogModel(
+                        run_id=log.run_id,
+                        phase=log.phase,
+                        timestamp=log.timestamp,
+                        level=log.level,
+                        logger_name=log.logger_name,
+                        module=log.module,
+                        function=log.function,
+                        line=log.line,
+                        message=log.message,
+                        extra=log.extra,
+                    )
+                    for log in logs
+                ]
+                session.bulk_save_objects(orm_logs)
+                session.commit()
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to insert pipeline logs: {exc}")
+                raise
+
+    def get_recent_logs(self, run_id: Optional[str] = None, phase: Optional[str] = None,
+                         limit: int = 500) -> List[PipelineLog]:
+        with self.db.get_session() as session:
+            query = session.query(PipelineLogModel)
+            if run_id:
+                query = query.filter(PipelineLogModel.run_id == run_id)
+            if phase:
+                query = query.filter(PipelineLogModel.phase == phase)
+            models = query.order_by(PipelineLogModel.timestamp.desc()).limit(limit).all()
+            return [self._model_to_log(model) for model in models]
+
+    def get_latest_run_logs(self, limit: int = 500) -> List[PipelineLog]:
+        with self.db.get_session() as session:
+            latest_run = session.query(PipelineLogModel.run_id)
+            latest_run = latest_run.order_by(PipelineLogModel.timestamp.desc()).limit(1).scalar()
+            if not latest_run:
+                return []
+            logs = session.query(PipelineLogModel).filter(
+                PipelineLogModel.run_id == latest_run
+            ).order_by(PipelineLogModel.timestamp.desc()).limit(limit).all()
+            return [self._model_to_log(model) for model in logs]
+
+    def _model_to_log(self, model: PipelineLogModel) -> PipelineLog:
+        return PipelineLog(
+            id=model.id,
+            run_id=model.run_id,
+            phase=model.phase,
+            timestamp=model.timestamp,
+            level=model.level,
+            logger_name=model.logger_name,
+            module=model.module,
+            function=model.function,
+            line=model.line,
+            message=model.message,
+            extra=model.extra,
+        )
+
 def get_feed_repo(db_manager: DatabaseManager = None) -> FeedRepository:
     """Get feed repository"""
     if db_manager is None:
@@ -1250,3 +1341,10 @@ def get_pipeline_run_repo(db_manager: DatabaseManager = None) -> PipelineRunRepo
     if db_manager is None:
         db_manager = get_database_manager()
     return PipelineRunRepository(db_manager)
+
+
+def get_pipeline_log_repo(db_manager: DatabaseManager = None) -> PipelineLogRepository:
+    """Get pipeline log repository"""
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return PipelineLogRepository(db_manager)

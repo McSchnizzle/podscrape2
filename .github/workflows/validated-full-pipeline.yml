@@ -258,34 +258,4 @@ jobs:
         env:
           ORCHESTRATED_EXECUTION: "1"
 
-      - name: Collect TTS logs and MP3 files
-        if: always()
-        run: |
-          mkdir -p artifacts/logs
-          for pattern in "logs/tts_*.log" "logs/digest_*.log" "logs/scoring_*.log" "logs/audio_*.log" "logs/discovery_*.log"; do
-            if compgen -G "$pattern" > /dev/null; then
-              cp $pattern artifacts/logs/
-            fi
-          done
-          # Copy generated MP3 files to artifacts
-          mkdir -p artifacts/mp3-files
-          if [ -d "data/completed-tts" ] && [ "$(ls -A data/completed-tts/*.mp3 2>/dev/null)" ]; then
-            cp data/completed-tts/*.mp3 artifacts/mp3-files/ 2>/dev/null || true
-          fi
-
-      - name: Upload TTS artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-phase
-          path: artifacts
-          if-no-files-found: warn
-
-      - name: Summarize TTS output
-        if: success()
-        run: |
-          if [ -f artifacts/tts-output.json ]; then
-            jq '.' artifacts/tts-output.json || cat artifacts/tts-output.json
-          else
-            echo "tts-output.json not produced."
-          fi
+      # Logs are now persisted in the database via PipelineLogRepository
