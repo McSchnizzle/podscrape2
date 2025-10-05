@@ -126,6 +126,11 @@ class DatabaseLogHandler(logging.Handler):
         if not self.enabled:
             return
 
+        # Skip logs from database module to prevent circular logging
+        # (DatabaseManager.__init__ logs, which would trigger this handler during initialization)
+        if record.name.startswith('src.database'):
+            return
+
         # Lazy-initialize repository on first use
         if not self._repo_initialized:
             self._ensure_repo()
