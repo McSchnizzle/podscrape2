@@ -197,13 +197,14 @@ class DiscoveryRunner:
             'User-Agent': 'PodcastDigest/1.0 (+https://github.com/McSchnizzle/podscrape2)'
         }
 
-        for feed_info in self.rss_feeds:
+        for feed_idx, feed_info in enumerate(self.rss_feeds, 1):
             # Continue checking all feeds - don't break early
 
             feed_url = feed_info['url']
             feed_name = feed_info['name']
 
-            self.logger.info(f"Checking {feed_name}: {feed_url}")
+            self.logger.info(f"[{feed_idx}/{len(self.rss_feeds)}] Checking {feed_name}")
+            self.logger.info(f"  URL: {feed_url}")
 
             # Mark feed as checked
             try:
@@ -216,22 +217,26 @@ class DiscoveryRunner:
                 # Fetch feed with requests (with timeout to prevent hanging)
                 feed = None
                 try:
+                    self.logger.info(f"  Fetching feed (timeout: 12s)...")
                     resp = requests.get(feed_url, timeout=12, headers=headers)
                     resp.raise_for_status()
+                    self.logger.info(f"  ✓ Fetch complete ({len(resp.content)} bytes)")
+                    self.logger.info(f"  Parsing feed XML...")
                     feed = feedparser.parse(resp.content)
+                    self.logger.info(f"  ✓ Parse complete")
                 except Exception as e:
-                    self.logger.error(f"Failed to fetch feed {feed_name}: {e}")
+                    self.logger.error(f"  ✗ Failed to fetch feed: {e}")
                     continue  # Skip this feed and move to next one
 
                 # Check for parser issues
                 if getattr(feed, 'bozo', 0):
-                    self.logger.warning(f"Parser flagged feed as bozo: {getattr(feed, 'bozo_exception', None)}")
+                    self.logger.warning(f"  Parser flagged feed as bozo: {getattr(feed, 'bozo_exception', None)}")
 
                 if not getattr(feed, 'entries', None):
-                    self.logger.warning(f"No entries found in {feed_name}")
+                    self.logger.warning(f"  No entries found in feed")
                     continue
 
-                self.logger.info(f"Found {len(feed.entries)} episodes in feed")
+                self.logger.info(f"  Found {len(feed.entries)} total episodes in feed")
 
                 # Check recent episodes
                 cutoff_date = datetime.now() - timedelta(days=self.days_back)
