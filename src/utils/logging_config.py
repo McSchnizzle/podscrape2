@@ -103,21 +103,34 @@ class DatabaseLogHandler(logging.Handler):
         self.enabled = True
         self._error_reported = False
         self.repo = None
+        self._repo_initialized = False
 
         if PipelineLog is None or get_pipeline_log_repo is None:
             self.enabled = False
             return
 
-        try:
-            self.repo = get_pipeline_log_repo()
-        except Exception as exc:  # pragma: no cover - defensive
-            self._disable(exc)
+        # Lazy initialization - don't create repo until first log emission
+        # This prevents deadlock during application initialization
+        atexit.register(self.flush)
 
-        if self.enabled:
-            atexit.register(self.flush)
+    def _ensure_repo(self):
+        """Lazy initialization of repository to avoid deadlock during app init"""
+        if not self._repo_initialized and self.enabled:
+            try:
+                self.repo = get_pipeline_log_repo()
+                self._repo_initialized = True
+            except Exception as exc:
+                self._disable(exc)
 
     def emit(self, record: logging.LogRecord):
-        if not self.enabled or self.repo is None:
+        if not self.enabled:
+            return
+
+        # Lazy-initialize repository on first use
+        if not self._repo_initialized:
+            self._ensure_repo()
+
+        if self.repo is None:
             return
 
         try:
@@ -161,7 +174,11 @@ class DatabaseLogHandler(logging.Handler):
             self._disable(exc)
 
     def flush(self):
-        if not self.enabled or self.repo is None:
+        if not self.enabled:
+            return
+        if not self._repo_initialized:
+            self._ensure_repo()
+        if self.repo is None:
             return
         with self.lock:
             self._flush_locked()

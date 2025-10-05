@@ -1232,13 +1232,19 @@ class PipelineRunRepository:
                 logger.error(f"Failed to update pipeline run {run_id}: {exc}")
 
 
+import threading
+
 _database_manager_instance = None
+_database_manager_lock = threading.Lock()
 
 def get_database_manager() -> DatabaseManager:
-    """Factory function to get database manager singleton"""
+    """Thread-safe factory function to get database manager singleton"""
     global _database_manager_instance
     if _database_manager_instance is None:
-        _database_manager_instance = DatabaseManager()
+        with _database_manager_lock:
+            # Double-check locking pattern
+            if _database_manager_instance is None:
+                _database_manager_instance = DatabaseManager()
     return _database_manager_instance
 
 
