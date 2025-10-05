@@ -3,6 +3,8 @@ WebConfigManager: DB-backed settings for the Web UI.
 Provides typed get/set with basic validation and integrates with the pipeline optionally.
 """
 
+print("DEBUG: web_config.py module starting to import", flush=True)
+
 from datetime import datetime
 from typing import Any, Dict, Optional
 from pathlib import Path
@@ -105,13 +107,18 @@ DEFAULTS = {
 
 class WebConfigManager:
     def __init__(self):
+        print("DEBUG: WebConfigManager.__init__ starting", flush=True)
         self.db_manager = get_database_manager()
+        print("DEBUG: db_manager created", flush=True)
         self._ensure_table()
+        print("DEBUG: _ensure_table complete", flush=True)
         self._seed_defaults()
+        print("DEBUG: _seed_defaults complete", flush=True)
 
     def _ensure_table(self):
-        # Create table using SQLAlchemy
-        Base.metadata.create_all(self.db_manager.engine)
+        # Table creation removed - web_settings table is managed via Alembic migrations
+        # The create_all() query was hanging when database logging was enabled
+        pass
 
     def _seed_defaults(self):
         with self.db_manager.get_session() as session:
