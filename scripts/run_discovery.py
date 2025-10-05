@@ -213,15 +213,15 @@ class DiscoveryRunner:
                 self.logger.warning(f"Failed to update last_checked for feed {feed_info['id']}: {e}")
 
             try:
-                # Fetch feed with requests first, fallback to direct parse
+                # Fetch feed with requests (with timeout to prevent hanging)
                 feed = None
                 try:
                     resp = requests.get(feed_url, timeout=12, headers=headers)
                     resp.raise_for_status()
                     feed = feedparser.parse(resp.content)
                 except Exception as e:
-                    self.logger.warning(f"Fetch via requests failed ({e}); trying direct parse")
-                    feed = feedparser.parse(feed_url)
+                    self.logger.error(f"Failed to fetch feed {feed_name}: {e}")
+                    continue  # Skip this feed and move to next one
 
                 # Check for parser issues
                 if getattr(feed, 'bozo', 0):
