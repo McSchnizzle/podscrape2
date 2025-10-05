@@ -347,6 +347,12 @@ Thank you for your understanding, and we'll see you tomorrow!
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
 
+        # Check if a digest already exists for this topic and date
+        existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
+        if existing_digest and existing_digest.script_content:
+            logger.info(f"Digest already exists for {topic} on {digest_date} (ID: {existing_digest.id}), returning existing digest")
+            return existing_digest
+
         # Find qualifying episodes
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)
         logger.info(f"Found {len(episodes)} qualifying episodes for {topic}")

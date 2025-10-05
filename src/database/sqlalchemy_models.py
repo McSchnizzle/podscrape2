@@ -146,6 +146,7 @@ class Digest(Base):
     github_url = Column(String(4096))
     published_at = Column(DateTime(timezone=False))
     generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(UTC))
+    status = Column(String(50), default='draft')  # draft, generated, audio_generated, published
 
     __table_args__ = (
         UniqueConstraint("topic", "digest_date", "digest_timestamp", name="uq_digests_topic_date_timestamp"),

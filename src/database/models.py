@@ -92,6 +92,7 @@ class Digest:
     published_at: Optional[datetime] = None
     id: Optional[int] = None
     generated_at: Optional[datetime] = None
+    status: Optional[str] = 'draft'  # draft, generated, audio_generated, published
 
 
 @dataclass
@@ -803,7 +804,8 @@ class DigestRepository:
                     mp3_summary=digest.mp3_summary,
                     average_score=digest.average_score,
                     github_url=digest.github_url,
-                    published_at=digest.published_at
+                    published_at=digest.published_at,
+                    status=digest.status or 'draft'
                 )
                 session.add(digest_model)
                 session.commit()
@@ -837,7 +839,7 @@ class DigestRepository:
             return self._model_to_digest(digest_model) if digest_model else None
 
     def update_script(self, digest_id: int, script_path: str, word_count: int, script_content: Optional[str] = None):
-        """Update script information"""
+        """Update script information and set status to 'generated'"""
         with self.db.get_session() as session:
             try:
                 digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
@@ -846,6 +848,7 @@ class DigestRepository:
                     digest_model.script_word_count = word_count
                     if script_content is not None:
                         digest_model.script_content = script_content
+                    digest_model.status = 'generated'
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -854,7 +857,7 @@ class DigestRepository:
 
     def update_audio(self, digest_id: int, mp3_path: str, duration_seconds: int,
                     title: str, summary: str):
-        """Update audio information"""
+        """Update audio information and set status to 'audio_generated'"""
         with self.db.get_session() as session:
             try:
                 digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
@@ -863,6 +866,7 @@ class DigestRepository:
                     digest_model.mp3_duration_seconds = duration_seconds
                     digest_model.mp3_title = title
                     digest_model.mp3_summary = summary
+                    digest_model.status = 'audio_generated'
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -870,13 +874,14 @@ class DigestRepository:
                 raise
 
     def update_published(self, digest_id: int, github_url: str):
-        """Update publishing information"""
+        """Update publishing information and set status to 'published'"""
         with self.db.get_session() as session:
             try:
                 digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
                 if digest_model:
                     digest_model.github_url = github_url
                     digest_model.published_at = datetime.now(UTC)
+                    digest_model.status = 'published'
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -987,7 +992,8 @@ class DigestRepository:
             average_score=model.average_score,
             github_url=model.github_url,
             published_at=model.published_at,
-            generated_at=model.generated_at
+            generated_at=model.generated_at,
+            status=getattr(model, 'status', 'draft')
         )
 
 
