@@ -74,8 +74,11 @@ class DiscoveryRunner:
     def __init__(self, dry_run: bool = False, limit: int = None, days_back: int = 7,
                  episode_guid: str = None, verbose: bool = False):
         # Set up phase-specific logging
+        print("DEBUG: Starting setup_phase_logging", flush=True)
         self.pipeline_logger = setup_phase_logging("discovery", verbose=verbose, console_output=True)
+        print("DEBUG: setup_phase_logging complete", flush=True)
         self.logger = self.pipeline_logger.get_logger()
+        print("DEBUG: Logger obtained", flush=True)
 
         self.dry_run = dry_run
         self.episode_guid = episode_guid
@@ -83,15 +86,20 @@ class DiscoveryRunner:
 
         # Load web settings for defaults if not explicitly provided
         try:
+            print("DEBUG: About to import WebConfigManager", flush=True)
             self.logger.info("Loading web settings from database...")
             from src.config.web_config import WebConfigManager
+            print("DEBUG: About to create WebConfigManager instance", flush=True)
             web_config = WebConfigManager()
+            print("DEBUG: WebConfigManager created", flush=True)
             self.logger.info("✓ WebConfigManager initialized")
 
             # Apply web settings if no explicit CLI values provided - FAIL FAST if not available
             if limit is None:
+                print("DEBUG: About to query max_episodes_per_run", flush=True)
                 self.logger.info("Querying database for 'max_episodes_per_run' setting...")
                 setting = web_config.get_setting('pipeline', 'max_episodes_per_run')
+                print(f"DEBUG: Got max_episodes_per_run = {setting}", flush=True)
                 if setting is None:
                     raise ValueError("Required database setting 'max_episodes_per_run' not found - pipeline cannot continue")
                 limit = int(setting)
@@ -112,10 +120,15 @@ class DiscoveryRunner:
         self.days_back = days_back
 
         # Initialize repositories
+        print("DEBUG: About to initialize repositories", flush=True)
         self.logger.info("Initializing database repositories...")
+        print("DEBUG: Calling get_episode_repo()", flush=True)
         self.episode_repo = get_episode_repo()
+        print("DEBUG: Episode repo created", flush=True)
         self.logger.info("✓ Episode repository initialized")
+        print("DEBUG: Calling get_feed_repo()", flush=True)
         self.feed_repo = get_feed_repo()
+        print("DEBUG: Feed repo created", flush=True)
         self.logger.info("✓ Feed repository initialized")
 
         # Load feeds from database
@@ -127,8 +140,10 @@ class DiscoveryRunner:
     def _load_feeds_from_database(self):
         """Load active RSS feeds from database"""
         try:
+            print("DEBUG: About to call get_active_feeds()", flush=True)
             self.logger.info("Querying database for active feeds...")
             feeds = self.feed_repo.get_active_feeds()
+            print(f"DEBUG: get_active_feeds() returned {len(feeds)} feeds", flush=True)
             self.logger.info(f"✓ Retrieved {len(feeds)} active feeds from database")
 
             feed_list = []
