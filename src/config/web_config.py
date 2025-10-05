@@ -3,8 +3,6 @@ WebConfigManager: DB-backed settings for the Web UI.
 Provides typed get/set with basic validation and integrates with the pipeline optionally.
 """
 
-print("DEBUG: web_config.py module starting to import", flush=True)
-
 from datetime import datetime
 from typing import Any, Dict, Optional
 from pathlib import Path
@@ -12,7 +10,8 @@ from sqlalchemy import text, Column, Integer, String, DateTime, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import insert
 
-from src.database.models import get_database_manager
+# Lazy import to avoid circular dependency when database logging is enabled
+# from src.database.models import get_database_manager
 
 # AI Model Definitions and Limits
 AI_MODELS = {
@@ -107,13 +106,11 @@ DEFAULTS = {
 
 class WebConfigManager:
     def __init__(self):
-        print("DEBUG: WebConfigManager.__init__ starting", flush=True)
+        # Lazy import to avoid circular dependency
+        from src.database.models import get_database_manager
         self.db_manager = get_database_manager()
-        print("DEBUG: db_manager created", flush=True)
         self._ensure_table()
-        print("DEBUG: _ensure_table complete", flush=True)
         self._seed_defaults()
-        print("DEBUG: _seed_defaults complete", flush=True)
 
     def _ensure_table(self):
         # Table creation removed - web_settings table is managed via Alembic migrations
