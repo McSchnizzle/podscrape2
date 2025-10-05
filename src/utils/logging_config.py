@@ -117,32 +117,55 @@ class DatabaseLogHandler(logging.Handler):
         """Lazy initialization of repository to avoid deadlock during app init"""
         if not self._repo_initialized and self.enabled:
             try:
+                # Temporarily disable to prevent reentrant logging during initialization
+                import sys
+                print("DEBUG: _ensure_repo starting, disabling handler", file=sys.stderr, flush=True)
+                old_enabled = self.enabled
+                self.enabled = False
+
+                print("DEBUG: Calling get_pipeline_log_repo()", file=sys.stderr, flush=True)
                 self.repo = get_pipeline_log_repo()
+                print("DEBUG: get_pipeline_log_repo() returned", file=sys.stderr, flush=True)
                 self._repo_initialized = True
+
+                # Re-enable after successful initialization
+                self.enabled = old_enabled
+                print("DEBUG: Repository initialized successfully", file=sys.stderr, flush=True)
             except Exception as exc:
+                print(f"DEBUG: Exception in _ensure_repo: {exc}", file=sys.stderr, flush=True)
                 self._disable(exc)
 
     def emit(self, record: logging.LogRecord):
+        import sys
+        print(f"DEBUG: emit() called for: {record.getMessage()[:50]}", file=sys.stderr, flush=True)
+
         if not self.enabled:
+            print("DEBUG: Handler disabled, returning", file=sys.stderr, flush=True)
             return
 
         # Skip logs from database module to prevent circular logging
         # (DatabaseManager.__init__ logs, which would trigger this handler during initialization)
         if record.name.startswith('src.database'):
+            print("DEBUG: Skipping src.database log", file=sys.stderr, flush=True)
             return
 
         # Lazy-initialize repository on first use
         if not self._repo_initialized:
+            print("DEBUG: Calling _ensure_repo()", file=sys.stderr, flush=True)
             self._ensure_repo()
+            print("DEBUG: _ensure_repo() returned", file=sys.stderr, flush=True)
 
         if self.repo is None:
+            print("DEBUG: Repo is None, returning", file=sys.stderr, flush=True)
             return
 
         try:
             # Only persist informative records; skip verbose DEBUG chatter
             if record.levelno < logging.INFO:
+                print("DEBUG: Level too low, skipping", file=sys.stderr, flush=True)
                 return
 
+            print("DEBUG: Creating log entry", file=sys.stderr, flush=True)
             timestamp = datetime.fromtimestamp(record.created)
             extra_payload: Dict[str, Any] = {}
             if hasattr(record, 'extra_fields') and isinstance(record.extra_fields, dict):
@@ -169,13 +192,20 @@ class DatabaseLogHandler(logging.Handler):
                 message=record.getMessage(),
                 extra=extra_payload or None,
             )
+            print("DEBUG: Log entry created, acquiring lock", file=sys.stderr, flush=True)
 
             with self.lock:
+                print("DEBUG: Lock acquired, appending to buffer", file=sys.stderr, flush=True)
                 self.buffer.append(log_entry)
+                print(f"DEBUG: Buffer size: {len(self.buffer)}/{self.buffer_size}", file=sys.stderr, flush=True)
                 if len(self.buffer) >= self.buffer_size:
+                    print("DEBUG: Buffer full, flushing", file=sys.stderr, flush=True)
                     self._flush_locked()
 
+            print("DEBUG: emit() complete", file=sys.stderr, flush=True)
+
         except Exception as exc:  # pragma: no cover - defensive
+            print(f"DEBUG: Exception in emit(): {exc}", file=sys.stderr, flush=True)
             self._disable(exc)
 
     def flush(self):

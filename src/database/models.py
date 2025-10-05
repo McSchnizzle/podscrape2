@@ -180,7 +180,8 @@ class DatabaseManager:
             echo=False  # Set to True for SQL debugging
         )
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        logger.info(f"Database manager initialized with PostgreSQL")
+        # Logging removed to prevent circular dependency with DatabaseLogHandler
+        # logger.info(f"Database manager initialized with PostgreSQL")
 
     def get_session(self) -> Session:
         """Get a new database session"""
