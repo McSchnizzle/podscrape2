@@ -175,6 +175,8 @@ class DatabaseManager:
             self.database_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=10,  # Increased from default 5 for database logging concurrency
+            max_overflow=20,  # Increased from default 10 for database logging concurrency
             echo=False  # Set to True for SQL debugging
         )
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
