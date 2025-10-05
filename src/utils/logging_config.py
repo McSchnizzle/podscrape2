@@ -90,86 +90,49 @@ class PerformanceLogger:
             )
 
 
-class DatabaseLogHandler(logging.Handler):
-    """Persist log records to the database for workflow observability."""
+class BatchDatabaseLogHandler(logging.Handler):
+    """
+    Batch database log handler - stores logs in memory and writes at phase completion.
 
-    def __init__(self, run_id: str, phase: str, buffer_size: int = 25):
+    This avoids threading/deadlock issues by deferring all database writes until
+    flush_to_database() is called explicitly at the end of the phase.
+    """
+
+    def __init__(self, run_id: str, phase: str):
         super().__init__()
         self.run_id = run_id
         self.phase = phase
-        self.buffer_size = max(1, buffer_size)
-        self.lock = threading.Lock()
-        self.buffer: list[PipelineLog] = []
+        self.buffer: List[PipelineLog] = []
         self.enabled = True
         self._error_reported = False
-        self.repo = None
-        self._repo_initialized = False
 
         if PipelineLog is None or get_pipeline_log_repo is None:
             self.enabled = False
             return
 
-        # Lazy initialization - don't create repo until first log emission
-        # This prevents deadlock during application initialization
-        atexit.register(self.flush)
-
-    def _ensure_repo(self):
-        """Lazy initialization of repository to avoid deadlock during app init"""
-        if not self._repo_initialized and self.enabled:
-            try:
-                # Temporarily disable to prevent reentrant logging during initialization
-                import sys
-                print("DEBUG: _ensure_repo starting, disabling handler", file=sys.stderr, flush=True)
-                old_enabled = self.enabled
-                self.enabled = False
-
-                print("DEBUG: Calling get_pipeline_log_repo()", file=sys.stderr, flush=True)
-                self.repo = get_pipeline_log_repo()
-                print("DEBUG: get_pipeline_log_repo() returned", file=sys.stderr, flush=True)
-                self._repo_initialized = True
-
-                # Re-enable after successful initialization
-                self.enabled = old_enabled
-                print("DEBUG: Repository initialized successfully", file=sys.stderr, flush=True)
-            except Exception as exc:
-                print(f"DEBUG: Exception in _ensure_repo: {exc}", file=sys.stderr, flush=True)
-                self._disable(exc)
+        # Set minimum level to INFO (skip DEBUG logs)
+        self.setLevel(logging.INFO)
 
     def emit(self, record: logging.LogRecord):
-        import sys
-        print(f"DEBUG: emit() called for: {record.getMessage()[:50]}", file=sys.stderr, flush=True)
-
+        """Accumulate log records in memory buffer - no database access during logging"""
         if not self.enabled:
-            print("DEBUG: Handler disabled, returning", file=sys.stderr, flush=True)
             return
 
         # Skip logs from database module to prevent circular logging
-        # (DatabaseManager.__init__ logs, which would trigger this handler during initialization)
         if record.name.startswith('src.database'):
-            print("DEBUG: Skipping src.database log", file=sys.stderr, flush=True)
-            return
-
-        # Lazy-initialize repository on first use
-        if not self._repo_initialized:
-            print("DEBUG: Calling _ensure_repo()", file=sys.stderr, flush=True)
-            self._ensure_repo()
-            print("DEBUG: _ensure_repo() returned", file=sys.stderr, flush=True)
-
-        if self.repo is None:
-            print("DEBUG: Repo is None, returning", file=sys.stderr, flush=True)
             return
 
         try:
             # Only persist informative records; skip verbose DEBUG chatter
             if record.levelno < logging.INFO:
-                print("DEBUG: Level too low, skipping", file=sys.stderr, flush=True)
                 return
 
-            print("DEBUG: Creating log entry", file=sys.stderr, flush=True)
             timestamp = datetime.fromtimestamp(record.created)
             extra_payload: Dict[str, Any] = {}
+
             if hasattr(record, 'extra_fields') and isinstance(record.extra_fields, dict):
                 extra_payload.update(record.extra_fields)
+
             if record.exc_info:
                 exc_type, exc_value, exc_tb = record.exc_info
                 extra_payload.setdefault('exception', {
@@ -177,9 +140,11 @@ class DatabaseLogHandler(logging.Handler):
                     'message': str(exc_value) if exc_value else None,
                     'traceback': traceback.format_exception(*record.exc_info)
                 })
+
             if record.stack_info:
                 extra_payload['stack'] = record.stack_info
 
+            # Create log entry object but DON'T write to database yet
             log_entry = PipelineLog(
                 run_id=self.run_id,
                 phase=self.phase,
@@ -192,54 +157,52 @@ class DatabaseLogHandler(logging.Handler):
                 message=record.getMessage(),
                 extra=extra_payload or None,
             )
-            print("DEBUG: Log entry created, acquiring lock", file=sys.stderr, flush=True)
 
-            with self.lock:
-                print("DEBUG: Lock acquired, appending to buffer", file=sys.stderr, flush=True)
-                self.buffer.append(log_entry)
-                print(f"DEBUG: Buffer size: {len(self.buffer)}/{self.buffer_size}", file=sys.stderr, flush=True)
-                if len(self.buffer) >= self.buffer_size:
-                    print("DEBUG: Buffer full, flushing", file=sys.stderr, flush=True)
-                    self._flush_locked()
-
-            print("DEBUG: emit() complete", file=sys.stderr, flush=True)
+            # Just append to buffer - no locks, no database access
+            self.buffer.append(log_entry)
 
         except Exception as exc:  # pragma: no cover - defensive
-            print(f"DEBUG: Exception in emit(): {exc}", file=sys.stderr, flush=True)
             self._disable(exc)
 
-    def flush(self):
-        if not self.enabled:
+    def flush_to_database(self):
+        """
+        Flush all buffered logs to database in a single batch operation.
+        Called explicitly at phase completion - not during logging.
+        """
+        if not self.enabled or not self.buffer:
             return
-        if not self._repo_initialized:
-            self._ensure_repo()
-        if self.repo is None:
-            return
-        with self.lock:
-            self._flush_locked()
+
+        try:
+            # Get repository and perform single bulk insert
+            repo = get_pipeline_log_repo()
+            repo.bulk_insert(self.buffer)
+
+            # Clear buffer after successful write
+            log_count = len(self.buffer)
+            self.buffer.clear()
+
+            # Log success to file/console (not to database to avoid recursion)
+            sys.stderr.write(f"[BatchDatabaseLogHandler] Wrote {log_count} logs to database\n")
+
+        except Exception as exc:  # pragma: no cover - defensive
+            self._disable(exc)
+            # Clear buffer even on failure to prevent memory issues
+            self.buffer.clear()
 
     def close(self):
+        """Handler cleanup - flush any remaining logs"""
         try:
-            self.flush()
+            self.flush_to_database()
         finally:
             super().close()
 
-    def _flush_locked(self):
-        if not self.buffer or self.repo is None:
-            return
-        try:
-            self.repo.bulk_insert(self.buffer)
-            self.buffer.clear()
-        except Exception as exc:  # pragma: no cover - defensive
-            self.buffer.clear()
-            self._disable(exc)
-
     def _disable(self, exc: Exception):
+        """Disable handler on error and report once"""
         if not self.enabled:
             return
         self.enabled = False
         if not self._error_reported:
-            sys.stderr.write(f"[DatabaseLogHandler] disabled: {exc}\n")
+            sys.stderr.write(f"[BatchDatabaseLogHandler] disabled: {exc}\n")
             self._error_reported = True
 
 class LoggingManager:
@@ -539,7 +502,7 @@ class PipelineLogger:
             return None
 
         try:
-            handler = DatabaseLogHandler(run_id, self.phase_name)
+            handler = BatchDatabaseLogHandler(run_id, self.phase_name)
             logging.getLogger().addHandler(handler)
             return handler
         except Exception as exc:  # pragma: no cover - defensive
@@ -564,13 +527,17 @@ class PipelineLogger:
         self.logger.info(f"📁 Log file: {self.log_file}")
 
     def log_phase_complete(self, success: bool = True, summary: str = ""):
-        """Log the completion of a phase"""
+        """Log the completion of a phase and flush database logs"""
         status = "✅ COMPLETED" if success else "❌ FAILED"
         self.logger.info("=" * 80)
         self.logger.info(f"🏁 {self.phase_name.upper()} {status}")
         if summary:
             self.logger.info(f"📊 {summary}")
         self.logger.info("=" * 80)
+
+        # Flush buffered logs to database at phase completion
+        if self.db_handler:
+            self.db_handler.flush_to_database()
 
 
 def setup_phase_logging(phase_name: str, verbose: bool = False, console_output: bool = True, run_cleanup: bool = True) -> PipelineLogger:
