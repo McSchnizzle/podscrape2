@@ -83,20 +83,26 @@ class DiscoveryRunner:
 
         # Load web settings for defaults if not explicitly provided
         try:
+            self.logger.info("Loading web settings from database...")
             from src.config.web_config import WebConfigManager
             web_config = WebConfigManager()
+            self.logger.info("✓ WebConfigManager initialized")
 
             # Apply web settings if no explicit CLI values provided - FAIL FAST if not available
             if limit is None:
+                self.logger.info("Querying database for 'max_episodes_per_run' setting...")
                 setting = web_config.get_setting('pipeline', 'max_episodes_per_run')
                 if setting is None:
                     raise ValueError("Required database setting 'max_episodes_per_run' not found - pipeline cannot continue")
                 limit = int(setting)
+                self.logger.info(f"✓ max_episodes_per_run = {limit}")
             if days_back == 7:  # Default value, check web config
+                self.logger.info("Querying database for 'discovery_lookback_days' setting...")
                 setting = web_config.get_setting('pipeline', 'discovery_lookback_days')
                 if setting is None:
                     raise ValueError("Required database setting 'discovery_lookback_days' not found - pipeline cannot continue")
                 days_back = int(setting)
+                self.logger.info(f"✓ discovery_lookback_days = {days_back}")
 
         except Exception as e:
             self.logger.error(f"Failed to load required database settings: {e}")
@@ -106,10 +112,14 @@ class DiscoveryRunner:
         self.days_back = days_back
 
         # Initialize repositories
+        self.logger.info("Initializing database repositories...")
         self.episode_repo = get_episode_repo()
+        self.logger.info("✓ Episode repository initialized")
         self.feed_repo = get_feed_repo()
+        self.logger.info("✓ Feed repository initialized")
 
         # Load feeds from database
+        self.logger.info("Loading active feeds from database...")
         self.rss_feeds = self._load_feeds_from_database()
 
         self.logger.info(f"Discovery initialized with {len(self.rss_feeds)} RSS feeds")
@@ -117,9 +127,12 @@ class DiscoveryRunner:
     def _load_feeds_from_database(self):
         """Load active RSS feeds from database"""
         try:
+            self.logger.info("Querying database for active feeds...")
             feeds = self.feed_repo.get_active_feeds()
+            self.logger.info(f"✓ Retrieved {len(feeds)} active feeds from database")
 
             feed_list = []
+            self.logger.info("Filtering feeds (skipping YouTube and problematic feeds)...")
             for feed in feeds:
                 # Skip YouTube channels and other problematic feeds
                 if isinstance(feed.feed_url, str):
