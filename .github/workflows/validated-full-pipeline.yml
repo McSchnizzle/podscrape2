@@ -35,7 +35,7 @@ jobs:
       PIPELINE_RUN_ID: ${{ format('{0}-{1}', github.run_id, github.run_attempt) }}
       PIPELINE_WORKFLOW_NAME: ${{ github.workflow }}
       PIPELINE_TRIGGER: ${{ github.event_name }}
-      PIPELINE_DB_LOGS: "true"
+      PIPELINE_DB_LOGS: "false"  # Disabled due to threading issues, file logging sufficient
 
     steps:
       - name: Checkout repository
