@@ -1240,10 +1240,8 @@ class PipelineLogRepository:
 
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
-        try:
-            PipelineLogModel.__table__.create(self.db.engine, checkfirst=True)
-        except Exception as exc:
-            logger.warning(f"Could not ensure pipeline_logs table exists: {exc}")
+        # Table creation removed - pipeline_logs table is managed via Alembic migrations
+        # The checkfirst=True query was hanging in GitHub Actions environment
 
     def bulk_insert(self, logs: List[PipelineLog]):
         if not logs:
