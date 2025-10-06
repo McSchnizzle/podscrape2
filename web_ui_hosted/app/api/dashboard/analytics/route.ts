@@ -107,85 +107,64 @@ export async function GET() {
       }
     }
 
-    // Get today's stats from database
+    // Get today's stats using existing methods
+    const pipelineStats = await db.getPipelineStats()
+    todayStats.episodesProcessed = pipelineStats.episodesProcessedToday
+    todayStats.digestsGenerated = pipelineStats.digestsGeneratedToday
+
+    // Get recent episodes to count discovered today
+    const recentEps = await db.getRecentEpisodes(50)
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
+    todayStats.episodesDiscovered = recentEps.filter((ep: any) =>
+      new Date(ep.created_at) >= todayStart
+    ).length
 
-    const { data: episodesData } = await db.supabase
-      .from('episodes')
-      .select('id, status, created_at')
-      .gte('created_at', todayStart.toISOString())
+    // Count published digests today
+    const recentDigs = await db.getRecentDigests(7)
+    todayStats.digestsPublished = recentDigs.filter((d: any) =>
+      d.status === 'published' && new Date(d.created_at) >= todayStart
+    ).length
 
-    if (episodesData) {
-      todayStats.episodesDiscovered = episodesData.length
-      todayStats.episodesProcessed = episodesData.filter(e =>
-        ['scored', 'digested', 'published'].includes(e.status)
-      ).length
-    }
+    // Get recent activity using existing method
+    const recentEpisodesData = await db.getRecentEpisodes(10)
 
-    const { data: digestsData } = await db.supabase
-      .from('digests')
-      .select('id, status, created_at')
-      .gte('created_at', todayStart.toISOString())
+    recentActivity = recentEpisodesData.map((ep: any) => {
+      const maxScore = ep.scores && typeof ep.scores === 'object'
+        ? Math.max(...Object.values(ep.scores as Record<string, number>))
+        : 0
 
-    if (digestsData) {
-      todayStats.digestsGenerated = digestsData.length
-      todayStats.digestsPublished = digestsData.filter(d => d.status === 'published').length
-    }
+      return {
+        id: ep.id,
+        title: ep.title,
+        status: ep.status,
+        timestamp: ep.created_at,
+        score: maxScore,
+        type: 'episode'
+      }
+    })
 
-    // Get recent activity
-    const { data: recentEpisodes } = await db.supabase
-      .from('episodes')
-      .select('id, title, status, created_at, scores, transcript_content')
-      .order('created_at', { ascending: false })
-      .limit(10)
+    // Transcript analytics - get episodes with transcripts
+    const allEpisodes = await db.getEpisodes({ limit: 100 })
+    const episodesWithTranscripts = allEpisodes.filter((ep: any) => ep.transcript_content)
 
-    if (recentEpisodes) {
-      recentActivity = recentEpisodes.map(ep => {
-        const maxScore = ep.scores && typeof ep.scores === 'object'
-          ? Math.max(...Object.values(ep.scores as Record<string, number>))
-          : 0
-
-        return {
-          id: ep.id,
-          title: ep.title,
-          status: ep.status,
-          timestamp: ep.created_at,
-          score: maxScore,
-          type: 'episode'
-        }
-      })
-    }
-
-    // Transcript analytics
-    const { data: transcriptData } = await db.supabase
-      .from('episodes')
-      .select('transcript_content, transcript_word_count')
-      .not('transcript_content', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(100)
-
-    if (transcriptData && transcriptData.length > 0) {
-      const lengths = transcriptData.map(t => (t.transcript_content || '').length).filter(l => l > 0)
+    if (episodesWithTranscripts.length > 0) {
+      const lengths = episodesWithTranscripts.map((ep: any) => (ep.transcript_content || '').length).filter((l: number) => l > 0)
 
       if (lengths.length > 0) {
-        transcriptAnalytics.avgChars = Math.round(lengths.reduce((sum, l) => sum + l, 0) / lengths.length)
+        transcriptAnalytics.avgChars = Math.round(lengths.reduce((sum: number, l: number) => sum + l, 0) / lengths.length)
         transcriptAnalytics.avgTokens = Math.round(transcriptAnalytics.avgChars / 4)
         transcriptAnalytics.maxChars = Math.max(...lengths)
         transcriptAnalytics.minChars = Math.min(...lengths)
         transcriptAnalytics.totalEpisodes = lengths.length
 
         // Calculate truncation risk (episodes over 100K tokens)
-        transcriptAnalytics.truncationRisk = lengths.filter(l => l > 400000).length
+        transcriptAnalytics.truncationRisk = lengths.filter((l: number) => l > 400000).length
 
-        // Calculate current utilization (avg chars per episode * episodes per digest)
-        const { data: settings } = await db.supabase
-          .from('web_settings')
-          .select('max_digest_episodes')
-          .single()
-
-        if (settings?.max_digest_episodes) {
-          transcriptAnalytics.episodesPerDigest = settings.max_digest_episodes
+        // Get episodes per digest setting
+        const maxDigestEpisodes = await db.getSetting('max_digest_episodes')
+        if (maxDigestEpisodes) {
+          transcriptAnalytics.episodesPerDigest = parseInt(maxDigestEpisodes, 10)
         }
 
         const estimatedDigestChars = transcriptAnalytics.avgChars * transcriptAnalytics.episodesPerDigest
