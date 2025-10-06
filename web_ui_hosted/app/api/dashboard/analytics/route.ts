@@ -129,10 +129,32 @@ export async function GET() {
     // Get recent activity using existing method
     const recentEpisodesData = await db.getRecentEpisodes(10)
 
+    // For digested episodes, get digest info
+    const digestedEpisodeIds = recentEpisodesData
+      .filter((ep: any) => ep.status === 'digested')
+      .map((ep: any) => ep.id)
+
+    const digestMap = new Map<number, any[]>()
+    if (digestedEpisodeIds.length > 0) {
+      const digestLinks = await db.getDigestLinksForEpisodes(digestedEpisodeIds)
+      for (const link of digestLinks) {
+        if (!digestMap.has(link.episode_id)) {
+          digestMap.set(link.episode_id, [])
+        }
+        digestMap.get(link.episode_id)!.push(link)
+      }
+    }
+
     recentActivity = recentEpisodesData.map((ep: any) => {
       const maxScore = ep.scores && typeof ep.scores === 'object'
         ? Math.max(...Object.values(ep.scores as Record<string, number>))
         : 0
+
+      const digestLinks = digestMap.get(ep.id) || []
+      const digests = digestLinks.map((link: any) => ({
+        topic: link.topic,
+        score: link.score
+      }))
 
       return {
         id: ep.id,
@@ -140,6 +162,8 @@ export async function GET() {
         status: ep.status,
         timestamp: ep.created_at,
         score: maxScore,
+        scores: ep.scores || {},
+        digests,
         type: 'episode'
       }
     })

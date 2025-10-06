@@ -8,6 +8,8 @@ interface ActivityItem {
   status: string
   timestamp: string
   score: number
+  scores?: Record<string, number>
+  digests?: Array<{ topic: string; score: number }>
   type: string
 }
 
@@ -110,17 +112,36 @@ export function EnhancedRecentActivity() {
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {activity.title}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {getStatusBadge(activity.status)}
-                  {activity.score > 0 && (
-                    <span className="text-xs text-gray-500">
-                      Score: {activity.score.toFixed(2)}
-                    </span>
-                  )}
                   <span className="text-xs text-gray-400">
                     {formatTimestamp(activity.timestamp)}
                   </span>
                 </div>
+
+                {/* Topic scores breakdown */}
+                {activity.scores && Object.keys(activity.scores).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {Object.entries(activity.scores)
+                      .filter(([_, score]) => score > 0)
+                      .sort(([_, a], [__, b]) => b - a)
+                      .map(([topic, score]) => (
+                        <span
+                          key={topic}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700"
+                        >
+                          {topic}: {score.toFixed(2)}
+                        </span>
+                      ))}
+                  </div>
+                )}
+
+                {/* Digest inclusion info */}
+                {activity.digests && activity.digests.length > 0 && (
+                  <div className="mt-1 text-xs text-gray-600">
+                    📝 Included in: {activity.digests.map((d: any) => d.topic).join(', ')}
+                  </div>
+                )}
               </div>
             </div>
           ))}

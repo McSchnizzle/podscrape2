@@ -526,7 +526,7 @@ export class DatabaseClient {
       const { count: digestsGeneratedToday } = await supabase
         .from('digests')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', `${today}T00:00:00Z`)
+        .gte('generated_at', `${today}T00:00:00Z`)
 
       // Get total episodes
       const { count: totalEpisodes } = await supabase
@@ -536,16 +536,16 @@ export class DatabaseClient {
       // Get last successful digest
       const { data: lastSuccessfulDigest } = await supabase
         .from('digests')
-        .select('created_at')
+        .select('published_at')
         .eq('status', 'published')
-        .order('created_at', { ascending: false })
+        .order('published_at', { ascending: false })
         .limit(1)
 
       return {
         episodesProcessedToday: episodesProcessedToday || 0,
         digestsGeneratedToday: digestsGeneratedToday || 0,
         totalEpisodes: totalEpisodes || 0,
-        lastSuccessfulRun: lastSuccessfulDigest?.[0]?.created_at || null
+        lastSuccessfulRun: lastSuccessfulDigest?.[0]?.published_at || null
       }
     } catch (error) {
       console.error('Failed to get pipeline stats:', error)
@@ -598,15 +598,7 @@ export class DatabaseClient {
   async getEpisodesAwaitingScoring(limit: number = 5) {
     const { data, error } = await supabase
       .from('episodes')
-      .select(`
-        id,
-        title,
-        episode_guid,
-        status,
-        published_date,
-        created_at,
-        feeds!inner(title)
-      `)
+      .select('id, title, episode_guid, status, published_date, created_at')
       .in('status', ['pending', 'transcribed'])
       .order('published_date', { ascending: false })
       .limit(limit)
@@ -618,15 +610,7 @@ export class DatabaseClient {
   async getEpisodesAwaitingDigest(limit: number = 5) {
     const { data, error } = await supabase
       .from('episodes')
-      .select(`
-        id,
-        title,
-        episode_guid,
-        status,
-        published_date,
-        created_at,
-        feeds!inner(title)
-      `)
+      .select('id, title, episode_guid, status, published_date, created_at')
       .eq('status', 'scored')
       .order('scored_at', { ascending: false, nullsFirst: false })
       .limit(limit)
@@ -636,18 +620,9 @@ export class DatabaseClient {
   }
 
   async getLatestDigests(limit: number = 5) {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('digests')
-      .select(`
-        id,
-        topic,
-        status,
-        digest_date,
-        created_at,
-        generated_at,
-        published_at,
-        mp3_path
-      `)
+      .select('id, topic, status, digest_date, generated_at, published_at, mp3_path')
       .order('generated_at', { ascending: false, nullsFirst: false })
       .limit(limit)
 
@@ -824,6 +799,21 @@ export class DatabaseClient {
       return data || []
     } catch (error) {
       console.error('Failed to get recent digests:', error)
+      return []
+    }
+  }
+
+  async getDigestLinksForEpisodes(episodeIds: number[]) {
+    try {
+      const { data, error } = await supabase
+        .from('digest_episode_links')
+        .select('episode_id, digest_id, topic, score')
+        .in('episode_id', episodeIds)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get digest links:', error)
       return []
     }
   }
