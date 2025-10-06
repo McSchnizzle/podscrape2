@@ -910,4 +910,203 @@ export class DatabaseClient {
       throw error
     }
   }
+
+  // ==================== TASKS MANAGEMENT ====================
+
+  async getTasks(filters?: {
+    status?: string[]
+    priority?: string[]
+    category?: string[]
+    tags?: string[]
+    search?: string
+  }, sort?: {
+    field: string
+    order: 'asc' | 'desc'
+  }, pagination?: {
+    page: number
+    pageSize: number
+  }) {
+    try {
+      let query = supabase
+        .from('tasks')
+        .select('*', { count: 'exact' })
+
+      // Apply filters
+      if (filters) {
+        if (filters.status && filters.status.length > 0) {
+          query = query.in('status', filters.status)
+        }
+        if (filters.priority && filters.priority.length > 0) {
+          query = query.in('priority', filters.priority)
+        }
+        if (filters.category && filters.category.length > 0) {
+          query = query.in('category', filters.category)
+        }
+        if (filters.tags && filters.tags.length > 0) {
+          query = query.overlaps('tags', filters.tags)
+        }
+        if (filters.search) {
+          query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
+        }
+      }
+
+      // Apply sorting
+      if (sort) {
+        query = query.order(sort.field, { ascending: sort.order === 'asc' })
+      } else {
+        // Default sort: priority (P0 first), then submission_date desc
+        query = query.order('priority', { ascending: true })
+        query = query.order('submission_date', { ascending: false })
+      }
+
+      // Apply pagination
+      if (pagination) {
+        const { page, pageSize } = pagination
+        const start = page * pageSize
+        const end = start + pageSize - 1
+        query = query.range(start, end)
+      }
+
+      const { data, error, count } = await query
+
+      if (error) throw error
+
+      return {
+        tasks: data || [],
+        totalCount: count || 0
+      }
+    } catch (error) {
+      console.error('Failed to get tasks:', error)
+      throw error
+    }
+  }
+
+  async getTaskById(id: number) {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Failed to get task by ID:', error)
+      throw error
+    }
+  }
+
+  async createTask(task: {
+    title: string
+    description?: string
+    status?: string
+    priority?: string
+    category?: string
+    version_introduced?: string
+    files_affected?: string[]
+    estimated_effort?: string
+    tags?: string[]
+    assigned_to?: string
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([{
+          ...task,
+          status: task.status || 'open',
+          priority: task.priority || 'P3',
+          submission_date: new Date().toISOString(),
+          last_update_date: new Date().toISOString()
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Failed to create task:', error)
+      throw error
+    }
+  }
+
+  async updateTask(id: number, updates: {
+    title?: string
+    description?: string
+    status?: string
+    priority?: string
+    category?: string
+    version_completed?: string
+    files_affected?: string[]
+    completion_notes?: string
+    estimated_effort?: string
+    session_number?: number
+    tags?: string[]
+    assigned_to?: string
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({
+          ...updates,
+          last_update_date: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Failed to update task:', error)
+      throw error
+    }
+  }
+
+  async deleteTask(id: number) {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to delete task:', error)
+      throw error
+    }
+  }
+
+  async getTaskStats() {
+    try {
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('status, priority')
+
+      if (error) throw error
+
+      const stats = {
+        total: tasks?.length || 0,
+        byStatus: {
+          open: tasks?.filter(t => t.status === 'open').length || 0,
+          in_progress: tasks?.filter(t => t.status === 'in_progress').length || 0,
+          on_hold: tasks?.filter(t => t.status === 'on_hold').length || 0,
+          completed: tasks?.filter(t => t.status === 'completed').length || 0,
+          skipped: tasks?.filter(t => t.status === 'skipped').length || 0
+        },
+        byPriority: {
+          P0: tasks?.filter(t => t.priority === 'P0').length || 0,
+          P1: tasks?.filter(t => t.priority === 'P1').length || 0,
+          P2: tasks?.filter(t => t.priority === 'P2').length || 0,
+          P3: tasks?.filter(t => t.priority === 'P3').length || 0
+        }
+      }
+
+      return stats
+    } catch (error) {
+      console.error('Failed to get task stats:', error)
+      throw error
+    }
+  }
 }
