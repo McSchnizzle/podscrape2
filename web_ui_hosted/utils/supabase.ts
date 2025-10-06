@@ -1089,17 +1089,17 @@ export class DatabaseClient {
       const stats = {
         total: tasks?.length || 0,
         byStatus: {
-          open: tasks?.filter(t => t.status === 'open').length || 0,
-          in_progress: tasks?.filter(t => t.status === 'in_progress').length || 0,
-          on_hold: tasks?.filter(t => t.status === 'on_hold').length || 0,
-          completed: tasks?.filter(t => t.status === 'completed').length || 0,
-          skipped: tasks?.filter(t => t.status === 'skipped').length || 0
+          open: tasks?.filter((t: { status: string }) => t.status === 'open').length || 0,
+          in_progress: tasks?.filter((t: { status: string }) => t.status === 'in_progress').length || 0,
+          on_hold: tasks?.filter((t: { status: string }) => t.status === 'on_hold').length || 0,
+          completed: tasks?.filter((t: { status: string }) => t.status === 'completed').length || 0,
+          skipped: tasks?.filter((t: { status: string }) => t.status === 'skipped').length || 0
         },
         byPriority: {
-          P0: tasks?.filter(t => t.priority === 'P0').length || 0,
-          P1: tasks?.filter(t => t.priority === 'P1').length || 0,
-          P2: tasks?.filter(t => t.priority === 'P2').length || 0,
-          P3: tasks?.filter(t => t.priority === 'P3').length || 0
+          P0: tasks?.filter((t: { priority: string }) => t.priority === 'P0').length || 0,
+          P1: tasks?.filter((t: { priority: string }) => t.priority === 'P1').length || 0,
+          P2: tasks?.filter((t: { priority: string }) => t.priority === 'P2').length || 0,
+          P3: tasks?.filter((t: { priority: string }) => t.priority === 'P3').length || 0
         }
       }
 
