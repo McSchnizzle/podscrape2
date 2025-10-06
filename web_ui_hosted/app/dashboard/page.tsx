@@ -1,9 +1,10 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { SystemHealth } from '@/components/SystemHealth'
 import { PipelineStatus } from '@/components/PipelineStatus'
-import { RecentActivity } from '@/components/RecentActivity'
+import { EnhancedRecentActivity } from '@/components/EnhancedRecentActivity'
+import { TranscriptAnalytics } from '@/components/TranscriptAnalytics'
+import { PerformanceInsights } from '@/components/PerformanceInsights'
 
 export default function DashboardPage() {
   const [pipelineLoading, setPipelineLoading] = useState(false)
@@ -68,17 +69,25 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* System Health */}
-      <SystemHealth />
-
-      {/* Pipeline Controls */}
+      {/* Pipeline Status and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Suspense fallback={<div className="card animate-pulse h-64" />}>
           <PipelineStatus />
         </Suspense>
 
         <Suspense fallback={<div className="card animate-pulse h-64" />}>
-          <RecentActivity />
+          <EnhancedRecentActivity />
+        </Suspense>
+      </div>
+
+      {/* Analytics Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Suspense fallback={<div className="card animate-pulse h-64" />}>
+          <TranscriptAnalytics />
+        </Suspense>
+
+        <Suspense fallback={<div className="card animate-pulse h-64" />}>
+          <PerformanceInsights />
         </Suspense>
       </div>
 
