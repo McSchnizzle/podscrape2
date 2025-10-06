@@ -9,7 +9,7 @@ interface ActivityItem {
   timestamp: string
   score: number
   scores?: Record<string, number>
-  digests?: Array<{ topic: string; score: number }>
+  digests?: Array<{ topic: string; score: number; publishedAt?: string }>
   type: string
 }
 
@@ -139,7 +139,12 @@ export function EnhancedRecentActivity() {
                 {/* Digest inclusion info */}
                 {activity.digests && activity.digests.length > 0 && (
                   <div className="mt-1 text-xs text-gray-600">
-                    📝 Included in: {activity.digests.map((d: any) => d.topic).join(', ')}
+                    📝 Included in: {activity.digests.map((d: any) => {
+                      const digestDate = d.publishedAt
+                        ? new Date(d.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : null
+                      return digestDate ? `${d.topic} (${digestDate})` : d.topic
+                    }).join(', ')}
                   </div>
                 )}
               </div>

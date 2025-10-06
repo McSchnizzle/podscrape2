@@ -151,10 +151,14 @@ export async function GET() {
         : 0
 
       const digestLinks = digestMap.get(ep.id) || []
-      const digests = digestLinks.map((link: any) => ({
-        topic: link.topic,
-        score: link.score
-      }))
+      const digests = digestLinks.map((link: any) => {
+        const digestDate = link.digests?.published_at || link.digests?.generated_at
+        return {
+          topic: link.topic,
+          score: link.score,
+          publishedAt: digestDate
+        }
+      })
 
       return {
         id: ep.id,

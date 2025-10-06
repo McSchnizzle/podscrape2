@@ -807,7 +807,16 @@ export class DatabaseClient {
     try {
       const { data, error } = await supabase
         .from('digest_episode_links')
-        .select('episode_id, digest_id, topic, score')
+        .select(`
+          episode_id,
+          digest_id,
+          topic,
+          score,
+          digests (
+            published_at,
+            generated_at
+          )
+        `)
         .in('episode_id', episodeIds)
 
       if (error) throw error

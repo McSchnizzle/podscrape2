@@ -158,18 +158,27 @@ export function PipelineStatus() {
       </div>
 
       {status?.runSummary && (
-        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="border border-gray-200 rounded-lg p-5 space-y-4">
+          <div className="space-y-3">
             <div>
               <div className="text-xs uppercase text-gray-500">Current Run</div>
               <div className="text-sm font-semibold text-gray-900">Run {status.runSummary.runId}</div>
             </div>
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">Started:</span> {new Date(status.runSummary.startedAt).toLocaleString()} •{' '}
-              <span className="font-medium">Duration:</span>{' '}
-              {status.runSummary.durationSeconds ? `${Math.round(status.runSummary.durationSeconds / 60)} min` : '—'}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600">
+              <div>
+                <span className="font-medium text-gray-700">Started:</span>
+                <div className="mt-0.5">{new Date(status.runSummary.startedAt).toLocaleString()}</div>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Duration:</span>
+                <div className="mt-0.5">
+                  {status.runSummary.durationSeconds ? `${Math.round(status.runSummary.durationSeconds / 60)} min` : '—'}
+                </div>
+              </div>
             </div>
-            <div className="flex gap-3 text-sm">
+
+            <div className="flex gap-4 text-sm pt-2 border-t border-gray-100">
               <span className="text-amber-600">⚠️ {status.runSummary.warnings} warnings</span>
               <span className={status.runSummary.errors > 0 ? 'text-red-600' : 'text-gray-600'}>
                 ❌ {status.runSummary.errors} errors

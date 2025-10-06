@@ -69,26 +69,27 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Pipeline Status and Recent Activity */}
+      {/* Main Dashboard Grid: Pipeline Status on Left, Everything Else Stacked on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Pipeline Status */}
         <Suspense fallback={<div className="card animate-pulse h-64" />}>
           <PipelineStatus />
         </Suspense>
 
-        <Suspense fallback={<div className="card animate-pulse h-64" />}>
-          <EnhancedRecentActivity />
-        </Suspense>
-      </div>
+        {/* Right Column: Recent Activity, Transcript Analytics, Performance Insights */}
+        <div className="space-y-6">
+          <Suspense fallback={<div className="card animate-pulse h-64" />}>
+            <EnhancedRecentActivity />
+          </Suspense>
 
-      {/* Analytics Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Suspense fallback={<div className="card animate-pulse h-64" />}>
-          <TranscriptAnalytics />
-        </Suspense>
+          <Suspense fallback={<div className="card animate-pulse h-64" />}>
+            <TranscriptAnalytics />
+          </Suspense>
 
-        <Suspense fallback={<div className="card animate-pulse h-64" />}>
-          <PerformanceInsights />
-        </Suspense>
+          <Suspense fallback={<div className="card animate-pulse h-64" />}>
+            <PerformanceInsights />
+          </Suspense>
+        </div>
       </div>
 
       {/* Quick Actions */}
