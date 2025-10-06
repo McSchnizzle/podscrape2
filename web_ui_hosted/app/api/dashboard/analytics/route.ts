@@ -123,7 +123,7 @@ export async function GET() {
     // Count published digests today
     const recentDigs = await db.getRecentDigests(7)
     todayStats.digestsPublished = recentDigs.filter((d: any) =>
-      d.status === 'published' && new Date(d.created_at) >= todayStart
+      d.status === 'published' && new Date(d.published_at || d.generated_at) >= todayStart
     ).length
 
     // Get recent activity using existing method

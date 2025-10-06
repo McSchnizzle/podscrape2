@@ -373,10 +373,7 @@ export class DatabaseClient {
   async getRecentEpisodes(limit: number = 10) {
     const { data, error } = await supabase
       .from('episodes')
-      .select(`
-        *,
-        feeds!inner(title)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -820,8 +817,8 @@ export class DatabaseClient {
       const { data, error } = await supabase
         .from('digests')
         .select('*')
-        .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: false })
+        .gte('generated_at', startDate.toISOString())
+        .order('generated_at', { ascending: false })
 
       if (error) throw error
       return data || []
