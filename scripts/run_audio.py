@@ -244,7 +244,23 @@ class AudioProcessor_Runner:
                     continue
 
                 # Step 2: Score the episode immediately after transcription
-                scores = self._score_episode_immediately(episode.episode_guid)
+                scoring_outcome = self._score_episode_immediately(episode.episode_guid)
+
+                if not scoring_outcome.get('success'):
+                    error_msg = scoring_outcome.get('error', 'Scoring failed')
+                    self.logger.error(f"Immediate scoring failed for {episode.title}: {error_msg}")
+                    try:
+                        self.episode_repo.update_status(episode.episode_guid, 'transcribed')
+                    except Exception:
+                        pass
+                    failed_episodes.append({
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'error': error_msg
+                    })
+                    continue
+
+                scores = scoring_outcome.get('scores', {})
 
                 # Step 3: Check relevance against threshold
                 is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
@@ -428,8 +444,23 @@ class AudioProcessor_Runner:
                     }
                 
                 # Score episode immediately
-                scores = self._score_episode_immediately(episode.episode_guid)
-                
+                scoring_outcome = self._score_episode_immediately(episode.episode_guid)
+                if not scoring_outcome.get('success'):
+                    error_msg = scoring_outcome.get('error', 'Scoring failed')
+                    self.logger.error(f"Immediate scoring failed for {episode.title}: {error_msg}")
+                    try:
+                        worker_episode_repo.update_status(episode.episode_guid, 'transcribed')
+                    except Exception:
+                        pass
+                    return {
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'error': error_msg,
+                        'type': 'failed'
+                    }
+
+                scores = scoring_outcome.get('scores', {})
+
                 # Check relevance
                 is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
                 
@@ -871,9 +902,15 @@ class AudioProcessor_Runner:
         try:
             # Get the episode from database
             db_episode = self.episode_repo.get_by_episode_guid(episode_guid)
-            if not db_episode or not db_episode.transcript_content:
-                self.logger.warning(f"No transcript available for immediate scoring: {episode_guid}")
-                return {}
+            if not db_episode:
+                message = f"Episode not found for immediate scoring: {episode_guid}"
+                self.logger.warning(message)
+                return {'success': False, 'error': message, 'scores': {}}
+
+            if not db_episode.transcript_content:
+                message = f"No transcript available for immediate scoring: {episode_guid}"
+                self.logger.warning(message)
+                return {'success': False, 'error': message, 'scores': {}}
 
             self.logger.info("⚡ Immediate scoring...")
 
@@ -887,15 +924,19 @@ class AudioProcessor_Runner:
                 # Store scores in database
                 self.episode_repo.update_scores(episode_guid, scoring_result.scores)
 
-                self.logger.info(f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}")
-                return scoring_result.scores
-            else:
-                self.logger.error(f"Scoring failed: {scoring_result.error_message}")
-                return {}
+                self.logger.info(
+                    f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}"
+                )
+                return {'success': True, 'scores': scoring_result.scores}
+
+            error_message = scoring_result.error_message or 'Scoring failed'
+            self.logger.error(f"Scoring failed: {error_message}")
+            return {'success': False, 'error': error_message, 'scores': {}}
 
         except Exception as e:
-            self.logger.error(f"Immediate scoring failed: {e}")
-            return {}
+            error_message = str(e)
+            self.logger.error(f"Immediate scoring failed: {error_message}")
+            return {'success': False, 'error': error_message, 'scores': {}}
 
     def _log_processing_summary(self, processed_episodes, relevant_count, not_relevant_count, total_processed):
         """Log comprehensive processing summary as requested"""
