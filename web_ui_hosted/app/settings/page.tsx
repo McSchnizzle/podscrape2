@@ -195,6 +195,23 @@ export default function SettingsPage() {
                   disabled={saving}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Min Episodes per Digest
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  className="input"
+                  value={getSetting('content_filtering', 'min_episodes_per_digest', 1)}
+                  onChange={(e) => updateLocalSetting('content_filtering', 'min_episodes_per_digest', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum episodes required to generate a digest (0 = always generate)
+                </p>
+              </div>
             </div>
           </div>
 

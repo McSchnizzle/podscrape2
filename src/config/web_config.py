@@ -56,6 +56,7 @@ class WebSettingModel(Base):
 DEFAULTS = {
     ("content_filtering", "score_threshold"): {"type": "float", "default": 0.65, "min": 0.0, "max": 1.0},
     ("content_filtering", "max_episodes_per_digest"): {"type": "int", "default": 5, "min": 1, "max": 20},
+    ("content_filtering", "min_episodes_per_digest"): {"type": "int", "default": 1, "min": 0, "max": 10},
     ("audio_processing", "chunk_duration_minutes"): {"type": "int", "default": 10, "min": 1, "max": 30},
     ("audio_processing", "transcribe_all_chunks"): {"type": "bool", "default": True},
     ("audio_processing", "max_chunks_per_episode"): {"type": "int", "default": 3, "min": 1, "max": 50},
@@ -322,6 +323,10 @@ class WebConfigReader:
     def get_score_threshold(self) -> float:
         """Get content filtering score threshold"""
         return self.web_config.get_setting('content_filtering', 'score_threshold', 0.65)
+
+    def get_min_episodes_per_digest(self) -> int:
+        """Get minimum episodes required to generate a digest"""
+        return self.web_config.get_setting('content_filtering', 'min_episodes_per_digest', 1)
 
     def get_ai_digest_config(self) -> Dict[str, Any]:
         """Get AI digest generation configuration for run_digest.py"""

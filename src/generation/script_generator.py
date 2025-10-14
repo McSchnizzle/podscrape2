@@ -82,6 +82,14 @@ class ScriptGenerator:
             except Exception:
                 pass
         
+        # Minimum episodes required to generate digest (from web config if available)
+        self.min_episodes_per_digest = 1
+        if self.web_config:
+            try:
+                self.min_episodes_per_digest = int(self.web_config.get_setting('content_filtering', 'min_episodes_per_digest', 1))
+            except Exception:
+                pass
+        
         # Load topic configuration
         self.topics = self.config.get_topics()
         self.score_threshold = self.config.get_score_threshold()
@@ -356,6 +364,11 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Find qualifying episodes
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)
         logger.info(f"Found {len(episodes)} qualifying episodes for {topic}")
+
+        # Check minimum episode threshold
+        if 0 < len(episodes) < self.min_episodes_per_digest:
+            logger.info(f"Insufficient episodes for {topic}: {len(episodes)} < minimum {self.min_episodes_per_digest}, generating no-content digest")
+            episodes = []  # Force no-content script path
 
         # Generate script
         script_content, word_count = self.generate_script(topic, episodes, digest_date)
