@@ -177,11 +177,15 @@ class ScriptGenerator:
         chars_per_episode = available_chars // max(num_episodes, 1)
         return min(max(chars_per_episode, 2000), 20000)
 
-    def get_qualifying_episodes(self, topic: str, start_date: date = None, 
+    def get_qualifying_episodes(self, topic: str, start_date: date = None,
                               end_date: date = None, max_episodes: int = None) -> List[Episode]:
         """
-        Get episodes that qualify for digest generation (score >= threshold)
-        Limited to max_episodes per topic to maintain digest quality
+        Get episodes that qualify for digest generation.
+
+        Returns only:
+        - Episodes with score >= threshold for the topic
+        - Episodes that haven't been digested yet (status == 'scored')
+        - Limited to max_episodes per topic to maintain digest quality
         """
         all_qualifying = self.episode_repo.get_scored_episodes_for_topic(
             topic=topic,
@@ -361,14 +365,19 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.info(f"Digest already exists for {topic} on {digest_date} (ID: {existing_digest.id}), returning existing digest")
             return existing_digest
 
-        # Find qualifying episodes
+        # Find qualifying episodes - only undigested scored episodes
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)
-        logger.info(f"Found {len(episodes)} qualifying episodes for {topic}")
+        logger.info(f"Found {len(episodes)} qualifying undigested episodes for {topic}")
 
-        # Check minimum episode threshold
-        if 0 < len(episodes) < self.min_episodes_per_digest:
-            logger.info(f"Insufficient episodes for {topic}: {len(episodes)} < minimum {self.min_episodes_per_digest}, generating no-content digest")
-            episodes = []  # Force no-content script path
+        # Only generate no-content digest if we have zero qualifying episodes
+        # If we have at least 1 episode (regardless of minimum), include it in the digest
+        # This ensures good-quality episodes aren't left undigested waiting for minimum threshold
+        if len(episodes) == 0:
+            logger.info(f"No qualifying undigested episodes found for {topic}, generating no-content digest")
+            episodes = []  # Will generate no-content script
+        else:
+            logger.info(f"Including {len(episodes)} undigested episodes in {topic} digest (>= min {self.min_episodes_per_digest})")
+            # Episodes will be used as-is, capped at max_episodes_per_digest (done by get_qualifying_episodes)
 
         # Generate script
         script_content, word_count = self.generate_script(topic, episodes, digest_date)

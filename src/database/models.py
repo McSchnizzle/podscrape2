@@ -414,8 +414,20 @@ class EpisodeRepository:
             return [self._model_to_episode(model) for model in episode_models]
 
     def get_scored_episodes_for_topic(self, topic: str, min_score: float = 0.65,
-                                    start_date: date = None, end_date: date = None) -> List[Episode]:
-        """Get episodes scored above threshold for specific topic"""
+                                    start_date: date = None, end_date: date = None,
+                                    exclude_digested: bool = True) -> List[Episode]:
+        """Get episodes scored above threshold for specific topic
+
+        Args:
+            topic: Topic to filter by
+            min_score: Minimum score threshold (0.65 default)
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+            exclude_digested: If True, exclude episodes that have already been digested
+
+        Returns:
+            List of qualifying episodes sorted by score (highest first)
+        """
         with self.db.get_session() as session:
             # Use database-agnostic JSON filtering
             query = session.query(EpisodeModel)\
