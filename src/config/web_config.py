@@ -63,9 +63,11 @@ DEFAULTS = {
     ("pipeline", "max_episodes_per_run"): {"type": "int", "default": 3, "min": 1, "max": 20},
     ("pipeline", "discovery_lookback_days"): {"type": "int", "default": 3, "min": 1, "max": 30},
     # Retention policies (days)
+    ("retention", "local_mp3_days"): {"type": "int", "default": 14, "min": 0, "max": 365},
+    ("retention", "audio_cache_days"): {"type": "int", "default": 3, "min": 0, "max": 30},
+    ("retention", "logs_days"): {"type": "int", "default": 3, "min": 0, "max": 365},
     ("retention", "episode_retention_days"): {"type": "int", "default": 14, "min": 8, "max": 365},
     ("retention", "digest_retention_days"): {"type": "int", "default": 14, "min": 8, "max": 365},
-    ("retention", "logs_days"): {"type": "int", "default": 30, "min": 0, "max": 365},
     ("retention", "github_releases_days"): {"type": "int", "default": 14, "min": 0, "max": 365},
 
     # AI Configuration - Content Scoring Phase
