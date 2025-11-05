@@ -1,0 +1,61 @@
+diff --git a/.github/workflows/validated-full-pipeline.yml b/.github/workflows/validated-full-pipeline.yml
+index c0109f1..8c738ff 100644
+--- a/.github/workflows/validated-full-pipeline.yml
++++ b/.github/workflows/validated-full-pipeline.yml
+@@ -59,6 +59,31 @@ jobs:
+             exit 1
+           fi
+ 
++      - name: Free up disk space
++        run: |
++          echo "Disk space before cleanup:"
++          df -h
++
++          # Remove unnecessary software to free up ~10GB
++          sudo rm -rf /usr/share/dotnet
++          sudo rm -rf /usr/local/lib/android
++          sudo rm -rf /opt/ghc
++          sudo rm -rf /opt/hostedtoolcache/CodeQL
++
++          # Clean apt cache
++          sudo apt-get clean
++
++          # Remove docker images
++          docker rmi $(docker images -q) -f 2>/dev/null || true
++
++          # Clean up old data files that may have accumulated
++          rm -rf data/completed-tts/*.mp3 2>/dev/null || true
++          rm -rf data/transcripts/*.txt 2>/dev/null || true
++          rm -rf data/scripts/*.md 2>/dev/null || true
++
++          echo "Disk space after cleanup:"
++          df -h
++
+       - name: Install system dependencies
+         run: sudo apt-get update && sudo apt-get install -y ffmpeg
+ 
+@@ -85,16 +110,6 @@ jobs:
+             venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+             venv-${{ runner.os }}-
+ 
+-      - name: Cache Whisper models
+-        uses: actions/cache@v4
+-        with:
+-          path: |
+-            ~/.cache/whisper
+-            ~/.cache/torch
+-          key: whisper-${{ runner.os }}-${{ env.PYTHON_VERSION }}
+-          restore-keys: |
+-            whisper-${{ runner.os }}-
+-
+       - name: Install dependencies
+         run: |
+           if [ ! -d "${VENV_PATH}" ]; then
+@@ -102,6 +117,7 @@ jobs:
+           fi
+           source "${VENV_PATH}/bin/activate"
+           python -m pip install --upgrade pip
++          # Use regular requirements (disk cleanup step freed up ~10GB)
+           python -m pip install -r requirements.txt
+ 
+       - name: Phase 1 - Discovery
