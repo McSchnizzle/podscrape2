@@ -39,7 +39,7 @@ aiohttp>=3.8.0                 # Async HTTP client
 httpx>=0.24.0                  # Modern HTTP client
 Flask>=2.3.0                   # Web UI framework
 feedparser>=6.0.10             # RSS/Atom parsing for feed checks
-parakeet-mlx                   # Apple Silicon transcription (optional but installed)
+# parakeet-mlx removed - not used in production (v1.76)
 
 # Development & Testing
 pytest>=7.4.0                  # Testing framework
