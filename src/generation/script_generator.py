@@ -359,25 +359,29 @@ Thank you for your understanding, and we'll see you tomorrow!
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
 
-        # Check if a digest already exists for this topic and date
-        existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
-        if existing_digest and existing_digest.script_content:
-            logger.info(f"Digest already exists for {topic} on {digest_date} (ID: {existing_digest.id}), returning existing digest")
-            return existing_digest
-
-        # Find qualifying episodes - only undigested scored episodes
+        # Find qualifying episodes FIRST - only undigested scored episodes
+        # This allows multiple digests per day when new episodes are scored
         episodes = self.get_qualifying_episodes(topic, start_date, end_date)
         logger.info(f"Found {len(episodes)} qualifying undigested episodes for {topic}")
 
-        # Only generate no-content digest if we have zero qualifying episodes
-        # If we have at least 1 episode (regardless of minimum), include it in the digest
-        # This ensures good-quality episodes aren't left undigested waiting for minimum threshold
+        # If no new episodes, check if we already have a digest for today
+        # Only return existing digest if there are NO new episodes to process
         if len(episodes) == 0:
-            logger.info(f"No qualifying undigested episodes found for {topic}, generating no-content digest")
-            episodes = []  # Will generate no-content script
+            existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
+            if existing_digest and existing_digest.script_content:
+                logger.info(f"No new episodes and digest already exists for {topic} on {digest_date} (ID: {existing_digest.id}), returning existing digest")
+                return existing_digest
+            else:
+                logger.info(f"No qualifying undigested episodes found for {topic}, generating no-content digest")
+                episodes = []  # Will generate no-content script
         else:
             logger.info(f"Including {len(episodes)} undigested episodes in {topic} digest (>= min {self.min_episodes_per_digest})")
             # Episodes will be used as-is, capped at max_episodes_per_digest (done by get_qualifying_episodes)
+
+            # Check if a digest already exists for this topic/date (for logging purposes)
+            existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
+            if existing_digest:
+                logger.info(f"Creating NEW digest for {topic} on {digest_date} with unique timestamp (existing digest ID: {existing_digest.id} will remain)")
 
         # Generate script
         script_content, word_count = self.generate_script(topic, episodes, digest_date)
