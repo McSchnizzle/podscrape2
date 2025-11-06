@@ -5,7 +5,7 @@ Migration from SQLite to PostgreSQL with comprehensive repository pattern.
 
 import json
 import logging
-from datetime import datetime, date, timedelta, UTC
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
 
@@ -249,7 +249,7 @@ class FeedRepository:
                     feed_model.last_checked = last_checked
                     if last_episode_date:
                         feed_model.last_episode_date = last_episode_date
-                    feed_model.updated_at = datetime.now(UTC)
+                    feed_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -263,7 +263,7 @@ class FeedRepository:
                 feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
                 if feed_model:
                     feed_model.consecutive_failures += 1
-                    feed_model.updated_at = datetime.now(UTC)
+                    feed_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -277,7 +277,7 @@ class FeedRepository:
                 feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
                 if feed_model:
                     feed_model.consecutive_failures = 0
-                    feed_model.updated_at = datetime.now(UTC)
+                    feed_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -309,7 +309,7 @@ class FeedRepository:
                 feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
                 if feed_model:
                     feed_model.active = active
-                    feed_model.updated_at = datetime.now(UTC)
+                    feed_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -323,7 +323,7 @@ class FeedRepository:
                 feed_model = session.query(FeedModel).filter(FeedModel.id == feed_id).first()
                 if feed_model:
                     feed_model.title = title
-                    feed_model.updated_at = datetime.now(UTC)
+                    feed_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -430,9 +430,17 @@ class EpisodeRepository:
         """
         with self.db.get_session() as session:
             # Use database-agnostic JSON filtering
+            # Only get episodes that are in 'scored' status (this naturally excludes 'digested' episodes)
+            # The exclude_digested parameter is for explicit control, though it's already implicit in the status filter
             query = session.query(EpisodeModel)\
-                .filter(EpisodeModel.status == 'scored')\
                 .filter(EpisodeModel.scores.isnot(None))
+
+            if exclude_digested:
+                # Only include scored episodes (not digested, not failed, etc.)
+                query = query.filter(EpisodeModel.status == 'scored')
+            else:
+                # Include both scored and digested episodes (for re-processing if needed)
+                query = query.filter(EpisodeModel.status.in_(['scored', 'digested']))
 
             if start_date:
                 query = query.filter(EpisodeModel.published_date >= start_date)
@@ -463,7 +471,7 @@ class EpisodeRepository:
                     .filter(EpisodeModel.episode_guid == episode_guid).first()
                 if episode_model:
                     episode_model.status = status
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -478,7 +486,7 @@ class EpisodeRepository:
                     .filter(EpisodeModel.episode_guid.in_(episode_guids))\
                     .update({
                         EpisodeModel.status: 'digested',
-                        EpisodeModel.updated_at: datetime.now(UTC)
+                        EpisodeModel.updated_at: datetime.now(timezone.utc)
                     }, synchronize_session=False)
                 session.commit()
             except SQLAlchemyError as e:
@@ -496,7 +504,7 @@ class EpisodeRepository:
             Number of episodes reset
         """
         from datetime import timedelta
-        timeout_threshold = datetime.now(UTC) - timedelta(minutes=timeout_minutes)
+        timeout_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
         with self.db.get_session() as session:
             try:
@@ -515,7 +523,7 @@ class EpisodeRepository:
                     .filter(EpisodeModel.updated_at < timeout_threshold)\
                     .update({
                         EpisodeModel.status: 'pending',
-                        EpisodeModel.updated_at: datetime.now(UTC)
+                        EpisodeModel.updated_at: datetime.now(timezone.utc)
                     }, synchronize_session=False)
 
                 session.commit()
@@ -533,8 +541,8 @@ class EpisodeRepository:
                     .filter(EpisodeModel.episode_guid == episode_guid).first()
                 if episode_model:
                     episode_model.audio_path = audio_path
-                    episode_model.audio_downloaded_at = datetime.now(UTC)
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.audio_downloaded_at = datetime.now(timezone.utc)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -563,12 +571,12 @@ class EpisodeRepository:
                 # Update word count
                 word_count = len(episode_model.transcript_content.split())
                 episode_model.transcript_word_count = word_count
-                episode_model.updated_at = datetime.now(UTC)
+                episode_model.updated_at = datetime.now(timezone.utc)
 
                 # Update status to 'transcribed' on first chunk
                 if chunk_number == 1:
                     episode_model.status = 'processing'
-                    episode_model.transcript_generated_at = datetime.now(UTC)
+                    episode_model.transcript_generated_at = datetime.now(timezone.utc)
 
                 session.commit()
                 return word_count
@@ -587,7 +595,7 @@ class EpisodeRepository:
 
                 if episode_model:
                     episode_model.status = 'transcribed'
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
 
             except SQLAlchemyError as e:
@@ -603,10 +611,10 @@ class EpisodeRepository:
                     .filter(EpisodeModel.episode_guid == episode_guid).first()
                 if episode_model:
                     episode_model.transcript_path = transcript_path
-                    episode_model.transcript_generated_at = datetime.now(UTC)
+                    episode_model.transcript_generated_at = datetime.now(timezone.utc)
                     episode_model.transcript_word_count = word_count
                     episode_model.status = 'transcribed'
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     if transcript_content is not None:
                         episode_model.transcript_content = transcript_content
                     session.commit()
@@ -623,9 +631,9 @@ class EpisodeRepository:
                     .filter(EpisodeModel.episode_guid == episode_guid).first()
                 if episode_model:
                     episode_model.scores = scores
-                    episode_model.scored_at = datetime.now(UTC)
+                    episode_model.scored_at = datetime.now(timezone.utc)
                     episode_model.status = 'scored'
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -641,10 +649,10 @@ class EpisodeRepository:
                 if episode_model:
                     episode_model.failure_count += 1
                     episode_model.failure_reason = failure_reason
-                    episode_model.last_failure_at = datetime.now(UTC)
+                    episode_model.last_failure_at = datetime.now(timezone.utc)
                     if episode_model.failure_count >= 3:
                         episode_model.status = 'failed'
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -683,7 +691,7 @@ class EpisodeRepository:
         """Delete episodes older than specified days"""
         with self.db.get_session() as session:
             try:
-                cutoff_date = datetime.now(UTC) - timedelta(days=days_old)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
                 deleted_count = session.query(EpisodeModel)\
                     .filter(EpisodeModel.published_date < cutoff_date)\
                     .delete()
@@ -707,7 +715,7 @@ class EpisodeRepository:
                 episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
                 if episode_model:
                     episode_model.status = status
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -733,7 +741,7 @@ class EpisodeRepository:
                 episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
                 if episode_model:
                     episode_model.transcript_path = transcript_path
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -747,7 +755,7 @@ class EpisodeRepository:
                 episode_model = session.query(EpisodeModel).filter(EpisodeModel.id == episode_id).first()
                 if episode_model:
                     episode_model.feed_id = feed_id
-                    episode_model.updated_at = datetime.now(UTC)
+                    episode_model.updated_at = datetime.now(timezone.utc)
                     session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -802,7 +810,7 @@ class DigestRepository:
         with self.db.get_session() as session:
             try:
                 # Use provided timestamp or generate new one
-                digest_timestamp = digest.digest_timestamp or datetime.now(UTC)
+                digest_timestamp = digest.digest_timestamp or datetime.now(timezone.utc)
 
                 digest_model = DigestModel(
                     topic=digest.topic,
@@ -895,7 +903,7 @@ class DigestRepository:
                 digest_model = session.query(DigestModel).filter(DigestModel.id == digest_id).first()
                 if digest_model:
                     digest_model.github_url = github_url
-                    digest_model.published_at = datetime.now(UTC)
+                    digest_model.published_at = datetime.now(timezone.utc)
                     digest_model.status = 'published'
                     session.commit()
             except SQLAlchemyError as e:
@@ -1036,7 +1044,7 @@ class TopicRepository:
                     raise ValueError(f"Topic {topic_id} not found")
 
                 topic_model.instructions_md = instructions_md
-                topic_model.updated_at = datetime.now(UTC)
+                topic_model.updated_at = datetime.now(timezone.utc)
 
                 latest_version = session.query(func.max(TopicInstructionModel.version))\
                     .filter(TopicInstructionModel.topic_id == topic_id)\
@@ -1047,7 +1055,7 @@ class TopicRepository:
                     version=latest_version + 1,
                     instructions_md=instructions_md,
                     change_note=change_note,
-                    created_at=datetime.now(UTC),
+                    created_at=datetime.now(timezone.utc),
                     created_by=created_by
                 )
                 session.add(version_model)
@@ -1068,7 +1076,7 @@ class TopicRepository:
         with self.db.get_session() as session:
             try:
                 model = session.query(TopicModel).filter(TopicModel.slug == topic.slug).first()
-                now = datetime.now(UTC)
+                now = datetime.now(timezone.utc)
                 voice_settings = topic.voice_settings if topic.voice_settings is None else dict(topic.voice_settings)
 
                 if model:
@@ -1115,8 +1123,8 @@ class TopicRepository:
                 topic_model = session.query(TopicModel).filter(TopicModel.id == topic_id).first()
                 if topic_model is None:
                     return
-                topic_model.last_generated_at = generated_at or datetime.now(UTC)
-                topic_model.updated_at = datetime.now(UTC)
+                topic_model.last_generated_at = generated_at or datetime.now(timezone.utc)
+                topic_model.updated_at = datetime.now(timezone.utc)
                 session.commit()
             except SQLAlchemyError as exc:
                 session.rollback()
@@ -1181,7 +1189,7 @@ class DigestEpisodeLinkRepository:
                         topic=link.topic,
                         score=link.score,
                         position=link.position,
-                        created_at=link.created_at or datetime.now(UTC)
+                        created_at=link.created_at or datetime.now(timezone.utc)
                     ))
                 session.commit()
             except SQLAlchemyError as exc:
@@ -1206,7 +1214,7 @@ class PipelineRunRepository:
                         value = getattr(run, field)
                         if value is not None:
                             setattr(model, field, value)
-                    model.updated_at = datetime.now(UTC)
+                    model.updated_at = datetime.now(timezone.utc)
                 else:
                     model = PipelineRunModel(
                         id=run.id,
@@ -1219,8 +1227,8 @@ class PipelineRunRepository:
                         finished_at=run.finished_at,
                         phase=run.phase,
                         notes=run.notes,
-                        created_at=run.created_at or datetime.now(UTC),
-                        updated_at=run.updated_at or datetime.now(UTC)
+                        created_at=run.created_at or datetime.now(timezone.utc),
+                        updated_at=run.updated_at or datetime.now(timezone.utc)
                     )
                     session.add(model)
                 session.commit()
@@ -1238,7 +1246,7 @@ class PipelineRunRepository:
                 for key, value in fields.items():
                     if hasattr(model, key):
                         setattr(model, key, value)
-                model.updated_at = datetime.now(UTC)
+                model.updated_at = datetime.now(timezone.utc)
                 session.commit()
             except SQLAlchemyError as exc:
                 session.rollback()

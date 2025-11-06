@@ -88,7 +88,7 @@ class Episode(Base):
         errors = []
 
         # Valid states
-        valid_states = ["pending", "processing", "transcribed", "scored", "failed"]
+        valid_states = ["pending", "processing", "transcribed", "scored", "digested", "failed"]
         if self.status not in valid_states:
             errors.append(f"Invalid status: {self.status}")
 
@@ -114,6 +114,12 @@ class Episode(Base):
                 errors.append("scored state requires scores")
             if not self.scored_at:
                 errors.append("scored state requires scored_at")
+
+        elif self.status == "digested":
+            if not self.scores:
+                errors.append("digested state requires scores")
+            if not self.scored_at:
+                errors.append("digested state requires scored_at")
 
         elif self.status == "failed":
             if self.failure_count == 0:
