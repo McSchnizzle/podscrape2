@@ -39,6 +39,10 @@ class TopicInstruction:
     voice_settings: Optional[Dict[str, Any]] = None
     topic_id: Optional[int] = None
     source: str = "file"
+    # Multi-voice dialogue support (v1.79+)
+    use_dialogue_api: bool = False
+    dialogue_model: str = 'eleven_turbo_v2_5'
+    voice_config: Optional[Dict[str, Any]] = None  # {"speaker_1": {...}, "speaker_2": {...}}
 
 class ScriptGenerationError(Exception):
     """Raised when script generation fails"""
@@ -146,7 +150,10 @@ class ScriptGenerator:
                 description=topic.get('description', ''),
                 voice_settings=topic.get('voice_settings'),
                 topic_id=topic.get('id'),
-                source='database'
+                source='database',
+                use_dialogue_api=topic.get('use_dialogue_api', False),
+                dialogue_model=topic.get('dialogue_model', 'eleven_turbo_v2_5'),
+                voice_config=topic.get('voice_config')
             )
             logger.info(f"Loaded instructions from database: {topic['name']} ({len(instructions_md)} chars)")
 
@@ -167,6 +174,33 @@ class ScriptGenerator:
 
         return requested_tokens
 
+    def _is_dialogue_mode(self, topic_name: str) -> bool:
+        """
+        Check if topic is configured for dialogue mode.
+
+        Args:
+            topic_name: Name of the topic to check
+
+        Returns:
+            True if topic uses dialogue API, False otherwise
+        """
+        instruction = self.topic_instructions.get(topic_name)
+        if not instruction:
+            return False
+        return instruction.use_dialogue_api
+
+    def _get_topic_config(self, topic_name: str) -> Optional[TopicInstruction]:
+        """
+        Get topic configuration including voice and dialogue settings.
+
+        Args:
+            topic_name: Name of the topic to retrieve
+
+        Returns:
+            TopicInstruction object or None if not found
+        """
+        return self.topic_instructions.get(topic_name)
+
     def _calculate_transcript_limit(self, num_episodes: int) -> int:
         """Calculate transcript character limit based on configured input token cap"""
         if not getattr(self, 'max_input_tokens', None):
@@ -176,6 +210,247 @@ class ScriptGenerator:
         available_chars = available_input_tokens * 4
         chars_per_episode = available_chars // max(num_episodes, 1)
         return min(max(chars_per_episode, 2000), 20000)
+
+    def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
+                                  digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
+        """
+        Generate dialogue-style script for multi-voice delivery (v3 with audio tags).
+        Target: 15,000-20,000 characters with SPEAKER_1/SPEAKER_2 labels.
+
+        Args:
+            topic: Topic name
+            episodes: List of episodes to include
+            digest_date: Date of digest
+            instruction: Topic configuration with voice_config
+
+        Returns:
+            Tuple of (script_content, character_count)
+        """
+        # Extract speaker names from voice_config
+        speaker_1_name = "Host"
+        speaker_2_name = "Analyst"
+        if instruction.voice_config:
+            speaker_1 = instruction.voice_config.get('speaker_1', {})
+            speaker_2 = instruction.voice_config.get('speaker_2', {})
+            speaker_1_name = speaker_1.get('name', speaker_1.get('role', 'Host'))
+            speaker_2_name = speaker_2.get('name', speaker_2.get('role', 'Analyst'))
+
+        # Prepare episode transcripts
+        transcripts = []
+        for episode in episodes:
+            if not episode.transcript_content or not episode.transcript_content.strip():
+                logger.error(f"No transcript content in database for episode: {episode.title}")
+                raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database")
+
+            transcripts.append({
+                'title': episode.title,
+                'published_date': episode.published_date.strftime('%Y-%m-%d'),
+                'transcript': episode.transcript_content,
+                'score': episode.scores.get(topic, 0.0) if episode.scores else 0.0
+            })
+
+        transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
+        # Generate dialogue script with audio tags for ElevenLabs v3
+        system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
+
+DIALOGUE FORMAT:
+- Use SPEAKER_1 and SPEAKER_2 labels for two-person dialogue
+- SPEAKER_1 ({speaker_1_name}): Primary host, introduces topics, asks questions
+- SPEAKER_2 ({speaker_2_name}): Expert analyst, provides insights and analysis
+- Create natural, engaging conversation with back-and-forth exchanges
+- Use audio tags for emotional expression: [excited], [thoughtful], [concerned], [hopeful], [surprised], etc.
+
+AUDIO TAG EXAMPLES:
+- [excited] This is a groundbreaking development!
+- [thoughtful] Let me think about the implications here...
+- [concerned] This raises some important questions.
+- [hopeful] But there's reason for optimism.
+- [curious] What does this mean for communities?
+
+TOPIC INSTRUCTIONS:
+{instruction.content}
+
+REQUIREMENTS:
+- Target 15,000-20,000 characters (this is measured in characters, not words)
+- Create engaging dialogue between {speaker_1_name} and {speaker_2_name}
+- Use audio tags liberally to add emotional warmth and expression
+- Follow the structure outlined in the topic instructions
+- Include episode titles and dates when relevant
+- Focus on the most important insights and developments
+- Maintain natural conversational flow with appropriate turn-taking
+
+Date: {digest_date.strftime('%B %d, %Y')}
+Topic: {topic}
+Episodes: {len(transcripts)}"""
+
+        user_prompt = f"""Create a dialogue-style digest script from these {len(transcripts)} episode(s):
+
+"""
+
+        for i, transcript_data in enumerate(transcripts, 1):
+            user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
+
+Transcript:
+{transcript_data['transcript'][:transcript_limit]}
+
+---
+
+"""
+
+        user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes. Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [concerned] to add emotional expression."""
+
+        try:
+            response = self.client.responses.create(
+                model=self.ai_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                reasoning={"effort": "medium"},
+                max_output_tokens=self.max_output_tokens
+            )
+
+            script_content = response.output_text
+            char_count = len(script_content)
+
+            # Validate character count
+            if char_count < 15000:
+                logger.warning(f"Dialogue script is shorter than target: {char_count} < 15,000 characters")
+            elif char_count > 20000:
+                logger.warning(f"Dialogue script exceeds target: {char_count} > 20,000 characters")
+
+            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes")
+            return script_content, char_count
+
+        except Exception as e:
+            logger.error(f"{self.ai_model} error for dialogue script {topic}: {e}")
+            raise ScriptGenerationError(f"Failed to generate dialogue script with {self.ai_model}: {e}")
+
+    def _generate_narrative_script(self, topic: str, episodes: List[Episode],
+                                   digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
+        """
+        Generate narrative-style script for single-voice delivery (Turbo v2.5).
+        Target: 10,000-15,000 characters with TTS optimization.
+
+        Args:
+            topic: Topic name
+            episodes: List of episodes to include
+            digest_date: Date of digest
+            instruction: Topic configuration
+
+        Returns:
+            Tuple of (script_content, character_count)
+        """
+        # Prepare episode transcripts
+        transcripts = []
+        for episode in episodes:
+            if not episode.transcript_content or not episode.transcript_content.strip():
+                logger.error(f"No transcript content in database for episode: {episode.title}")
+                raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database")
+
+            transcripts.append({
+                'title': episode.title,
+                'published_date': episode.published_date.strftime('%Y-%m-%d'),
+                'transcript': episode.transcript_content,
+                'score': episode.scores.get(topic, 0.0) if episode.scores else 0.0
+            })
+
+        transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
+        # Generate narrative script with TTS optimization for ElevenLabs Turbo v2.5
+        system_prompt = f"""You are a professional podcast script writer creating a narrative digest for the topic "{topic}".
+
+TOPIC INSTRUCTIONS:
+{instruction.content}
+
+TTS OPTIMIZATION REQUIREMENTS (CRITICAL):
+Your script will be converted to audio using ElevenLabs TTS. Follow these rules EXACTLY:
+
+1. TEXT NORMALIZATION:
+   - Write ALL numbers in full spoken form (e.g., "twenty twenty-four" not "2024")
+   - Expand ALL abbreviations (e.g., "January" not "Jan", "Doctor" not "Dr.")
+   - Convert ALL symbols to words (e.g., "and" not "&", "dollars" not "$")
+   - Spell out ALL monetary values (e.g., "one hundred dollars" not "$100")
+   - Write ALL percentages in full (e.g., "twenty-five percent" not "25%")
+   - Expand ALL measurements (e.g., "one hundred kilometers" not "100km")
+
+2. DATES AND TIMES:
+   - Full expansion: "January second, twenty twenty-four" not "01/02/2024"
+   - Years: "twenty twenty-four" or "two thousand twenty-four"
+   - Times: "two thirty PM" not "14:30"
+
+3. ABBREVIATIONS TO AVOID:
+   - "Dr." → "Doctor"
+   - "Ave." → "Avenue"
+   - "etc." → "etcetera" or rephrase
+   - "e.g." → "for example"
+   - "i.e." → "that is"
+   - "CEO" → "C E O" or "Chief Executive Officer"
+   - "AI" → "A I" or "artificial intelligence"
+
+4. NARRATIVE EMOTION STYLE:
+   - Use dialogue tags for emotion: "she said excitedly" instead of emotion markers
+   - Add emotional context naturally: "He paused, taking a deep breath before continuing."
+   - Use punctuation for expression: exclamation marks (!), ellipses (...), questions (?)
+   - Examples:
+     * "The researcher explained thoughtfully, we need to consider multiple perspectives."
+     * "She said excitedly, this is the most important discovery of the decade."
+
+5. SCRIPT STRUCTURE:
+   - Target 10,000-15,000 characters (measured in characters, not words)
+   - Write in natural, conversational speech patterns
+   - Use clear paragraph breaks for topic transitions
+   - Maintain engaging, audio-friendly tone
+   - Include episode titles and dates when relevant
+   - Focus on the most important insights and developments
+
+Date: {digest_date.strftime('%B %d, %Y')}
+Topic: {topic}
+Episodes: {len(transcripts)}"""
+
+        user_prompt = f"""Create a narrative digest script from these {len(transcripts)} episode(s):
+
+"""
+
+        for i, transcript_data in enumerate(transcripts, 1):
+            user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
+
+Transcript:
+{transcript_data['transcript'][:transcript_limit]}
+
+---
+
+"""
+
+        user_prompt += f"""Generate a TTS-optimized narrative script following ALL the text normalization rules above. Target 10,000-15,000 characters. Remember: expand ALL numbers, dates, and abbreviations to their full spoken form."""
+
+        try:
+            response = self.client.responses.create(
+                model=self.ai_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                reasoning={"effort": "medium"},
+                max_output_tokens=self.max_output_tokens
+            )
+
+            script_content = response.output_text
+            char_count = len(script_content)
+
+            # Validate character count
+            if char_count < 10000:
+                logger.warning(f"Narrative script is shorter than target: {char_count} < 10,000 characters")
+            elif char_count > 15000:
+                logger.warning(f"Narrative script exceeds target: {char_count} > 15,000 characters")
+
+            logger.info(f"Generated narrative script for {topic}: {char_count} characters from {len(episodes)} episodes")
+            return script_content, char_count
+
+        except Exception as e:
+            logger.error(f"{self.ai_model} error for narrative script {topic}: {e}")
+            raise ScriptGenerationError(f"Failed to generate narrative script with {self.ai_model}: {e}")
 
     def get_qualifying_episodes(self, topic: str, start_date: date = None,
                               end_date: date = None, max_episodes: int = None) -> List[Episode]:
@@ -209,105 +484,34 @@ class ScriptGenerator:
         
         return all_qualifying
     
-    def generate_script(self, topic: str, episodes: List[Episode], 
+    def generate_script(self, topic: str, episodes: List[Episode],
                        digest_date: date) -> Tuple[str, int]:
         """
         Generate digest script for topic using GPT-5.
-        Returns (script_content, word_count)
+        Routes to dialogue or narrative mode based on topic configuration.
+
+        Returns (script_content, count) where count is:
+        - character_count for dialogue mode
+        - word_count for narrative mode (backward compatibility)
         """
         if topic not in self.topic_instructions:
             raise ScriptGenerationError(f"No instructions found for topic: {topic}")
-        
+
         instruction = self.topic_instructions[topic]
-        
+
         # Handle no content case
         if not episodes:
             return self._generate_no_content_script(topic, digest_date)
-        
-        # Prepare episode transcripts
-        transcripts = []
-        for episode in episodes:
-            # Read transcript content from database (REQUIRED - no file fallbacks)
-            if not episode.transcript_content or not episode.transcript_content.strip():
-                logger.error(f"No transcript content in database for episode: {episode.title}")
-                raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database - system requires database content")
 
-            transcript = episode.transcript_content
-            logger.debug(f"Using transcript from database for episode: {episode.title}")
+        # Check if dialogue mode is enabled for this topic
+        is_dialogue = self._is_dialogue_mode(topic)
 
-            if transcript:
-                transcripts.append({
-                    'title': episode.title,
-                    'published_date': episode.published_date.strftime('%Y-%m-%d'),
-                    'transcript': transcript,
-                    'score': episode.scores.get(topic, 0.0) if episode.scores else 0.0
-                })
-        
-        if not transcripts:
-            logger.warning(f"No transcripts available for {len(episodes)} episodes")
-            return self._generate_no_content_script(topic, digest_date)
-        
-        transcript_limit = self._calculate_transcript_limit(len(transcripts))
-
-        # Generate script using configured AI model
-        system_prompt = f"""You are a professional podcast script writer creating a daily digest for the topic "{topic}".
-
-INSTRUCTIONS:
-{instruction.content}
-
-REQUIREMENTS:
-- Maximum {self.max_words:,} words
-- Create a coherent narrative from the provided episode transcripts
-- Follow the structure outlined in the topic instructions
-- Maintain engaging, conversational tone suitable for audio
-- Include episode titles and dates when relevant
-- Focus on the most important insights and developments
-
-Date: {digest_date.strftime('%B %d, %Y')}
-Topic: {topic}
-Episodes: {len(transcripts)}"""
-
-        user_prompt = f"""Create a digest script from these {len(transcripts)} episode(s):
-
-"""
-        
-        for i, transcript_data in enumerate(transcripts, 1):
-            user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
-
-Transcript:
-{transcript_data['transcript'][:transcript_limit]}  # Limit transcript length for token management
-
----
-
-"""
-        
-        user_prompt += f"""Generate a comprehensive digest script following the topic instructions. Maximum {self.max_words:,} words."""
-        
-        try:
-            response = self.client.responses.create(
-                model=self.ai_model,  # Use configured AI model
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                reasoning={"effort": "medium"},  # Medium effort for quality script generation
-                max_output_tokens=self.max_output_tokens
-            )
-            
-            script_content = response.output_text  # GPT-5 Responses API format
-            word_count = len(script_content.split())
-            
-            # Validate word count
-            if word_count > self.max_words:
-                logger.warning(f"Generated script exceeds word limit: {word_count} > {self.max_words}")
-                # Could implement truncation logic here if needed
-            
-            logger.info(f"Generated script for {topic}: {word_count} words from {len(episodes)} episodes")
-            return script_content, word_count
-            
-        except Exception as e:
-            logger.error(f"{self.ai_model} Responses API error for topic {topic}: {e}")
-            raise ScriptGenerationError(f"Failed to generate script with {self.ai_model}: {e}")
+        if is_dialogue:
+            logger.info(f"Generating DIALOGUE script for {topic} (multi-voice with audio tags)")
+            return self._generate_dialogue_script(topic, episodes, digest_date, instruction)
+        else:
+            logger.info(f"Generating NARRATIVE script for {topic} (single-voice TTS-optimized)")
+            return self._generate_narrative_script(topic, episodes, digest_date, instruction)
     
     def _generate_no_content_script(self, topic: str, digest_date: date) -> Tuple[str, int]:
         """Generate script for days with no qualifying content"""

@@ -196,5 +196,9 @@ class ConfigManager:
             "active": topic.is_active,
             "sort_order": topic.sort_order,
             "last_generated_at": topic.last_generated_at.isoformat() if topic.last_generated_at else None,
-            "source": "database"
+            "source": "database",
+            # Multi-voice dialogue support (v1.79+)
+            "use_dialogue_api": topic.use_dialogue_api,
+            "dialogue_model": topic.dialogue_model,
+            "voice_config": topic.voice_config
         }

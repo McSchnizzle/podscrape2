@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, date, UTC
+from datetime import datetime, date, timezone
 from typing import Optional
 
 from sqlalchemy import (
@@ -37,8 +37,8 @@ class Feed(Base):
     last_episode_date = Column(DateTime(timezone=False))
     total_episodes_processed = Column(Integer, nullable=False, default=0)
     total_episodes_failed = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_feeds_active", "active"),
@@ -69,8 +69,8 @@ class Episode(Base):
     failure_count = Column(Integer, nullable=False, default=0)
     failure_reason = Column(Text)
     last_failure_at = Column(DateTime(timezone=False))
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_episodes_status_published", "status", "published_date"),
@@ -138,7 +138,7 @@ class Digest(Base):
     id = Column(Integer, primary_key=True)
     topic = Column(String(256), nullable=False)
     digest_date = Column(Date, nullable=False)
-    digest_timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(UTC))
+    digest_timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
     script_path = Column(String(4096))
     script_content = Column(Text)
     script_word_count = Column(Integer)
@@ -151,7 +151,7 @@ class Digest(Base):
     average_score = Column(Integer)
     github_url = Column(String(4096))
     published_at = Column(DateTime(timezone=False))
-    generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(UTC))
+    generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(timezone.utc))
     status = Column(String(50), default='draft')  # draft, generated, audio_generated, published
 
     __table_args__ = (
@@ -245,8 +245,13 @@ class Topic(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False, default=0)
     last_generated_at = Column(DateTime(timezone=False))
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # Multi-voice dialogue support (v1.79)
+    use_dialogue_api = Column(Boolean, nullable=False, default=False)
+    dialogue_model = Column(String(50), nullable=False, default='eleven_turbo_v2_5')
+    voice_config = Column(JSONB)  # {"speaker_1": {"name": "...", "voice_id": "..."}, "speaker_2": {...}}
 
     __table_args__ = (
         Index("ix_topics_active", "is_active"),
@@ -262,7 +267,7 @@ class TopicInstructionVersion(Base):
     version = Column(Integer, nullable=False)
     instructions_md = Column(Text, nullable=False)
     change_note = Column(Text)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     created_by = Column(String(255))
 
     __table_args__ = (
@@ -280,7 +285,7 @@ class DigestEpisodeLink(Base):
     topic = Column(String(256))
     score = Column(Float)
     position = Column(Integer)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_digest_episode_digest", "digest_id"),
@@ -302,8 +307,8 @@ class PipelineRun(Base):
     finished_at = Column(DateTime(timezone=False))
     phase = Column(JSONB)
     notes = Column(Text)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("ix_pipeline_runs_started", "started_at"),
@@ -317,7 +322,7 @@ class PipelineLog(Base):
     id = Column(Integer, primary_key=True)
     run_id = Column(String(128), nullable=False)
     phase = Column(String(64), nullable=False)
-    timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(UTC))
+    timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
     level = Column(String(16), nullable=False)
     logger_name = Column(String(256), nullable=False)
     module = Column(String(256))

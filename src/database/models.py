@@ -109,6 +109,10 @@ class Topic:
     id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Multi-voice dialogue support (v1.79+)
+    use_dialogue_api: bool = False
+    dialogue_model: str = 'eleven_turbo_v2_5'
+    voice_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -1156,7 +1160,10 @@ class TopicRepository:
             sort_order=model.sort_order,
             last_generated_at=model.last_generated_at,
             created_at=model.created_at,
-            updated_at=model.updated_at
+            updated_at=model.updated_at,
+            use_dialogue_api=getattr(model, 'use_dialogue_api', False),
+            dialogue_model=getattr(model, 'dialogue_model', 'eleven_turbo_v2_5'),
+            voice_config=getattr(model, 'voice_config', None)
         )
 
     def _model_to_instruction_version(self, model: TopicInstructionModel) -> TopicInstructionVersion:
