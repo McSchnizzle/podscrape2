@@ -47,7 +47,7 @@
 **Testing**: Use `scripts/doctor.py` to validate complete environment before any development work. If doctor fails, fix the environment - don't proceed with broken config.
 
 ## Python Environment
-**CRITICAL**: Always use `python3` command, never just `python`
+**Requires Python 3.13+**. Always use `python3` command, never just `python`
 - All CLI commands: `python3 script.py`
 - All test execution: `python3 test_script.py`
 - All pip installations: `pip3 install package`

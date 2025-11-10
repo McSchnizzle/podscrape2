@@ -158,7 +158,7 @@ python3 -m alembic current       # Check current migration status
 - No masking or workarounds - configuration problems must be fixed
 
 ### Python Environment
-**ALWAYS use `python3` command, never `python`** - this is critical for macOS compatibility.
+**Requires Python 3.13+**. Always use `python3` command, never `python` - this is critical for macOS compatibility.
 
 ### macOS Command Compatibility
 **Use `gtimeout` instead of `timeout`** for command timeouts on macOS. For Claude Code Bash tool, use the `timeout` parameter instead.

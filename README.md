@@ -79,7 +79,7 @@ podscrape2/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.13+
 - RSS podcast feeds to monitor
 - API keys: OpenAI, ElevenLabs, GitHub
 - PostgreSQL database (Supabase recommended)

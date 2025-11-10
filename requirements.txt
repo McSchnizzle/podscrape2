@@ -1,4 +1,5 @@
-# YouTube Transcript Digest System - Python Dependencies
+# RSS Podcast Transcript Digest System - Python Dependencies
+# Requires Python 3.13+
 
 # Core Dependencies
 python-dotenv>=1.0.0           # Environment variable management
