@@ -106,11 +106,74 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'preview') {
-      return NextResponse.json({
-        success: true,
-        preview: 'Script preview generation not yet implemented - would show digest script using current instructions and scored episodes',
-        message: 'Preview generated successfully'
-      })
+      // Call Python script to generate preview
+      const { spawn } = require('child_process');
+      const path = require('path');
+
+      const projectRoot = path.resolve(process.cwd(), '..');
+      const scriptPath = path.join(projectRoot, 'scripts', 'generate_preview_script.py');
+      const pythonPath = path.join(projectRoot, '.venv', 'bin', 'python3');
+
+      return new Promise((resolve) => {
+        const python = spawn(pythonPath, [scriptPath], {
+          cwd: projectRoot
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        python.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString();
+        });
+
+        python.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString();
+        });
+
+        python.on('close', (code: number) => {
+          if (code !== 0) {
+            console.error('Python script failed:', stderr);
+            resolve(NextResponse.json({
+              success: false,
+              error: `Script generation failed: ${stderr || 'Unknown error'}`
+            }, { status: 500 }));
+            return;
+          }
+
+          try {
+            const result = JSON.parse(stdout);
+            if (result.success) {
+              resolve(NextResponse.json({
+                success: true,
+                preview: result.script,
+                char_count: result.char_count,
+                word_count: result.word_count,
+                episode_count: result.episode_count,
+                mode: result.mode,
+                message: 'Preview generated successfully'
+              }));
+            } else {
+              resolve(NextResponse.json({
+                success: false,
+                error: result.error || 'Script generation failed'
+              }, { status: 500 }));
+            }
+          } catch (error) {
+            console.error('Failed to parse Python output:', stdout, stderr);
+            resolve(NextResponse.json({
+              success: false,
+              error: 'Failed to parse script generation output'
+            }, { status: 500 }));
+          }
+        });
+
+        // Send input to Python script
+        python.stdin.write(JSON.stringify({
+          topic_name: topicName,
+          instructions_md: content
+        }));
+        python.stdin.end();
+      });
     }
 
     if (action === 'rewrite') {

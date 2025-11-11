@@ -30,6 +30,12 @@ export default function ScriptLabPage() {
     pace: 'moderate'
   });
   const [preview, setPreview] = useState<string>('');
+  const [previewStats, setPreviewStats] = useState<{
+    char_count?: number;
+    word_count?: number;
+    episode_count?: number;
+    mode?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -116,6 +122,12 @@ export default function ScriptLabPage() {
           setScriptData(prev => ({ ...prev, content: data.content }));
         } else if (action === 'preview' && data.preview) {
           setPreview(data.preview);
+          setPreviewStats({
+            char_count: data.char_count,
+            word_count: data.word_count,
+            episode_count: data.episode_count,
+            mode: data.mode
+          });
         }
       } else {
         setMessage({ type: 'error', text: data.error || 'Operation failed' });
@@ -271,7 +283,33 @@ export default function ScriptLabPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Preview Script</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium">Preview Script</label>
+              {previewStats && (
+                <div className="text-xs text-gray-600 space-x-3">
+                  {previewStats.mode && (
+                    <span className="font-mono">
+                      Mode: <span className="font-semibold">{previewStats.mode}</span>
+                    </span>
+                  )}
+                  {previewStats.episode_count !== undefined && (
+                    <span className="font-mono">
+                      Episodes: <span className="font-semibold">{previewStats.episode_count}</span>
+                    </span>
+                  )}
+                  {previewStats.char_count !== undefined && (
+                    <span className="font-mono">
+                      Chars: <span className="font-semibold">{previewStats.char_count.toLocaleString()}</span>
+                    </span>
+                  )}
+                  {previewStats.word_count !== undefined && (
+                    <span className="font-mono">
+                      Words: <span className="font-semibold">{previewStats.word_count.toLocaleString()}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
             <pre className="w-full border rounded p-2 bg-gray-50 text-xs overflow-auto"
                  style={{ minHeight: '26rem', whiteSpace: 'pre-wrap' }}>
               {preview || '—'}
