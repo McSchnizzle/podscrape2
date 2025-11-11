@@ -41,7 +41,16 @@ export default function EpisodesPage() {
         if (value) params.append(key, value);
       });
 
-      const response = await fetch(`/api/episodes?${params}`);
+      // Add cache-busting timestamp to prevent stale data
+      params.append('_t', Date.now().toString());
+
+      const response = await fetch(`/api/episodes?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setEpisodes(data.episodes || []);
