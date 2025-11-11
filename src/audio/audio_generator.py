@@ -177,43 +177,60 @@ class AudioGenerator:
 
         if not script_content or not script_content.strip():
             raise AudioGenerationError(f"Script content is empty{ref_info}")
-        
+
         # Clean script for TTS
         tts_text = self._clean_script_for_tts(script_content)
         logger.info(f"Cleaned script: {len(tts_text)} characters for TTS")
-        
+
         # Get voice configuration for topic
         voice_id = self._get_voice_id_for_topic(topic)
         voice_settings = self.voice_manager.get_voice_settings_for_topic(topic)
-        
+
         logger.info(f"Using voice {voice_id} for topic '{topic}'")
-        
+
+        # Check if we need to chunk for v3 model (3000 char limit)
+        topic_config = self._get_topic_config(topic)
+        needs_chunking = (
+            topic_config and
+            topic_config.dialogue_model == 'eleven_v3' and
+            len(tts_text) > 3000
+        )
+
         # Generate filename (allow caller to supply an exact timestamp to match script)
         if not timestamp:
             timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
         safe_topic = topic.replace(' ', '_').replace('&', 'and')
         filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
-        
-        # Generate audio via ElevenLabs API
-        audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
-        
-        # Save audio file
-        with open(output_path, 'wb') as f:
-            f.write(audio_data)
-        
-        # Get file metadata
-        file_size = output_path.stat().st_size
-        
+
+        if needs_chunking:
+            logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for v3 model")
+            audio_data = self._generate_chunked_narrative_audio(
+                tts_text,
+                voice_id,
+                voice_settings,
+                output_path
+            )
+            file_size = output_path.stat().st_size
+        else:
+            # Generate audio via ElevenLabs API (single request)
+            audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
+
+            # Save audio file
+            with open(output_path, 'wb') as f:
+                f.write(audio_data)
+
+            file_size = output_path.stat().st_size
+
         # Estimate duration (rough approximation: ~150 words per minute, ~5 chars per word)
         estimated_duration = (len(tts_text) / 5) / 150 * 60  # seconds
-        
+
         # Get voice name
         voice = self.voice_manager.get_voice_by_id(voice_id)
         voice_name = voice.name if voice else "Unknown"
-        
+
         logger.info(f"Generated audio: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
-        
+
         return AudioMetadata(
             file_path=str(output_path),
             duration_seconds=estimated_duration,
@@ -223,6 +240,17 @@ class AudioGenerator:
             generation_timestamp=get_pacific_now()
         )
     
+    def _get_topic_config(self, topic: str):
+        """Get topic configuration from database"""
+        try:
+            from src.database.models import get_topic_repo
+            topic_repo = get_topic_repo()
+            all_topics = topic_repo.get_all_topics()
+            return next((t for t in all_topics if t.name == topic), None)
+        except Exception as e:
+            logger.warning(f"Failed to get topic config for '{topic}': {e}")
+            return None
+
     def _get_voice_id_for_topic(self, topic: str) -> str:
         """Get voice ID for a specific topic"""
         try:
@@ -237,7 +265,116 @@ class AudioGenerator:
             
         except Exception as e:
             raise AudioGenerationError(f"Failed to get voice ID for topic '{topic}': {e}")
-    
+
+    def _generate_chunked_narrative_audio(
+        self,
+        text: str,
+        voice_id: str,
+        voice_settings: VoiceSettings,
+        output_path: Path
+    ) -> bytes:
+        """
+        Generate audio for long narrative scripts by chunking and concatenating.
+
+        For eleven_v3 model with scripts >3000 chars:
+        1. Split text at sentence boundaries into ~2800 char chunks
+        2. Generate audio for each chunk via TTS API
+        3. Concatenate chunks using ffmpeg
+
+        Args:
+            text: Full narrative text (already cleaned for TTS)
+            voice_id: ElevenLabs voice ID
+            voice_settings: Voice configuration
+            output_path: Final MP3 output path
+
+        Returns:
+            Audio bytes (from concatenated file)
+        """
+        import tempfile
+        import shutil
+
+        MAX_CHUNK_SIZE = 2800  # Safety margin under v3's 3000 char limit
+
+        logger.info(f"Chunking narrative script: {len(text)} chars")
+
+        # Split text into chunks at sentence boundaries
+        chunks = self._chunk_narrative_text(text, MAX_CHUNK_SIZE)
+        logger.info(f"Split into {len(chunks)} chunks")
+
+        # Create temp directory for chunk files
+        temp_dir = Path(tempfile.mkdtemp(prefix="narrative_chunks_"))
+
+        try:
+            chunk_files = []
+
+            # Generate audio for each chunk
+            for i, chunk_text in enumerate(chunks, 1):
+                chunk_file = temp_dir / f"chunk_{i:03d}.mp3"
+                logger.info(f"Processing chunk {i}/{len(chunks)} ({len(chunk_text)} chars)")
+
+                # Generate audio for this chunk
+                audio_bytes = self._generate_tts_audio(chunk_text, voice_id, voice_settings)
+
+                # Save chunk to temp file
+                with open(chunk_file, 'wb') as f:
+                    f.write(audio_bytes)
+
+                chunk_files.append(chunk_file)
+                logger.info(f"Saved chunk {i} to {chunk_file} ({len(audio_bytes)} bytes)")
+
+            # Concatenate all chunks
+            self._concatenate_audio_chunks(chunk_files, output_path)
+
+            logger.info(f"Generated chunked narrative audio: {output_path} ({len(chunks)} chunks)")
+
+            # Return empty bytes since we saved directly to output_path
+            return b''
+
+        finally:
+            # Clean up temp directory
+            try:
+                shutil.rmtree(temp_dir)
+                logger.info(f"Cleaned up temp directory: {temp_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp directory {temp_dir}: {e}")
+
+    def _chunk_narrative_text(self, text: str, max_chunk_size: int) -> list[str]:
+        """
+        Split narrative text into chunks at sentence boundaries.
+
+        Args:
+            text: Full narrative text
+            max_chunk_size: Maximum characters per chunk
+
+        Returns:
+            List of text chunks
+        """
+        import re
+
+        # Split into sentences (preserve punctuation)
+        sentences = re.split(r'([.!?]+\s+)', text)
+
+        chunks = []
+        current_chunk = ""
+
+        for i in range(0, len(sentences), 2):
+            sentence = sentences[i]
+            punctuation = sentences[i + 1] if i + 1 < len(sentences) else ""
+            full_sentence = sentence + punctuation
+
+            if len(current_chunk) + len(full_sentence) > max_chunk_size and current_chunk:
+                # Save current chunk and start new one
+                chunks.append(current_chunk.strip())
+                current_chunk = full_sentence
+            else:
+                current_chunk += full_sentence
+
+        # Add final chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks
+
     def _generate_tts_audio(self, text: str, voice_id: str, voice_settings: VoiceSettings) -> bytes:
         """Generate TTS audio using ElevenLabs API"""
         
@@ -547,7 +684,7 @@ class AudioGenerator:
 
     def _generate_chunked_dialogue_audio(
         self,
-        script_path: str,
+        script_content: str,
         topic: str,
         voice_config: dict,
         dialogue_model: str,
@@ -557,14 +694,14 @@ class AudioGenerator:
         Generate multi-voice dialogue audio with chunking support.
 
         Process:
-        1. Load script file
+        1. Use script content from database
         2. Chunk script into segments that fit within API limits
         3. Generate audio for each chunk via Text-to-Dialogue API
         4. Concatenate chunks into final MP3
         5. Clean up intermediate files
 
         Args:
-            script_path: Path to dialogue script file
+            script_content: Dialogue script content (not file path)
             topic: Topic name (for output filename)
             voice_config: Speaker-to-voice mapping
             dialogue_model: ElevenLabs model ID (e.g., "eleven_v3")
@@ -582,13 +719,6 @@ class AudioGenerator:
         logger.info(f"Generating chunked dialogue audio for {topic}")
         logger.info(f"Voice config: {voice_config}")
         logger.info(f"Dialogue model: {dialogue_model}")
-
-        # Load script content
-        try:
-            with open(script_path, 'r', encoding='utf-8') as f:
-                script_content = f.read()
-        except Exception as e:
-            raise AudioGenerationError(f"Failed to read script file {script_path}: {e}")
 
         # Chunk the dialogue script
         # Use 2500 chars for safety margin (API limit is 3000)
@@ -738,8 +868,13 @@ class AudioGenerator:
         # Route to appropriate generation method
         if use_dialogue_api:
             logger.info(f"Using DIALOGUE MODE for {digest.topic}")
+
+            # Ensure we have script content
+            if not digest.script_content:
+                raise AudioGenerationError(f"Digest {digest.id} has no script_content")
+
             audio_metadata = self._generate_chunked_dialogue_audio(
-                script_path=digest.script_path,
+                script_content=digest.script_content,
                 topic=digest.topic,
                 voice_config=voice_config,
                 dialogue_model=dialogue_model,
@@ -747,8 +882,13 @@ class AudioGenerator:
             )
         else:
             logger.info(f"Using NARRATIVE MODE for {digest.topic}")
+
+            # Ensure we have script content
+            if not digest.script_content:
+                raise AudioGenerationError(f"Digest {digest.id} has no script_content")
+
             audio_metadata = self.generate_audio_for_script(
-                script_content=digest.script_path,
+                script_content=digest.script_content,
                 topic=digest.topic,
                 timestamp=ts
             )

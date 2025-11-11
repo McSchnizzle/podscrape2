@@ -103,6 +103,11 @@ function generateRSSXML(digests: Digest[]): string {
 
   let items = '';
 
+  // Calculate total episodes for episode numbering (most recent = highest number)
+  const totalEpisodes = digests.filter(d => d.github_url && d.mp3_path).length;
+
+  let episodeNumber = totalEpisodes;
+
   for (const digest of digests) {
     if (!digest.github_url || !digest.mp3_path) continue;
 
@@ -123,12 +128,15 @@ function generateRSSXML(digests: Digest[]): string {
       <description>${escapeXML(description)}</description>
       <pubDate>${pubDate}</pubDate>
       <guid isPermaLink="false">${escapeXML(guid)}</guid>
+      <itunes:episode>${episodeNumber}</itunes:episode>
       <enclosure url="${escapeXML(mp3Url)}" length="0" type="audio/mpeg"/>
     </item>`;
+
+    episodeNumber--;
   }
 
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
     <title>Daily AI &amp; Tech Digest</title>
     <description>AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.</description>

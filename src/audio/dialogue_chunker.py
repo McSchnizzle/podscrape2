@@ -32,9 +32,9 @@ class DialogueChunker:
     - Maintain dialogue flow across chunks
     """
 
-    # Regex to match speaker turns: SPEAKER_1: or SPEAKER_2: or SPEAKER_1 (Name):
-    # Matches: "SPEAKER_1:", "SPEAKER_2:", "SPEAKER_1 (Young Jamal):", etc.
-    SPEAKER_PATTERN = re.compile(r'^(SPEAKER_[12])(?:\s*\([^)]+\))?:\s*', re.MULTILINE)
+    # Regex to match speaker turns: SPEAKER_1: or SPEAKER_2: or SPEAKER_1 (Name): or SPEAKER_1 [Name, emotion]:
+    # Matches: "SPEAKER_1:", "SPEAKER_2:", "SPEAKER_1 (Young Jamal):", "SPEAKER_1 [Jamal, excited]:", etc.
+    SPEAKER_PATTERN = re.compile(r'^(SPEAKER_[12])(?:\s*[\(\[][^\)\]]+[\)\]])?:\s*', re.MULTILINE)
 
     def __init__(self, max_chunk_size: int = 2800):
         """
@@ -69,6 +69,10 @@ class DialogueChunker:
 
         logger.info(f"Parsed {len(turns)} speaker turns from script ({len(script)} chars)")
 
+        # Pre-split any oversized turns before chunking
+        turns = self._normalize_turn_sizes(turns)
+        logger.info(f"Normalized to {len(turns)} turns (after splitting oversized turns)")
+
         # Group turns into chunks that fit within character limit
         chunks = self._create_chunks(turns)
 
@@ -102,6 +106,34 @@ class DialogueChunker:
                     })
 
         return turns
+
+    def _normalize_turn_sizes(self, turns: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Pre-split any turns that exceed max_chunk_size.
+        This ensures _create_chunks never encounters oversized turns.
+
+        Args:
+            turns: List of parsed speaker turns
+
+        Returns:
+            List of normalized turns, all within max_chunk_size
+        """
+        normalized_turns = []
+
+        for turn in turns:
+            # Reconstruct turn with speaker label to get full size
+            turn_text = f"{turn['speaker']}: {turn['text']}"
+            turn_size = len(turn_text)
+
+            if turn_size > self.max_chunk_size:
+                # Split this oversized turn
+                sub_turns = self._split_long_turn(turn, self.max_chunk_size)
+                normalized_turns.extend(sub_turns)
+            else:
+                # Turn is fine as-is
+                normalized_turns.append(turn)
+
+        return normalized_turns
 
     def _split_long_turn(self, turn: Dict[str, str], max_size: int) -> List[Dict[str, str]]:
         """
@@ -151,10 +183,11 @@ class DialogueChunker:
         """
         Group speaker turns into chunks that fit within character limit.
 
+        All turns are already normalized (pre-split), so we just need to group them.
+
         Strategy:
         - Add turns to current chunk until adding next turn would exceed limit
         - Start new chunk at turn boundary
-        - If single turn exceeds limit, split it at sentence boundaries
         """
         chunks = []
         current_chunk_turns = []
@@ -165,37 +198,12 @@ class DialogueChunker:
             turn_text = f"{turn['speaker']}: {turn['text']}"
             turn_size = len(turn_text)
 
-            # If single turn exceeds limit, split it
+            # All turns should be pre-normalized, but verify
             if turn_size > self.max_chunk_size:
-                # Save current chunk if any
-                if current_chunk_turns:
-                    chunks.append(self._finalize_chunk(current_chunk_turns, len(chunks) + 1))
-                    current_chunk_turns = []
-                    current_chunk_size = 0
-
-                # Split the long turn
-                logger.warning(
-                    f"Single turn ({turn_size} chars) exceeds chunk limit ({self.max_chunk_size} chars). "
-                    f"Splitting at sentence boundaries."
+                raise ValueError(
+                    f"Turn ({turn_size} chars) exceeds chunk limit ({self.max_chunk_size} chars). "
+                    f"This should never happen after normalization."
                 )
-                sub_turns = self._split_long_turn(turn, self.max_chunk_size)
-
-                # Process each sub-turn
-                for sub_turn in sub_turns:
-                    sub_turn_text = f"{sub_turn['speaker']}: {sub_turn['text']}"
-                    sub_turn_size = len(sub_turn_text)
-
-                    potential_size = current_chunk_size + sub_turn_size + (1 if current_chunk_turns else 0)
-
-                    if potential_size > self.max_chunk_size and current_chunk_turns:
-                        chunks.append(self._finalize_chunk(current_chunk_turns, len(chunks) + 1))
-                        current_chunk_turns = []
-                        current_chunk_size = 0
-
-                    current_chunk_turns.append(sub_turn)
-                    current_chunk_size += sub_turn_size + (1 if len(current_chunk_turns) > 1 else 0)
-
-                continue
 
             # Check if adding this turn would exceed limit
             # (Add 1 for newline between turns)
