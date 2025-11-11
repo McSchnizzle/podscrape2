@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       const scriptPath = path.join(projectRoot, 'scripts', 'generate_preview_script.py');
       const pythonPath = path.join(projectRoot, '.venv', 'bin', 'python3');
 
-      return new Promise((resolve) => {
+      return new Promise<NextResponse>((resolve) => {
         const python = spawn(pythonPath, [scriptPath], {
           cwd: projectRoot
         });
