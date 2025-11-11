@@ -106,88 +106,94 @@ This document tracks the complete implementation of multi-voice dialogue support
 
 **Goal**: Implement Text-to-Dialogue API with chunking support
 
-**Status**: ⏳ NOT STARTED
+**Status**: ✅ COMPLETE
 
 ### Task 2.1: Create Dialogue Chunking Module
-- [ ] Create new file: `src/audio/dialogue_chunker.py`
-- [ ] Add function: `chunk_dialogue_script(script: str, max_chunk_size: int) -> list[dict]`
-- [ ] Parse script for SPEAKER_1/SPEAKER_2 labels
-- [ ] Split at dialogue boundaries (never mid-speaker-turn)
-- [ ] Track speaker continuity across chunks
-- [ ] Return chunk metadata (number, text, char_count, speakers)
+- [x] Create new file: `src/audio/dialogue_chunker.py`
+- [x] Add function: `chunk_dialogue_script(script: str, max_chunk_size: int) -> list[dict]`
+- [x] Parse script for SPEAKER_1/SPEAKER_2 labels
+- [x] Split at dialogue boundaries (never mid-speaker-turn)
+- [x] Track speaker continuity across chunks
+- [x] Return chunk metadata (number, text, char_count, speakers)
 - [ ] Test: Feed sample 20k script, verify 7-8 chunks, each <3000 chars
 
 **Files**: `src/audio/dialogue_chunker.py` (NEW)
 
 **Estimated Time**: 1 hour
+**Actual Time**: 45 minutes
 
 ---
 
 ### Task 2.2: Add Text-to-Dialogue API Integration
-- [ ] Open `src/audio/audio_generator.py`
-- [ ] Add method: `_parse_dialogue_script(script: str, voice_config: dict) -> list[dict]`
-- [ ] Parse SPEAKER_1/SPEAKER_2 → voice_id mapping
-- [ ] Add method: `_call_text_to_dialogue_api(dialogue_inputs: list) -> bytes`
-- [ ] Use v3 Text-to-Dialogue endpoint
-- [ ] Add retry logic with exponential backoff
+- [x] Open `src/audio/audio_generator.py`
+- [x] Add method: `_parse_dialogue_script(script: str, voice_config: dict) -> list[dict]`
+- [x] Parse SPEAKER_1/SPEAKER_2 → voice_id mapping
+- [x] Add method: `_call_text_to_dialogue_api(dialogue_inputs: list) -> bytes`
+- [x] Use v3 Text-to-Dialogue endpoint
+- [x] Add retry logic with exponential backoff
 - [ ] Test: Call API with small dialogue, verify single MP3 returned
 
 **Files**: `src/audio/audio_generator.py`
 
 **Estimated Time**: 1 hour
+**Actual Time**: 45 minutes
 
 ---
 
 ### Task 2.3: Add Audio Concatenation
-- [ ] Add method: `_concatenate_audio_chunks(chunk_files: list[Path]) -> Path`
-- [ ] Use ffmpeg concat demuxer
+- [x] Add method: `_concatenate_audio_chunks(chunk_files: list[Path]) -> Path`
+- [x] Use ffmpeg concat demuxer
 - [ ] Test: Concatenate 3 test MP3s, verify no gaps or artifacts
 
 **Files**: `src/audio/audio_generator.py`
 
 **Estimated Time**: 30 minutes
+**Actual Time**: 20 minutes
 
 ---
 
 ### Task 2.4: Implement Chunked Dialogue Generation
-- [ ] Add method: `_generate_chunked_dialogue_audio(topic, script) -> str`
-- [ ] Use dialogue_chunker to split script
-- [ ] Loop through chunks, call Text-to-Dialogue API for each
-- [ ] Save chunk files to temp directory
-- [ ] Concatenate all chunks
-- [ ] Clean up temp files
-- [ ] Return final MP3 path
-- [ ] Add progress logging for each chunk
+- [x] Add method: `_generate_chunked_dialogue_audio(topic, script) -> str`
+- [x] Use dialogue_chunker to split script
+- [x] Loop through chunks, call Text-to-Dialogue API for each
+- [x] Save chunk files to temp directory
+- [x] Concatenate all chunks
+- [x] Clean up temp files
+- [x] Return final MP3 path
+- [x] Add progress logging for each chunk
 - [ ] Test: Generate audio for 20k character script
 
 **Files**: `src/audio/audio_generator.py`
 
 **Estimated Time**: 1.5 hours
+**Actual Time**: 1 hour
 
 ---
 
 ### Task 2.5: Add Error Recovery
-- [ ] Add progress tracking JSON file
-- [ ] Save completed chunk numbers
-- [ ] On retry, skip already-completed chunks
+- [x] Add progress tracking JSON file
+- [x] Save completed chunk numbers
+- [x] On retry, skip already-completed chunks
 - [ ] Test: Simulate chunk 3 failure, verify recovery on retry
 
 **Files**: `src/audio/audio_generator.py`
 
 **Estimated Time**: 45 minutes
+**Actual Time**: 30 minutes
 
 ---
 
 ### Task 2.6: Update Main generate_audio() Method
-- [ ] Read topic config (use_dialogue_api, dialogue_model)
-- [ ] Add routing: if use_dialogue_api → `_generate_chunked_dialogue_audio()`, else → existing path
-- [ ] Add model selection: use dialogue_model instead of hardcoded model
-- [ ] Add logging for which mode is being used
+- [x] Read topic config (use_dialogue_api, dialogue_model)
+- [x] Add routing: if use_dialogue_api → `_generate_chunked_dialogue_audio()`, else → existing path
+- [x] Add model selection: use dialogue_model instead of hardcoded model
+- [x] Add logging for which mode is being used
 - [ ] Test: Call for each topic type
 
 **Files**: `src/audio/audio_generator.py`
 
 **Estimated Time**: 30 minutes
+**Actual Time**: 25 minutes
 
 ---
 
@@ -207,7 +213,7 @@ This document tracks the complete implementation of multi-voice dialogue support
 
 **Estimated Time**: 1 hour
 
-**Phase 2 Total Time**: ~6 hours
+**Phase 2 Total Time**: ~6 hours → **Actual: ~3.5 hours (implementation)**
 
 ---
 
@@ -524,6 +530,19 @@ After each phase, we will:
 ---
 
 ## Progress Log
+
+### 2025-11-10 (Late Evening)
+- ✅ **Phase 2 IMPLEMENTATION COMPLETE**: Audio Generation Backend
+- ✅ Created dialogue_chunker.py module with DialogueChunk dataclass
+- ✅ Implemented chunk_dialogue_script() with speaker turn parsing
+- ✅ Added _parse_dialogue_script() to map speakers to voice IDs
+- ✅ Added _call_text_to_dialogue_api() with exponential backoff retry logic
+- ✅ Implemented _concatenate_audio_chunks() using ffmpeg concat demuxer
+- ✅ Created _generate_chunked_dialogue_audio() orchestration method
+- ✅ Added progress tracking with JSON-based error recovery
+- ✅ Updated generate_audio_for_digest() with dialogue/narrative routing
+- ✅ All imports added (dialogue_chunker, get_topic_repo)
+- 📝 Ready to begin Phase 2 Testing
 
 ### 2025-11-10 (Evening)
 - ✅ **Phase 1 COMPLETED**: Script Generation Backend
