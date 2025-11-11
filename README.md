@@ -2,7 +2,7 @@
 
 Production-ready automated system that generates daily, topic-based podcast digests from RSS feeds. Features a comprehensive orchestrator, PostgreSQL database, OpenAI Whisper transcription, and Next.js Web UI for management.
 
-**Current Version**: v1.52 (October 2025)
+**Current Version**: v1.84 (November 2025)
 **Live RSS Feed**: https://podcast.paulrbrown.org/daily-digest.xml (Dynamic API)
 
 ## 🎯 Overview
@@ -10,9 +10,9 @@ Production-ready automated system that generates daily, topic-based podcast dige
 This production system automatically:
 - Discovers new episodes from RSS podcast feeds
 - Downloads and transcribes audio using local OpenAI Whisper
-- Scores content against multiple topics using GPT-5-mini
-- Generates topic-based digest scripts using GPT-5
-- Converts scripts to MP3 audio using ElevenLabs TTS
+- Scores content against multiple topics using GPT-4o-mini
+- Generates topic-based digest scripts using GPT-4o (dialogue or narrative mode)
+- Converts scripts to MP3 audio using ElevenLabs TTS (single-voice or multi-voice dialogue)
 - Publishes via GitHub Releases and RSS feed at podcast.paulrbrown.org
 
 ## 🏗️ Architecture
@@ -33,8 +33,10 @@ AI Scoring → Script Generation (Database-First) → TTS → GitHub Releases �
 - **Database**: PostgreSQL (Supabase) with SQLAlchemy models, RLS security, and automatic connection pooling
 - **Orchestrator**: Production-ready 6-phase pipeline with comprehensive logging and error handling
 - **Transcription**: Local OpenAI Whisper with memory-efficient incremental database writes (v1.52)
-- **AI Processing**: GPT-5-mini scoring and GPT-5 script generation (database-first architecture)
+- **AI Processing**: GPT-4o-mini scoring and GPT-4o script generation (database-first architecture)
 - **Audio/TTS**: ElevenLabs with per-topic voice configuration
+  - **Dialogue Mode**: Multi-voice conversations with Text-to-Dialogue API (v3) and intelligent chunking
+  - **Narrative Mode**: Single-voice TTS with text normalization and optimization
 - **Publishing**: GitHub Releases (MP3 assets) + Dynamic RSS API (v1.49)
 - **Retention**: Automated cleanup phase with configurable retention periods (v1.51)
 - **Web UI**: Next.js app hosted at podcast.paulrbrown.org for management and monitoring
@@ -171,6 +173,46 @@ python3 scripts/run_retention.py   # Phase 6: Cleanup old files/records
   - Direct PostgreSQL table manipulation via Supabase SQL editor
   - No JSON files or markdown files in filesystem (digest_instructions/ removed v1.52)
 
+### 🎙️ Multi-Voice Dialogue Mode (v1.79+)
+
+The system supports two script generation modes per topic:
+
+**Dialogue Mode** - Multi-voice conversational digests:
+- **Format**: SPEAKER_1/SPEAKER_2 conversation with audio tags
+- **Length**: 15,000-20,000 characters
+- **Audio Tags**: ElevenLabs tags like `[excited]`, `[thoughtful]`, `[serious]`, `[laughs]`
+- **TTS**: Text-to-Dialogue API (v3) with intelligent chunking (~3k chars per chunk)
+- **Use Case**: Topics that benefit from conversational exploration (e.g., Community Organizing)
+
+**Narrative Mode** - Single-voice optimized digests:
+- **Format**: Standard narrative prose with TTS optimization
+- **Length**: 10,000-15,000 characters
+- **Optimization**: Text normalization (numbers spelled out, abbreviations expanded)
+- **TTS**: Standard Text-to-Speech API with single voice
+- **Use Case**: Topics that benefit from authoritative narration (e.g., AI & Technology)
+
+**Configuration** (via Web UI):
+1. Visit Topics page: https://podcast.paulrbrown.org/topics
+2. Select script mode: "dialogue" or "narrative"
+3. For dialogue mode:
+   - Choose Voice 1 (e.g., "Young Jamal - energetic, passionate")
+   - Choose Voice 2 (e.g., "Dakota H - thoughtful, analytical")
+   - Select GPT model: gpt-4o or gpt-4o-mini
+4. Edit topic instructions to guide conversation style
+5. Use Script Lab preview to test with real episodes
+
+**Example Dialogue Script**:
+```
+SPEAKER_1: [excited] Hey everyone, welcome back! Today we're diving into some incredible stories from the world of community organizing.
+
+SPEAKER_2: [thoughtful] That's right. We've been following some amazing movements, and the energy behind these grassroots efforts is absolutely inspiring.
+```
+
+**Example Narrative Script**:
+```
+Welcome to today's digest on artificial intelligence and technology. We're exploring groundbreaking developments in AI safety, machine learning, and the future of autonomous systems...
+```
+
 ## 🔄 Daily Operation
 
 ### Automated Execution
@@ -220,7 +262,11 @@ The Next.js Web UI is hosted at https://podcast.paulrbrown.org and provides:
   - Add feeds (URL validation, duplicate guard, title autofill), toggle active, soft delete
   - "Check feed" verifies TLS and audio enclosure reachability (no pipeline run)
 - **Topics**:
-  - Edit voice_id, instructions_md (database-stored, no files), description, active
+  - Configure script mode: dialogue (multi-voice) or narrative (single-voice)
+  - Select Voice 1 and Voice 2 (for dialogue mode) from ElevenLabs voice library
+  - Choose dialogue model: GPT-4o or GPT-4o-mini
+  - Edit instructions_md (database-stored, no files), description, active status
+  - Script Lab preview: Generate and preview scripts with real episode data
   - All topic configuration stored in PostgreSQL, no filesystem dependencies
 - **Dashboard**:
   - Key settings display; Recent RSS episodes with phase summaries

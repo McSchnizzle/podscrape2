@@ -10,15 +10,19 @@ RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription (O
 AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dynamic RSS API) → Retention
 ```
 
-**Current Version**: v1.52 (October 2025)
+**Current Version**: v1.84 (November 2025)
 **Pipeline Architecture**: 6 phases (Discovery, Audio, Digest, TTS, Publishing, Retention)
 
 ### Core Data Flow
 - **RSS Feeds**: Monitored for new episodes via `src/podcast/feed_parser.py`
 - **Audio Processing**: Downloads, chunks (3-min), transcribes with OpenAI Whisper (cross-platform)
-- **Content Scoring**: Uses GPT-5-mini to score transcripts against configured topics (threshold: 0.65)
-- **Script Generation**: Creates topic-based digest scripts using GPT-5 and database-stored topic instructions (database-first architecture)
-- **Audio Generation**: Converts scripts to MP3 using ElevenLabs TTS with topic-specific voices
+- **Content Scoring**: Uses GPT-4o-mini to score transcripts against configured topics (threshold: 0.65)
+- **Script Generation**: Creates topic-based digest scripts using GPT-4o and database-stored topic instructions (database-first architecture)
+  - **Dialogue Mode**: SPEAKER_1/SPEAKER_2 format with audio tags (15-20k chars)
+  - **Narrative Mode**: Single-voice TTS-optimized prose (10-15k chars)
+- **Audio Generation**: Converts scripts to MP3 using ElevenLabs TTS
+  - **Dialogue Mode**: Text-to-Dialogue API (v3) with intelligent chunking (~3k chars per chunk)
+  - **Narrative Mode**: Standard Text-to-Speech API with single voice
 - **Publishing**: Uploads to GitHub Releases, updates database for dynamic RSS API (no static files since v1.49)
 - **Retention**: Automatic cleanup of old MP3s, GitHub releases, logs, and database records based on configured retention periods
 
@@ -184,8 +188,65 @@ Real data reveals actual RSS behavior, network issues, and audio CDN problems th
 - **Chunking**: Audio split into 3-minute chunks for optimal ASR performance
 - **Transcription**: OpenAI Whisper (local, cross-platform) with configurable model size
 - **Memory Efficiency**: Incremental database writes per chunk for O(1) constant memory usage (v1.52)
-- **TTS**: ElevenLabs with topic-specific voice IDs and settings
+- **TTS**: ElevenLabs with topic-specific voice IDs and settings (single-voice or multi-voice dialogue)
 - **Cleanup**: Automatic cleanup of intermediate audio files after processing
+
+### Multi-Voice Dialogue Mode (v1.79+)
+The system supports two script generation modes per topic:
+
+**Dialogue Mode** (for conversational digests):
+- **Format**: SPEAKER_1/SPEAKER_2 conversation format with audio tags
+- **Length**: 15,000-20,000 characters
+- **Audio Tags**: Supports ElevenLabs audio tags like [excited], [thoughtful], [serious], [laughs], etc.
+- **TTS API**: ElevenLabs Text-to-Dialogue API (v3) with intelligent chunking
+- **Chunking**: Automatically splits scripts into ~3k character chunks at speaker boundaries
+- **Voice Config**: Requires `voice_1_id` and `voice_2_id` in database (configured via Web UI)
+
+**Narrative Mode** (for single-voice digests):
+- **Format**: Standard narrative prose with TTS optimization
+- **Length**: 10,000-15,000 characters
+- **TTS Optimization**: Text normalization (numbers spelled out, abbreviations expanded)
+- **TTS API**: ElevenLabs standard Text-to-Speech API
+- **Voice Config**: Uses primary `voice_1_id` only
+
+**Configuration** (via Web UI Topics page):
+```typescript
+// Database fields in topics table
+script_mode: 'dialogue' | 'narrative'  // Script generation mode
+voice_1_id: string                      // ElevenLabs voice ID for Voice 1 / narrator
+voice_2_id: string | null               // ElevenLabs voice ID for Voice 2 (dialogue only)
+dialogue_model: string                  // GPT model: 'gpt-4o' or 'gpt-4o-mini'
+instructions_md: string                 // Topic-specific generation instructions
+```
+
+**Dialogue Script Example**:
+```
+SPEAKER_1: [excited] Hey everyone, welcome back! Today we're diving into some incredible stories from the world of community organizing.
+
+SPEAKER_2: [thoughtful] That's right. We've been following some amazing movements, and the energy behind these grassroots efforts is absolutely inspiring.
+
+SPEAKER_1: [serious] Let's start with the transit justice campaign in Los Angeles...
+```
+
+**Narrative Script Example**:
+```
+Welcome to today's digest on artificial intelligence and technology. We're exploring groundbreaking developments in AI safety, machine learning, and the future of autonomous systems.
+
+Recent research from Stanford reveals fascinating insights into large language model capabilities. Scientists have discovered that these models can exhibit emergent properties...
+```
+
+**Audio Tags Reference**:
+Supported ElevenLabs audio tags for dialogue mode:
+- Emotion: `[excited]`, `[thoughtful]`, `[serious]`, `[concerned]`, `[hopeful]`
+- Action: `[laughs]`, `[sighs]`, `[chuckles]`
+- Pacing: `[pause]`, `[quickly]`, `[slowly]`
+
+**Implementation Files**:
+- Script generation: `src/generation/script_generator.py`
+- Audio generation: `src/audio/audio_generator.py`
+- Dialogue chunking: `src/audio/dialogue_chunker.py`
+- Web UI configuration: `web_ui_hosted/app/topics/page.tsx`
+- Script preview: `web_ui_hosted/app/api/script-lab/preview/route.ts`
 
 ## Key File Structure Understanding
 
