@@ -103,11 +103,6 @@ function generateRSSXML(digests: Digest[]): string {
 
   let items = '';
 
-  // Calculate total episodes for episode numbering (most recent = highest number)
-  const totalEpisodes = digests.filter(d => d.github_url && d.mp3_path).length;
-
-  let episodeNumber = totalEpisodes;
-
   for (const digest of digests) {
     if (!digest.github_url || !digest.mp3_path) continue;
 
@@ -122,17 +117,16 @@ function generateRSSXML(digests: Digest[]): string {
     const title = digest.mp3_title || `${digest.topic} - ${digest.digest_date}`;
     const description = digest.mp3_summary || `Daily digest for ${digest.topic}`;
 
+    // Use database ID as episode number for consistency
     items += `
     <item>
       <title>${escapeXML(title)}</title>
       <description>${escapeXML(description)}</description>
       <pubDate>${pubDate}</pubDate>
       <guid isPermaLink="false">${escapeXML(guid)}</guid>
-      <itunes:episode>${episodeNumber}</itunes:episode>
+      <itunes:episode>${digest.id}</itunes:episode>
       <enclosure url="${escapeXML(mp3Url)}" length="0" type="audio/mpeg"/>
     </item>`;
-
-    episodeNumber--;
   }
 
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
