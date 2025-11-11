@@ -24,7 +24,11 @@ const getCachedTopics = unstable_cache(
       active: topic.is_active,
       sort_order: topic.sort_order,
       last_generated_at: topic.last_generated_at,
-      source: 'supabase'
+      source: 'supabase',
+      // Multi-voice dialogue support (v1.82)
+      use_dialogue_api: topic.use_dialogue_api || false,
+      dialogue_model: topic.dialogue_model || 'eleven_turbo_v2_5',
+      voice_config: topic.voice_config || null
     }))
 
     return {
@@ -97,6 +101,10 @@ export async function POST(request: NextRequest) {
         instructions_md: topic.instructions_md || existingBySlug.get(slug)?.instructions_md,
         is_active: topic.active !== undefined ? Boolean(topic.active) : true,
         sort_order: typeof topic.sort_order === 'number' ? topic.sort_order : index * 10,
+        // Multi-voice dialogue support (v1.82)
+        use_dialogue_api: topic.use_dialogue_api !== undefined ? Boolean(topic.use_dialogue_api) : (existingBySlug.get(slug)?.use_dialogue_api || false),
+        dialogue_model: topic.dialogue_model || existingBySlug.get(slug)?.dialogue_model || 'eleven_turbo_v2_5',
+        voice_config: topic.voice_config !== undefined ? topic.voice_config : (existingBySlug.get(slug)?.voice_config || null),
       }
 
       await db.upsertTopic(payload)

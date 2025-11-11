@@ -96,6 +96,10 @@ export interface TopicRecord {
   last_generated_at?: string
   created_at: string
   updated_at: string
+  // Multi-voice dialogue support (v1.82)
+  use_dialogue_api?: boolean
+  dialogue_model?: string
+  voice_config?: Record<string, any>
 }
 
 export interface TopicInstructionVersionRecord {
