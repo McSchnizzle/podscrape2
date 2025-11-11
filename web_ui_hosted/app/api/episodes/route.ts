@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DatabaseClient, Episode } from "@/utils/supabase";
-import { unstable_cache } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
-// Cached function to fetch episodes data
-const getCachedEpisodes = unstable_cache(
-  async (q: string, status: string, sortBy: string, sortDir: string, limit: number) => {
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get('q') || '';
+    const status = searchParams.get('status') || '';
+    const sortBy = searchParams.get('sortBy') || 'scored_at';
+    const sortDir = searchParams.get('sortDir') || 'desc';
+    const limit = parseInt(searchParams.get('limit') || '100');
+
+    console.log(`Episodes API request with filters:`, { q, status, sortBy, sortDir, limit });
+
     const db = DatabaseClient.getInstance();
 
     // Get episodes with filters
@@ -44,33 +51,12 @@ const getCachedEpisodes = unstable_cache(
       };
     });
 
-    return {
+    const result = {
       episodes: processedEpisodes,
       total: processedEpisodes.length
     };
-  },
-  ['episodes'],
-  {
-    revalidate: 30, // Cache for 30 seconds
-    tags: ['episodes-data']
-  }
-);
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q') || '';
-    const status = searchParams.get('status') || '';
-    const sortBy = searchParams.get('sortBy') || 'scored_at';
-    const sortDir = searchParams.get('sortDir') || 'desc';
-    const limit = parseInt(searchParams.get('limit') || '100');
-
-    console.log(`Episodes API request with filters:`, { q, status, sortBy, sortDir, limit });
-
-    // Use cached function for better performance
-    const result = await getCachedEpisodes(q, status, sortBy, sortDir, limit);
-
-    console.log(`Returning ${result.episodes.length} episodes (cached)`);
+    console.log(`Returning ${result.episodes.length} episodes`);
 
     return NextResponse.json(result);
   } catch (error) {

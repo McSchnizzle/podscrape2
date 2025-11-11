@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
-import { unstable_cache, revalidateTag } from 'next/cache'
 
 function slugify(input: string): string {
   return input.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'topic'
 }
 
-// Cached function to fetch topics data
-const getCachedTopics = unstable_cache(
-  async () => {
+export async function GET() {
+  try {
+    console.log('Topics API request');
+
     const db = DatabaseClient.getInstance()
     const topics = await db.getTopics()
 
@@ -31,7 +31,7 @@ const getCachedTopics = unstable_cache(
       voice_config: topic.voice_config || null
     }))
 
-    return {
+    const result = {
       topics: response,
       settings: {
         score_threshold: 0.65,
@@ -44,22 +44,8 @@ const getCachedTopics = unstable_cache(
         }
       }
     }
-  },
-  ['topics'],
-  {
-    revalidate: 30, // Cache for 30 seconds
-    tags: ['topics-data']
-  }
-);
 
-export async function GET() {
-  try {
-    console.log('Topics API request');
-
-    // Use cached function for better performance
-    const result = await getCachedTopics();
-
-    console.log(`Returning ${result.topics.length} topics (cached)`);
+    console.log(`Returning ${result.topics.length} topics`);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -113,10 +99,6 @@ export async function POST(request: NextRequest) {
     // Delete topics that were removed
     const toDelete = existing.filter(t => !seenSlugs.has(t.slug))
     await Promise.all(toDelete.map(t => db.deleteTopic(t.id)))
-
-    // Invalidate cache after topics are updated
-    revalidateTag('topics-data')
-    console.log('Topics cache invalidated after update')
 
     return NextResponse.json({ success: true })
   } catch (error) {
