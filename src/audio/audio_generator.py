@@ -170,7 +170,7 @@ class AudioGenerator:
         
         return text
     
-    def generate_audio_for_script(self, script_content: str, topic: str, timestamp: str = None, script_reference: str = None) -> AudioMetadata:
+    def generate_audio_for_script(self, script_content: str, topic: str, timestamp: str = None, script_reference: str = None, episode_id: int = None) -> AudioMetadata:
         """Generate audio from script content"""
         ref_info = f" (ref: {script_reference})" if script_reference else ""
         logger.info(f"Generating audio for script content{ref_info}")
@@ -200,7 +200,11 @@ class AudioGenerator:
         if not timestamp:
             timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
         safe_topic = topic.replace(' ', '_').replace('&', 'and')
-        filename = f"{safe_topic}_{timestamp}.mp3"
+        # Include episode ID in filename if provided
+        if episode_id:
+            filename = f"{safe_topic}_ep{episode_id}_{timestamp}.mp3"
+        else:
+            filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
 
         if needs_chunking:
@@ -688,7 +692,8 @@ class AudioGenerator:
         topic: str,
         voice_config: dict,
         dialogue_model: str,
-        timestamp: str = None
+        timestamp: str = None,
+        episode_id: int = None
     ) -> AudioMetadata:
         """
         Generate multi-voice dialogue audio with chunking support.
@@ -788,7 +793,11 @@ class AudioGenerator:
             if not timestamp:
                 timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
             safe_topic = topic.replace(' ', '_').replace('&', 'and')
-            filename = f"{safe_topic}_{timestamp}.mp3"
+            # Include episode ID in filename if provided
+            if episode_id:
+                filename = f"{safe_topic}_ep{episode_id}_{timestamp}.mp3"
+            else:
+                filename = f"{safe_topic}_{timestamp}.mp3"
             output_path = self.audio_dir / filename
 
             # Concatenate all chunks
@@ -878,7 +887,8 @@ class AudioGenerator:
                 topic=digest.topic,
                 voice_config=voice_config,
                 dialogue_model=dialogue_model,
-                timestamp=ts
+                timestamp=ts,
+                episode_id=digest.id
             )
         else:
             logger.info(f"Using NARRATIVE MODE for {digest.topic}")
@@ -890,7 +900,8 @@ class AudioGenerator:
             audio_metadata = self.generate_audio_for_script(
                 script_content=digest.script_content,
                 topic=digest.topic,
-                timestamp=ts
+                timestamp=ts,
+                episode_id=digest.id
             )
 
         # Update digest record with audio information
