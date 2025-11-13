@@ -171,30 +171,15 @@ class AudioGenerator:
         return text
     
     def generate_audio_for_script(self, script_content: str, topic: str, timestamp: str = None, script_reference: str = None, episode_id: int = None) -> AudioMetadata:
-        """Generate audio from script content"""
+        """Generate audio from script content - routes to dialogue or single-voice based on topic config"""
         ref_info = f" (ref: {script_reference})" if script_reference else ""
         logger.info(f"Generating audio for script content{ref_info}")
 
         if not script_content or not script_content.strip():
             raise AudioGenerationError(f"Script content is empty{ref_info}")
 
-        # Clean script for TTS
-        tts_text = self._clean_script_for_tts(script_content)
-        logger.info(f"Cleaned script: {len(tts_text)} characters for TTS")
-
-        # Get voice configuration for topic
-        voice_id = self._get_voice_id_for_topic(topic)
-        voice_settings = self.voice_manager.get_voice_settings_for_topic(topic)
-
-        logger.info(f"Using voice {voice_id} for topic '{topic}'")
-
-        # Check if we need to chunk for v3 model (3000 char limit)
+        # Get topic configuration to determine generation mode
         topic_config = self._get_topic_config(topic)
-        needs_chunking = (
-            topic_config and
-            topic_config.dialogue_model == 'eleven_v3' and
-            len(tts_text) > 3000
-        )
 
         # Generate filename (allow caller to supply an exact timestamp to match script)
         if not timestamp:
@@ -207,42 +192,73 @@ class AudioGenerator:
             filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
 
-        if needs_chunking:
-            logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for v3 model")
-            audio_data = self._generate_chunked_narrative_audio(
-                tts_text,
-                voice_id,
-                voice_settings,
-                output_path
+        # CRITICAL FIX: Check use_dialogue_api to route to correct TTS method
+        if topic_config and topic_config.use_dialogue_api and topic_config.voice_config:
+            logger.info(f"🎭 DIALOGUE MODE for '{topic}' - using Text-to-Dialogue API with chunking")
+            # Call existing chunked dialogue method with correct signature
+            return self._generate_chunked_dialogue_audio(
+                script_content=script_content,  # DON'T clean - preserves SPEAKER_1/SPEAKER_2 and audio tags
+                topic=topic,
+                voice_config=topic_config.voice_config,
+                dialogue_model=topic_config.dialogue_model,
+                timestamp=timestamp,
+                episode_id=episode_id
             )
-            file_size = output_path.stat().st_size
         else:
-            # Generate audio via ElevenLabs API (single request)
-            audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
+            logger.info(f"📢 SINGLE-VOICE MODE for '{topic}' - using standard TTS API")
+            # Clean script for single-voice TTS
+            tts_text = self._clean_script_for_tts(script_content)
+            logger.info(f"Cleaned script: {len(tts_text)} characters for TTS")
 
-            # Save audio file
-            with open(output_path, 'wb') as f:
-                f.write(audio_data)
+            # Get voice configuration for topic
+            voice_id = self._get_voice_id_for_topic(topic)
+            voice_settings = self.voice_manager.get_voice_settings_for_topic(topic)
 
-            file_size = output_path.stat().st_size
+            logger.info(f"Using voice {voice_id} for topic '{topic}'")
 
-        # Estimate duration (rough approximation: ~150 words per minute, ~5 chars per word)
-        estimated_duration = (len(tts_text) / 5) / 150 * 60  # seconds
+            # Check if we need to chunk for v3 model (3000 char limit)
+            needs_chunking = (
+                topic_config and
+                topic_config.dialogue_model == 'eleven_v3' and
+                len(tts_text) > 3000
+            )
 
-        # Get voice name
-        voice = self.voice_manager.get_voice_by_id(voice_id)
-        voice_name = voice.name if voice else "Unknown"
+            if needs_chunking:
+                logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for v3 model")
+                audio_data = self._generate_chunked_narrative_audio(
+                    tts_text,
+                    voice_id,
+                    voice_settings,
+                    output_path
+                )
+                file_size = output_path.stat().st_size
+            else:
+                # Generate audio via ElevenLabs API (single request)
+                audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
 
-        logger.info(f"Generated audio: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
+                # Save audio file
+                with open(output_path, 'wb') as f:
+                    f.write(audio_data)
 
-        return AudioMetadata(
-            file_path=str(output_path),
-            duration_seconds=estimated_duration,
-            file_size_bytes=file_size,
-            voice_name=voice_name,
-            voice_id=voice_id,
-            generation_timestamp=get_pacific_now()
-        )
+                file_size = output_path.stat().st_size
+
+            # Estimate duration (rough approximation: ~150 words per minute, ~5 chars per word)
+            estimated_duration = (len(tts_text) / 5) / 150 * 60  # seconds
+
+            # Get voice name
+            voice = self.voice_manager.get_voice_by_id(voice_id)
+            voice_name = voice.name if voice else "Unknown"
+
+            logger.info(f"Generated audio: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
+
+            return AudioMetadata(
+                file_path=str(output_path),
+                duration_seconds=estimated_duration,
+                file_size_bytes=file_size,
+                voice_name=voice_name,
+                voice_id=voice_id,
+                generation_timestamp=get_pacific_now()
+            )
     
     def _get_topic_config(self, topic: str):
         """Get topic configuration from database"""
