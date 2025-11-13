@@ -224,12 +224,13 @@ class AudioGenerator:
             )
 
             if needs_chunking:
-                logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for v3 model")
+                logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for {topic_config.dialogue_model} model")
                 audio_data = self._generate_chunked_narrative_audio(
                     tts_text,
                     voice_id,
                     voice_settings,
-                    output_path
+                    output_path,
+                    model_id=topic_config.dialogue_model  # Pass per-topic model
                 )
                 file_size = output_path.stat().st_size
             else:
@@ -291,7 +292,8 @@ class AudioGenerator:
         text: str,
         voice_id: str,
         voice_settings: VoiceSettings,
-        output_path: Path
+        output_path: Path,
+        model_id: str = None
     ) -> bytes:
         """
         Generate audio for long narrative scripts by chunking and concatenating.
@@ -306,6 +308,7 @@ class AudioGenerator:
             voice_id: ElevenLabs voice ID
             voice_settings: Voice configuration
             output_path: Final MP3 output path
+            model_id: Optional model ID (uses per-topic model if provided)
 
         Returns:
             Audio bytes (from concatenated file)
@@ -332,8 +335,8 @@ class AudioGenerator:
                 chunk_file = temp_dir / f"chunk_{i:03d}.mp3"
                 logger.info(f"Processing chunk {i}/{len(chunks)} ({len(chunk_text)} chars)")
 
-                # Generate audio for this chunk
-                audio_bytes = self._generate_tts_audio(chunk_text, voice_id, voice_settings)
+                # Generate audio for this chunk (use per-topic model if provided)
+                audio_bytes = self._generate_tts_audio(chunk_text, voice_id, voice_settings, model_id=model_id)
 
                 # Save chunk to temp file
                 with open(chunk_file, 'wb') as f:
@@ -395,29 +398,42 @@ class AudioGenerator:
 
         return chunks
 
-    def _generate_tts_audio(self, text: str, voice_id: str, voice_settings: VoiceSettings) -> bytes:
+    def _generate_tts_audio(self, text: str, voice_id: str, voice_settings: VoiceSettings, model_id: str = None) -> bytes:
         """Generate TTS audio using ElevenLabs API"""
-        
+
         # Ensure API key is loaded
         self._ensure_api_key()
-        
+
         # Enforce rate limiting
         self._rate_limit_delay()
-        
+
         url = f"{self.base_url}/text-to-speech/{voice_id}"
-        
+
+        # Use per-topic model if provided, otherwise use global default
+        effective_model = model_id if model_id else self.ai_model
+
+        # For eleven_v3 model, normalize stability to allowed values: 0.0, 0.5, 1.0
+        stability = voice_settings.stability
+        if effective_model == "eleven_v3":
+            if stability < 0.25:
+                stability = 0.0
+            elif stability < 0.75:
+                stability = 0.5
+            else:
+                stability = 1.0
+
         payload = {
             "text": text,
-            "model_id": self.ai_model,  # Use configured model
+            "model_id": effective_model,  # Use per-topic model if provided
             "voice_settings": {
-                "stability": voice_settings.stability,
+                "stability": stability,  # Normalized for v3 if needed
                 "similarity_boost": voice_settings.similarity_boost,
                 "style": voice_settings.style,
                 "use_speaker_boost": voice_settings.use_speaker_boost
             }
         }
         
-        logger.info(f"Sending TTS request: {len(text)} chars, voice {voice_id}, model {self.ai_model}")
+        logger.info(f"Sending TTS request: {len(text)} chars, voice {voice_id}, model {effective_model}")
         
         # Retry logic for transient failures
         max_retries = 2
