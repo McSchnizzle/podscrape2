@@ -96,7 +96,7 @@ class OpenAIWhisperTranscriber:
         logger.info(f"OpenAI Whisper local transcriber initialized: model={model}, device={device}")
 
     def _initialize_model(self):
-        """Initialize local Whisper model"""
+        """Initialize local Whisper model with corrupted cache recovery"""
         if self._initialized:
             return
 
@@ -125,6 +125,35 @@ class OpenAIWhisperTranscriber:
             error_msg = f"OpenAI Whisper library not installed: pip install openai-whisper"
             logger.error(error_msg)
             raise PodcastError(error_msg) from e
+        except RuntimeError as e:
+            # CRITICAL FIX: Handle SHA256 checksum errors (corrupted model cache)
+            # These are transient errors that should be retried after cleaning cache
+            error_str = str(e)
+            if 'SHA256 checksum does not' in error_str or 'checksum' in error_str.lower():
+                logger.warning(f"Detected corrupted Whisper model cache: {error_str}")
+
+                # Try to clean up corrupted model file
+                try:
+                    import os
+                    cache_dir = Path.home() / ".cache" / "whisper"
+                    model_file = cache_dir / f"{self.model}.pt"
+
+                    if model_file.exists():
+                        logger.info(f"Deleting corrupted model cache: {model_file}")
+                        model_file.unlink()
+                        logger.info("Corrupted cache deleted - will retry download on next attempt")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clean up corrupted cache: {cleanup_error}")
+
+                # Raise regular Exception (not PodcastError) to allow retry
+                error_msg = f"Whisper model cache corrupted (SHA256 mismatch) - cache cleaned, retry needed: {e}"
+                logger.error(error_msg)
+                raise Exception(error_msg) from e
+            else:
+                # Other RuntimeError - treat as permanent failure
+                error_msg = f"Failed to load Whisper model: {e}"
+                logger.error(error_msg)
+                raise PodcastError(error_msg) from e
         except Exception as e:
             error_msg = f"Failed to load Whisper model: {e}"
             logger.error(error_msg)
