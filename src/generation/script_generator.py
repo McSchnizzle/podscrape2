@@ -555,10 +555,10 @@ Thank you for your understanding, and we'll see you tomorrow!
             raise ScriptGenerationError(f"Failed to save script: {e}")
     
     def create_digest(self, topic: str, digest_date: date,
-                     start_date: date = None, end_date: date = None) -> Digest:
+                     start_date: date = None, end_date: date = None) -> Optional[Digest]:
         """
         Create complete digest: find episodes, generate script, save to database.
-        Returns created Digest object.
+        Returns created Digest object, or None if insufficient episodes.
         Multiple digests per topic per day are allowed (with unique timestamps).
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
@@ -578,6 +578,18 @@ Thank you for your understanding, and we'll see you tomorrow!
             else:
                 logger.info(f"No qualifying undigested episodes found for {topic}, generating no-content digest")
                 episodes = []  # Will generate no-content script
+        elif len(episodes) < self.min_episodes_per_digest:
+            # Not enough episodes to meet minimum threshold
+            logger.info(f"Insufficient episodes for {topic} digest: {len(episodes)} < {self.min_episodes_per_digest} (minimum required). Skipping digest creation.")
+
+            # Check if existing digest exists - return it if available
+            existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
+            if existing_digest and existing_digest.script_content:
+                logger.info(f"Returning existing digest for {topic} on {digest_date} (ID: {existing_digest.id})")
+                return existing_digest
+            else:
+                logger.info(f"No existing digest found for {topic} - skipping digest creation")
+                return None
         else:
             logger.info(f"Including {len(episodes)} undigested episodes in {topic} digest (>= min {self.min_episodes_per_digest})")
             # Episodes will be used as-is, capped at max_episodes_per_digest (done by get_qualifying_episodes)
@@ -631,16 +643,17 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         return digest
     
-    def create_daily_digests(self, digest_date: date, 
+    def create_daily_digests(self, digest_date: date,
                             start_date: date = None, end_date: date = None) -> List[Digest]:
         """Create digests for all active topics for given date"""
         digests = []
-        
+
         # Try to create topic-specific digests
         for topic_name in self.topic_instructions:
             try:
                 digest = self.create_digest(topic_name, digest_date, start_date, end_date)
-                digests.append(digest)
+                if digest:  # Only append if digest was created (may be None if insufficient episodes)
+                    digests.append(digest)
             except Exception as e:
                 logger.error(f"Failed to create digest for {topic_name}: {e}")
                 continue

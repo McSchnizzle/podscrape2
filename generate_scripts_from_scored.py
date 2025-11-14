@@ -66,8 +66,11 @@ def main():
             logger.info(f"  📄 Generating script for: {topic}")
             try:
                 digest = script_generator.create_digest(topic, date.today())
-                digests.append(digest)
-                logger.info(f"    ✅ Success: {digest.episode_count} episodes, {digest.script_word_count} words")
+                if digest:  # Only append if digest was created (may be None if insufficient episodes)
+                    digests.append(digest)
+                    logger.info(f"    ✅ Success: {digest.episode_count} episodes, {digest.script_word_count} words")
+                else:
+                    logger.info(f"    ⏭️  Skipped: Insufficient episodes to meet minimum threshold")
             except Exception as e:
                 logger.error(f"    ❌ Failed: {e}")
         

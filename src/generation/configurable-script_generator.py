@@ -379,7 +379,8 @@ Thank you for your understanding, and we'll see you tomorrow!
         for topic_name in self.topic_instructions:
             try:
                 digest = self.create_digest(topic_name, digest_date, start_date, end_date)
-                digests.append(digest)
+                if digest:  # Only append if digest was created (may be None if insufficient episodes)
+                    digests.append(digest)
             except Exception as e:
                 logger.error(f"Failed to create digest for {topic_name}: {e}")
                 continue
