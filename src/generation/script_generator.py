@@ -254,19 +254,34 @@ class ScriptGenerator:
         # Generate dialogue script with audio tags for ElevenLabs v3
         system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
 
-DIALOGUE FORMAT:
-- Use SPEAKER_1 and SPEAKER_2 labels for two-person dialogue
+DIALOGUE FORMAT (CRITICAL - EXACT FORMAT REQUIRED):
+EVERY speaker turn MUST follow this EXACT format:
+
+SPEAKER_1: [audio_tag] dialogue text here...
+SPEAKER_2: [audio_tag] dialogue text here...
+
+REQUIREMENTS:
+1. Speaker label MUST be exactly "SPEAKER_1:" or "SPEAKER_2:" (with colon immediately after number)
+2. Colon comes IMMEDIATELY after speaker number, BEFORE any audio tags
+3. Audio tag MUST come AFTER the colon, wrapped in square brackets [like_this]
+4. NO speaker names, NO parentheses, NO brackets before the colon
+
+CORRECT FORMAT:
+SPEAKER_1: [excited] This is a groundbreaking development!
+SPEAKER_2: [thoughtful] Let me think about the implications here...
+SPEAKER_1: [concerned] This raises some important questions.
+SPEAKER_2: [hopeful] But there's reason for optimism.
+
+INCORRECT FORMATS (DO NOT USE):
+❌ SPEAKER_1 [excited] text... (missing colon)
+❌ SPEAKER_1 [excited]: text... (colon after tag)
+❌ Host 1: text... (wrong speaker name)
+❌ SPEAKER_1 (Jamal): text... (name before colon)
+
+CHARACTER ROLES:
 - SPEAKER_1 ({speaker_1_name}): Primary host, introduces topics, asks questions
 - SPEAKER_2 ({speaker_2_name}): Expert analyst, provides insights and analysis
 - Create natural, engaging conversation with back-and-forth exchanges
-- Use audio tags for emotional expression: [excited], [thoughtful], [concerned], [hopeful], [surprised], etc.
-
-AUDIO TAG EXAMPLES:
-- [excited] This is a groundbreaking development!
-- [thoughtful] Let me think about the implications here...
-- [concerned] This raises some important questions.
-- [hopeful] But there's reason for optimism.
-- [curious] What does this mean for communities?
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
@@ -298,7 +313,15 @@ Transcript:
 
 """
 
-        user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes. Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [concerned] to add emotional expression."""
+        user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes.
+
+CRITICAL: Use EXACT format for EVERY turn:
+SPEAKER_1: [audio_tag] dialogue text...
+SPEAKER_2: [audio_tag] dialogue text...
+
+The colon MUST come immediately after the speaker number, BEFORE the audio tag.
+
+Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
 
         try:
             response = self.client.responses.create(
@@ -314,6 +337,12 @@ Transcript:
             script_content = response.output_text
             char_count = len(script_content)
 
+            # Validate and fix dialogue format (v1.96 - enforce SPEAKER_1: format)
+            script_content, fixed = self._validate_and_fix_dialogue_format(script_content)
+            if fixed:
+                logger.warning(f"Auto-corrected dialogue format issues in generated script")
+                char_count = len(script_content)  # Update char count after fixes
+
             # Validate character count
             if char_count < 15000:
                 logger.warning(f"Dialogue script is shorter than target: {char_count} < 15,000 characters")
@@ -326,6 +355,73 @@ Transcript:
         except Exception as e:
             logger.error(f"{self.ai_model} error for dialogue script {topic}: {e}")
             raise ScriptGenerationError(f"Failed to generate dialogue script with {self.ai_model}: {e}")
+
+    def _validate_and_fix_dialogue_format(self, script: str) -> Tuple[str, bool]:
+        """
+        Validate and auto-correct dialogue format issues.
+
+        Fixes common format errors:
+        - SPEAKER_1 [tag] text → SPEAKER_1: [tag] text (missing colon)
+        - SPEAKER_1 [tag]: text → SPEAKER_1: [tag] text (colon after tag)
+        - Host 1: text → SPEAKER_1: text (wrong speaker name)
+
+        Args:
+            script: Generated dialogue script
+
+        Returns:
+            Tuple of (corrected_script, was_fixed)
+        """
+        import re
+
+        fixed = False
+        original_script = script
+
+        # Fix 1: SPEAKER_1 [tag] text → SPEAKER_1: [tag] text (add missing colon)
+        pattern1 = re.compile(r'^(SPEAKER_[12])\s+(\[)', re.MULTILINE)
+        if pattern1.search(script):
+            script = pattern1.sub(r'\1: \2', script)
+            fixed = True
+            logger.warning("Fixed missing colons after speaker labels")
+
+        # Fix 2: SPEAKER_1 [tag]: text → SPEAKER_1: [tag] text (move colon before tag)
+        pattern2 = re.compile(r'^(SPEAKER_[12])\s+(\[[^\]]+\]):\s+', re.MULTILINE)
+        if pattern2.search(script):
+            script = pattern2.sub(r'\1: \2 ', script)
+            fixed = True
+            logger.warning("Fixed colon position (moved before audio tags)")
+
+        # Fix 3: Host 1: / Host 2: → SPEAKER_1: / SPEAKER_2:
+        pattern3 = re.compile(r'^Host\s+([12]):\s+', re.MULTILINE)
+        if pattern3.search(script):
+            script = pattern3.sub(r'SPEAKER_\1: ', script)
+            fixed = True
+            logger.warning("Fixed 'Host N:' to 'SPEAKER_N:'")
+
+        # Fix 4: Named hosts (Maya:, Jules:, etc.) → SPEAKER_1: / SPEAKER_2:
+        # This is trickier - we need to track which name maps to which speaker
+        pattern4 = re.compile(r'^([A-Z][a-z]+):\s+', re.MULTILINE)
+        named_matches = pattern4.findall(script)
+        if named_matches and 'SPEAKER_' not in script:
+            # Map unique names to SPEAKER_1/SPEAKER_2
+            unique_names = []
+            for name in named_matches:
+                if name not in unique_names and name not in ['SPEAKER_1', 'SPEAKER_2']:
+                    unique_names.append(name)
+
+            if len(unique_names) == 2:
+                # Replace first name with SPEAKER_1, second with SPEAKER_2
+                script = re.sub(rf'^{unique_names[0]}:\s+', 'SPEAKER_1: ', script, flags=re.MULTILINE)
+                script = re.sub(rf'^{unique_names[1]}:\s+', 'SPEAKER_2: ', script, flags=re.MULTILINE)
+                fixed = True
+                logger.warning(f"Fixed named speakers '{unique_names[0]}'/'{unique_names[1]}' to SPEAKER_1/SPEAKER_2")
+
+        # Validate: Check if script now has proper SPEAKER_1: and SPEAKER_2: labels
+        if 'SPEAKER_1:' in script and 'SPEAKER_2:' in script:
+            logger.debug("Dialogue format validated successfully")
+        else:
+            logger.error(f"Dialogue script still missing proper SPEAKER labels after fixes. Contains SPEAKER_1: {('SPEAKER_1:' in script)}, SPEAKER_2: {('SPEAKER_2:' in script)}")
+
+        return script, fixed
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
                                    digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
