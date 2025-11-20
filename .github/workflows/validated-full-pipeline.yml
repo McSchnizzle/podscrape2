@@ -30,7 +30,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
       DRY_RUN: ${{ inputs.dry_run }}
       PIPELINE_RUN_ID: ${{ format('{0}-{1}', github.run_id, github.run_attempt) }}
       PIPELINE_WORKFLOW_NAME: ${{ github.workflow }}
@@ -189,7 +189,7 @@ jobs:
         if: success() && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           TARGET_BRANCH: ${{ github.ref_name }}
           BASELINE_FILE: ${{ steps.capture_mp3_baseline.outputs.before_file }}
         run: |
