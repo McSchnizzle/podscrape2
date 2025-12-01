@@ -280,8 +280,9 @@ export default function TopicsPage() {
                       className="input w-full"
                       disabled={saving}
                     >
-                      <option value="eleven_turbo_v2_5">Turbo v2.5 (Fast, Single Voice)</option>
                       <option value="eleven_v3">v3 (High Quality, Dialogue Support)</option>
+                      <option value="eleven_turbo_v2_5">Turbo v2.5 (Fast, Single Voice)</option>
+                      <option value="eleven_flash_v2_5">Flash v2.5 (Low Latency)</option>
                     </select>
                   </div>
 

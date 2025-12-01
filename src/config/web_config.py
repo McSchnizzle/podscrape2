@@ -16,8 +16,9 @@ from sqlalchemy.dialects.postgresql import insert
 # AI Model Definitions and Limits
 AI_MODELS = {
     'openai': {
+        'gpt-5.1': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.1'},
         'gpt-5': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5'},
-        'gpt-5-mini': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5 Mini'},
+        'gpt-5-mini': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5 Mini'},
         'gpt-5-nano': {'max_output': 64000, 'max_input': 128000, 'display_name': 'GPT-5 Nano'},
         'gpt-4-turbo-preview': {'max_output': 4096, 'max_input': 128000, 'display_name': 'GPT-4 Turbo'},
         'gpt-4o': {'max_output': 16384, 'max_input': 128000, 'display_name': 'GPT-4o'},
@@ -25,6 +26,7 @@ AI_MODELS = {
         'gpt-3.5-turbo': {'max_output': 4096, 'max_input': 16385, 'display_name': 'GPT-3.5 Turbo'}
     },
     'elevenlabs': {
+        'eleven_v3': {'max_characters': 5000, 'display_name': 'v3 (5k chars, highest quality)'},
         'eleven_turbo_v2_5': {'max_characters': 40000, 'display_name': 'Turbo v2.5 (40k chars)'},
         'eleven_turbo_v2': {'max_characters': 30000, 'display_name': 'Turbo v2 (30k chars)'},
         'eleven_flash_v2_5': {'max_characters': 40000, 'display_name': 'Flash v2.5 (40k chars, low latency)'},

@@ -333,12 +333,12 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
                   </select>
                 </div>
                 <div>
@@ -400,12 +400,12 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
                   </select>
                 </div>
                 <div>
@@ -471,12 +471,12 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
                   </select>
                 </div>
                 <div>
@@ -538,9 +538,10 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_tts_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="eleven_v3">ElevenLabs v3 (Highest Quality)</option>
                     <option value="eleven_turbo_v2_5">ElevenLabs Turbo v2.5</option>
+                    <option value="eleven_flash_v2_5">ElevenLabs Flash v2.5 (Low Latency)</option>
                     <option value="eleven_multilingual_v2">ElevenLabs Multilingual v2</option>
-                    <option value="eleven_english_v1">ElevenLabs English v1</option>
                   </select>
                 </div>
                 <div>
