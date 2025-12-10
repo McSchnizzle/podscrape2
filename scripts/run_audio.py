@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict
 import threading
 
 
@@ -38,7 +39,8 @@ from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.utils.logging_config import setup_phase_logging
 from src.scoring.content_scorer import ContentScorer
-import threading
+from src.topic_tracking.topic_extractor import TopicExtractor
+
 
 class AudioProcessor_Runner:
     """Audio download and transcription phase"""
@@ -67,6 +69,13 @@ class AudioProcessor_Runner:
 
         # Initialize content scorer for immediate relevance checking
         self.content_scorer = ContentScorer()
+
+        # Initialize topic extractor for topic tracking
+        try:
+            self.topic_extractor = TopicExtractor()
+        except Exception as e:
+            self.logger.warning(f"Topic extractor initialization failed: {e}")
+            self.topic_extractor = None
 
         # Verify dependencies
         self._verify_dependencies()
@@ -927,6 +936,10 @@ class AudioProcessor_Runner:
                 self.logger.info(
                     f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}"
                 )
+
+                # Extract topics for tracking (non-blocking)
+                self._extract_topics_for_tracking(episode_guid, db_episode.transcript_content, scoring_result.scores)
+
                 return {'success': True, 'scores': scoring_result.scores}
 
             error_message = scoring_result.error_message or 'Scoring failed'
@@ -937,6 +950,73 @@ class AudioProcessor_Runner:
             error_message = str(e)
             self.logger.error(f"Immediate scoring failed: {error_message}")
             return {'success': False, 'error': error_message, 'scores': {}}
+
+    def _extract_topics_for_tracking(self, episode_guid: str, transcript: str, scores: Dict[str, float]):
+        """
+        Extract topics for tracking if enabled (non-blocking).
+
+        Args:
+            episode_guid: Episode GUID
+            transcript: Full episode transcript
+            scores: Dictionary of topic scores
+        """
+        if not self.topic_extractor:
+            self.logger.debug("Topic extractor not available, skipping topic extraction")
+            return
+
+        try:
+            # Get topics from database that have topic tracking enabled
+            from src.database.sqlalchemy_models import Topic
+            from src.database.models import get_database_manager
+
+            db_manager = get_database_manager()
+            with db_manager.get_session() as session:
+                # Query for topics with enable_topic_tracking=True
+                topics_with_tracking = session.query(Topic).filter(
+                    Topic.enable_topic_tracking == True,
+                    Topic.is_active == True
+                ).all()
+
+                if not topics_with_tracking:
+                    self.logger.debug("No topics have topic tracking enabled")
+                    return
+
+                # Extract topics for each relevant digest topic
+                extraction_count = 0
+                for topic in topics_with_tracking:
+                    topic_name = topic.name
+                    topic_score = scores.get(topic_name, 0.0)
+
+                    # Only extract if score is above threshold
+                    if topic_score >= self.score_threshold:
+                        try:
+                            self.logger.info(f"🔍 Extracting topics for '{topic_name}' (score: {topic_score:.2f})")
+
+                            extracted_topics = self.topic_extractor.extract_and_store_topics(
+                                episode_guid=episode_guid,
+                                digest_topic=topic_name,
+                                transcript=transcript,
+                                relevance_score=topic_score
+                            )
+
+                            extraction_count += len(extracted_topics)
+                            self.logger.info(
+                                f"✓ Extracted {len(extracted_topics)} topics for '{topic_name}'"
+                            )
+
+                        except Exception as e:
+                            # Non-blocking: log warning but continue
+                            self.logger.warning(
+                                f"Topic extraction failed for '{topic_name}': {e}"
+                            )
+                            continue
+
+                if extraction_count > 0:
+                    self.logger.info(f"📋 Total topics extracted: {extraction_count}")
+
+        except Exception as e:
+            # Non-blocking: log warning but don't fail the pipeline
+            self.logger.warning(f"Topic extraction process failed: {e}")
 
     def _log_processing_summary(self, processed_episodes, relevant_count, not_relevant_count, total_processed):
         """Log comprehensive processing summary as requested"""

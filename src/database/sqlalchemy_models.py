@@ -253,6 +253,9 @@ class Topic(Base):
     dialogue_model = Column(String(50), nullable=False, default='eleven_turbo_v2_5')
     voice_config = Column(JSONB)  # {"speaker_1": {"name": "...", "voice_id": "..."}, "speaker_2": {...}}
 
+    # Topic tracking support (v1.100)
+    enable_topic_tracking = Column(Boolean, nullable=False, default=False)
+
     __table_args__ = (
         Index("ix_topics_active", "is_active"),
         Index("ix_topics_sort", "sort_order"),
@@ -334,4 +337,54 @@ class PipelineLog(Base):
     __table_args__ = (
         Index("ix_pipeline_logs_run_phase_time", "run_id", "phase", "timestamp"),
         Index("ix_pipeline_logs_level", "level"),
+    )
+
+
+class EpisodeTopic(Base):
+    """Tracks extracted topics from episode transcripts for deduplication"""
+    __tablename__ = "episode_topics"
+
+    id = Column(Integer, primary_key=True)
+    episode_id = Column(Integer, nullable=False)
+    topic_name = Column(String(512), nullable=False)
+    topic_slug = Column(String(255), nullable=False)
+    key_points = Column(JSONB, nullable=False)  # Array of key insight strings
+    first_mentioned_at = Column(DateTime(timezone=False), nullable=False)
+    last_mentioned_at = Column(DateTime(timezone=False), nullable=False)
+    mention_count = Column(Integer, nullable=False, default=1)
+    digest_topic = Column(String(256), nullable=False)  # Parent topic (e.g., "AI and Technology")
+    relevance_score = Column(Float)
+    included_in_digest_id = Column(Integer)  # NULL until included in a digest
+    included_at = Column(DateTime(timezone=False))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint('episode_id', 'topic_slug', name='uq_episode_topics_episode_slug'),
+        Index('ix_episode_topics_episode', 'episode_id'),
+        Index('ix_episode_topics_slug', 'topic_slug'),
+        Index('ix_episode_topics_digest_topic', 'digest_topic'),
+        Index('ix_episode_topics_included', 'included_in_digest_id'),
+        Index('ix_episode_topics_mentioned', 'last_mentioned_at'),
+    )
+
+
+class CommonAd(Base):
+    """Tracks frequently appearing advertisement content for filtering"""
+    __tablename__ = "common_ads"
+
+    id = Column(Integer, primary_key=True)
+    advertiser_name = Column(String(256), nullable=False, unique=True)
+    pattern_keywords = Column(JSONB, nullable=False)  # Array of keyword strings
+    confidence_threshold = Column(Float, nullable=False, default=0.8)
+    is_active = Column(Boolean, nullable=False, default=True)
+    first_detected_at = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_detected_at = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
+    detection_count = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_common_ads_active', 'is_active'),
+        Index('ix_common_ads_advertiser', 'advertiser_name'),
     )

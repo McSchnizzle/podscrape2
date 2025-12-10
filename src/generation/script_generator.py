@@ -22,6 +22,8 @@ from ..database.models import (
     DigestEpisodeLink,
     get_digest_episode_link_repo,
 )
+from ..database.topic_tracking_repo import get_topic_tracking_repo
+from ..topic_tracking.ad_filter import AdFilter
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager
 
@@ -76,6 +78,20 @@ class ScriptGenerator:
             except Exception as exc:
                 logger.debug("Digest episode link repository unavailable: %s", exc)
                 self.digest_episode_link_repo = None
+
+        # Initialize topic tracking repository for deduplication
+        try:
+            self.topic_tracking_repo = get_topic_tracking_repo()
+        except Exception as exc:
+            logger.debug("Topic tracking repository unavailable: %s", exc)
+            self.topic_tracking_repo = None
+
+        # Initialize ad filter for transcript cleaning
+        try:
+            self.ad_filter = AdFilter()
+        except Exception as exc:
+            logger.debug("Ad filter initialization failed: %s", exc)
+            self.ad_filter = None
 
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         # Per-digest episode cap (from web config if available)
@@ -211,6 +227,148 @@ class ScriptGenerator:
         chars_per_episode = available_chars // max(num_episodes, 1)
         return min(max(chars_per_episode, 2000), 20000)
 
+    def _get_recent_topic_history(self, digest_topic: str, days_back: int = None) -> str:
+        """
+        Retrieve recent topic history for deduplication.
+
+        Args:
+            digest_topic: Name of the digest topic (e.g., "AI and Technology")
+            days_back: Number of days to look back (default from config)
+
+        Returns:
+            Formatted string of recent topics, or empty string if unavailable
+        """
+        if not self.topic_tracking_repo:
+            logger.debug("Topic tracking repository unavailable, skipping deduplication")
+            return ""
+
+        # Get lookback window from config
+        if days_back is None:
+            if self.web_config:
+                days_back = self.web_config.get_setting("topic_tracking", "retention_days", 14)
+            else:
+                days_back = 14
+
+        try:
+            # Get topics from last N days that were included in digests
+            recent_topics = self.topic_tracking_repo.get_topics_last_n_days(
+                digest_topic=digest_topic,
+                days=days_back,
+                only_used=True  # Only topics that were included in published digests
+            )
+
+            if not recent_topics:
+                logger.debug(f"No recent topic history found for {digest_topic}")
+                return ""
+
+            # Format topics for GPT prompt
+            history_text = f"\n\n## RECENT TOPICS COVERED (Last {days_back} days)\n"
+            history_text += "The following topics have been recently covered in digests. AVOID repeating these unless there are significant NEW developments:\n\n"
+
+            for topic_data in recent_topics:
+                topic_name = topic_data.get('topic_name', '')
+                key_points = topic_data.get('key_points', [])
+
+                history_text += f"- **{topic_name}**\n"
+                if key_points:
+                    for point in key_points[:2]:  # Limit to first 2 key points for brevity
+                        history_text += f"  - {point}\n"
+
+            logger.info(f"Retrieved {len(recent_topics)} recent topics for {digest_topic} deduplication")
+            return history_text
+
+        except Exception as e:
+            logger.warning(f"Failed to retrieve topic history for {digest_topic}: {e}")
+            return ""
+
+    def _check_topic_repetition(self, episodes: List[Episode], digest_topic: str,
+                               repetition_threshold: float = 0.8) -> Tuple[bool, str]:
+        """
+        Check if episodes contain too many repetitive topics.
+
+        Args:
+            episodes: List of episodes to check
+            digest_topic: Name of the digest topic
+            repetition_threshold: Fraction of topics that must be repetitive to skip (default 0.8 = 80%)
+
+        Returns:
+            Tuple of (is_too_repetitive, reason_message)
+        """
+        if not self.topic_tracking_repo:
+            logger.debug("Topic tracking unavailable, skipping repetition check")
+            return False, ""
+
+        if not episodes:
+            return False, ""
+
+        try:
+            # Get lookback window from config
+            if self.web_config:
+                days_back = self.web_config.get_setting("topic_tracking", "retention_days", 14)
+            else:
+                days_back = 14
+
+            # Get topics from current episodes
+            current_topics = []
+            for episode in episodes:
+                episode_topics = self.topic_tracking_repo.get_topics_for_episode(
+                    episode_id=episode.id,
+                    digest_topic=digest_topic
+                )
+                current_topics.extend(episode_topics)
+
+            if not current_topics:
+                # No topics extracted yet - not repetitive
+                logger.debug(f"No topics found for episodes, allowing digest")
+                return False, ""
+
+            # Get recent topics (from digests published in last N days)
+            recent_topics = self.topic_tracking_repo.get_topics_last_n_days(
+                digest_topic=digest_topic,
+                days=days_back,
+                only_used=True
+            )
+
+            if not recent_topics:
+                # No recent history - not repetitive
+                logger.debug(f"No recent topics found, allowing digest")
+                return False, ""
+
+            # Build set of recent topic slugs for comparison
+            recent_topic_slugs = {t.get('topic_slug') for t in recent_topics if t.get('topic_slug')}
+
+            # Count how many current topics are repetitive
+            repetitive_count = 0
+            for topic in current_topics:
+                topic_slug = topic.get('topic_slug')
+                if topic_slug and topic_slug in recent_topic_slugs:
+                    repetitive_count += 1
+
+            # Calculate repetition percentage
+            total_current = len(current_topics)
+            repetition_pct = repetitive_count / total_current if total_current > 0 else 0.0
+
+            is_too_repetitive = repetition_pct >= repetition_threshold
+
+            if is_too_repetitive:
+                message = (
+                    f"Skipping digest: {repetitive_count}/{total_current} topics "
+                    f"({repetition_pct:.0%}) are repetitive (threshold: {repetition_threshold:.0%})"
+                )
+                logger.info(message)
+                return True, message
+            else:
+                logger.info(
+                    f"Digest has acceptable novelty: {repetitive_count}/{total_current} "
+                    f"({repetition_pct:.0%}) repetitive (threshold: {repetition_threshold:.0%})"
+                )
+                return False, ""
+
+        except Exception as e:
+            logger.warning(f"Failed to check topic repetition: {e}")
+            # On error, allow digest to proceed
+            return False, ""
+
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
                                   digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
         """
@@ -237,19 +395,34 @@ class ScriptGenerator:
 
         # Prepare episode transcripts
         transcripts = []
+        total_ads_filtered = 0
         for episode in episodes:
             if not episode.transcript_content or not episode.transcript_content.strip():
                 logger.error(f"No transcript content in database for episode: {episode.title}")
                 raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database")
 
+            # Apply ad filtering if available
+            transcript_content = episode.transcript_content
+            if self.ad_filter:
+                transcript_content, detected_ads = self.ad_filter.filter_transcript(transcript_content)
+                if detected_ads:
+                    total_ads_filtered += len(detected_ads)
+                    logger.info(f"Filtered {len(detected_ads)} ad types from '{episode.title}': {', '.join(detected_ads)}")
+
             transcripts.append({
                 'title': episode.title,
                 'published_date': episode.published_date.strftime('%Y-%m-%d'),
-                'transcript': episode.transcript_content,
+                'transcript': transcript_content,
                 'score': episode.scores.get(topic, 0.0) if episode.scores else 0.0
             })
 
+        if total_ads_filtered > 0:
+            logger.info(f"Total ad filtering: {total_ads_filtered} ad types removed from {len(episodes)} episodes")
+
         transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
+        # Retrieve recent topic history for deduplication
+        topic_history = self._get_recent_topic_history(topic)
 
         # Generate dialogue script with audio tags for ElevenLabs v3
         system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
@@ -285,6 +458,7 @@ CHARACTER ROLES:
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
+{topic_history}
 
 REQUIREMENTS:
 - Target 15,000-20,000 characters (this is measured in characters, not words)
@@ -440,25 +614,41 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
         """
         # Prepare episode transcripts
         transcripts = []
+        total_ads_filtered = 0
         for episode in episodes:
             if not episode.transcript_content or not episode.transcript_content.strip():
                 logger.error(f"No transcript content in database for episode: {episode.title}")
                 raise ScriptGenerationError(f"Episode {episode.title} has no transcript content in database")
 
+            # Apply ad filtering if available
+            transcript_content = episode.transcript_content
+            if self.ad_filter:
+                transcript_content, detected_ads = self.ad_filter.filter_transcript(transcript_content)
+                if detected_ads:
+                    total_ads_filtered += len(detected_ads)
+                    logger.info(f"Filtered {len(detected_ads)} ad types from '{episode.title}': {', '.join(detected_ads)}")
+
             transcripts.append({
                 'title': episode.title,
                 'published_date': episode.published_date.strftime('%Y-%m-%d'),
-                'transcript': episode.transcript_content,
+                'transcript': transcript_content,
                 'score': episode.scores.get(topic, 0.0) if episode.scores else 0.0
             })
 
+        if total_ads_filtered > 0:
+            logger.info(f"Total ad filtering: {total_ads_filtered} ad types removed from {len(episodes)} episodes")
+
         transcript_limit = self._calculate_transcript_limit(len(transcripts))
+
+        # Retrieve recent topic history for deduplication
+        topic_history = self._get_recent_topic_history(topic)
 
         # Generate narrative script with TTS optimization for ElevenLabs Turbo v2.5
         system_prompt = f"""You are a professional podcast script writer creating a narrative digest for the topic "{topic}".
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
+{topic_history}
 
 TTS OPTIMIZATION REQUIREMENTS (CRITICAL):
 Your script will be converted to audio using ElevenLabs TTS. Follow these rules EXACTLY:
@@ -689,6 +879,18 @@ Thank you for your understanding, and we'll see you tomorrow!
         else:
             logger.info(f"Including {len(episodes)} undigested episodes in {topic} digest (>= min {self.min_episodes_per_digest})")
             # Episodes will be used as-is, capped at max_episodes_per_digest (done by get_qualifying_episodes)
+
+            # Check for topic repetition (skip digest if too many topics are recently covered)
+            is_repetitive, repetition_msg = self._check_topic_repetition(episodes, topic)
+            if is_repetitive:
+                logger.info(f"Skipping digest for {topic} due to repetitive content: {repetition_msg}")
+                # Return existing digest if available, otherwise None
+                existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
+                if existing_digest and existing_digest.script_content:
+                    logger.info(f"Returning existing digest for {topic} on {digest_date} (ID: {existing_digest.id})")
+                    return existing_digest
+                else:
+                    return None
 
             # Check if a digest already exists for this topic/date (for logging purposes)
             existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)

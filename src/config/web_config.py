@@ -72,6 +72,15 @@ DEFAULTS = {
     ("retention", "digest_retention_days"): {"type": "int", "default": 14, "min": 8, "max": 365},
     ("retention", "github_releases_days"): {"type": "int", "default": 14, "min": 0, "max": 365},
 
+    # Topic Tracking Configuration
+    ("topic_tracking", "min_score_for_extraction"): {"type": "float", "default": 0.70, "min": 0.0, "max": 1.0},
+    ("topic_tracking", "max_topics_per_episode"): {"type": "int", "default": 15, "min": 3, "max": 20},
+    ("topic_tracking", "retention_days"): {"type": "int", "default": 14, "min": 7, "max": 90},
+
+    # Ad Filtering Configuration
+    ("ad_filtering", "enabled"): {"type": "bool", "default": True},
+    ("ad_filtering", "confidence_threshold"): {"type": "float", "default": 0.7, "min": 0.0, "max": 1.0},
+
     # AI Configuration - Content Scoring Phase
     ("ai_content_scoring", "model"): {"type": "string", "default": "gpt-5-mini"},
     ("ai_content_scoring", "max_tokens"): {"type": "int", "default": 1000, "min": 100, "max": 128000},
