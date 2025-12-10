@@ -17,6 +17,8 @@ interface TopicRow {
   use_dialogue_api?: boolean
   dialogue_model?: string
   voice_config?: VoiceConfig | null
+  // Topic tracking and deduplication (v2.00)
+  enable_topic_tracking?: boolean
 }
 
 const slugify = (value: string) =>
@@ -53,6 +55,8 @@ export default function TopicsPage() {
           use_dialogue_api: Boolean(topic.use_dialogue_api || false),
           dialogue_model: topic.dialogue_model || 'eleven_turbo_v2_5',
           voice_config: topic.voice_config || null,
+          // Topic tracking and deduplication (v2.00)
+          enable_topic_tracking: Boolean(topic.enable_topic_tracking || false),
         }))
         setTopics(mapped)
       } else {
@@ -79,6 +83,8 @@ export default function TopicsPage() {
       use_dialogue_api: false,
       dialogue_model: 'eleven_turbo_v2_5',
       voice_config: null,
+      // Topic tracking and deduplication (v2.00)
+      enable_topic_tracking: false,
     }])
   }
 
@@ -300,8 +306,8 @@ export default function TopicsPage() {
                   </div>
                 </div>
 
-                {/* Dialogue Mode Toggle */}
-                <div className="border-t pt-4">
+                {/* Feature Toggles */}
+                <div className="border-t pt-4 space-y-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -315,6 +321,22 @@ export default function TopicsPage() {
                     </span>
                     <span className="text-xs text-gray-500">
                       (Requires TTS Model: v3)
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={topic.enable_topic_tracking || false}
+                      onChange={(e) => updateTopic(index, 'enable_topic_tracking', e.target.checked)}
+                      className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                      disabled={saving}
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Enable Topic Tracking & Deduplication
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      (Extracts topics and avoids repetitive content)
                     </span>
                   </label>
                 </div>

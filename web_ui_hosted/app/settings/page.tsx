@@ -599,6 +599,108 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Topic Tracking */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Tracking</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Min Score for Extraction
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    className="input"
+                    value={getSetting('topic_tracking', 'min_score_for_extraction', 0.70)}
+                    onChange={(e) => updateLocalSetting('topic_tracking', 'min_score_for_extraction', parseFloat(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum episode score required to extract topics (0.0 - 1.0)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Topics per Episode
+                  </label>
+                  <input
+                    type="number"
+                    min="3"
+                    max="20"
+                    className="input"
+                    value={getSetting('topic_tracking', 'max_topics_per_episode', 15)}
+                    onChange={(e) => updateLocalSetting('topic_tracking', 'max_topics_per_episode', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum number of topics to extract per episode
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Retention Days (Deduplication Window)
+                  </label>
+                  <input
+                    type="number"
+                    min="7"
+                    max="90"
+                    className="input"
+                    value={getSetting('topic_tracking', 'retention_days', 14)}
+                    onChange={(e) => updateLocalSetting('topic_tracking', 'retention_days', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Number of days to look back for duplicate topic detection
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Ad Filtering */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Ad Filtering</h3>
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="ad-filtering-enabled"
+                    className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                    checked={getSetting('ad_filtering', 'enabled', true)}
+                    onChange={(e) => updateLocalSetting('ad_filtering', 'enabled', e.target.checked)}
+                    disabled={saving}
+                  />
+                  <label htmlFor="ad-filtering-enabled" className="ml-2 text-sm text-gray-700">
+                    Enable ad filtering
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Confidence Threshold
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                    className="input"
+                    value={getSetting('ad_filtering', 'confidence_threshold', 0.7)}
+                    onChange={(e) => updateLocalSetting('ad_filtering', 'confidence_threshold', parseFloat(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum confidence required to filter an ad (0.0 - 1.0, higher = stricter)
+                  </p>
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm text-blue-700">
+                    <strong>Note:</strong> Ad patterns are managed in the database. Enable topic tracking per topic to use deduplication.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Retention Settings */}
             <div className="card">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
