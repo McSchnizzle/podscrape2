@@ -81,6 +81,11 @@ DEFAULTS = {
     ("ad_filtering", "enabled"): {"type": "bool", "default": True},
     ("ad_filtering", "confidence_threshold"): {"type": "float", "default": 0.7, "min": 0.0, "max": 1.0},
 
+    # Topic Evolution Configuration (v2.01+)
+    ("topic_evolution", "enable_novelty_detection"): {"type": "bool", "default": True},
+    ("topic_evolution", "novelty_threshold"): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
+    ("topic_evolution", "embedding_model"): {"type": "string", "default": "text-embedding-3-small"},
+
     # AI Configuration - Content Scoring Phase
     ("ai_content_scoring", "model"): {"type": "string", "default": "gpt-5-mini"},
     ("ai_content_scoring", "max_tokens"): {"type": "int", "default": 1000, "min": 100, "max": 128000},

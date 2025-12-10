@@ -701,6 +701,50 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Topic Evolution */}
+            <div className="card">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Evolution</h3>
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="enable-novelty-detection"
+                    className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                    checked={getSetting('topic_evolution', 'enable_novelty_detection', true)}
+                    onChange={(e) => updateLocalSetting('topic_evolution', 'enable_novelty_detection', e.target.checked)}
+                    disabled={saving}
+                  />
+                  <label htmlFor="enable-novelty-detection" className="ml-2 text-sm text-gray-700">
+                    Enable novelty detection
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Novelty Threshold
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    className="input"
+                    value={getSetting('topic_evolution', 'novelty_threshold', 0.30)}
+                    onChange={(e) => updateLocalSetting('topic_evolution', 'novelty_threshold', parseFloat(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum novelty required to include topic (0.0-1.0, lower = more lenient)
+                  </p>
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm text-blue-700">
+                    <strong>Info:</strong> Novelty detection uses embeddings to compare topics and allow fresh content even if topic slugs match.
+                    Lower threshold = more likely to include topics with similar content.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Retention Settings */}
             <div className="card">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>

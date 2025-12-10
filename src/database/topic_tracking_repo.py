@@ -25,6 +25,11 @@ class TopicTrackingRepository:
         key_points: List[str],
         digest_topic: str,
         relevance_score: float,
+        topic_type: str = 'other',
+        novelty_score: float = 1.0,
+        is_update: bool = False,
+        parent_topic_id: Optional[int] = None,
+        evolution_summary: Optional[str] = None,
     ) -> EpisodeTopic:
         """
         Store or update topic for episode.
@@ -36,6 +41,11 @@ class TopicTrackingRepository:
             key_points: List of key insights (2-4 items)
             digest_topic: Parent topic (e.g., "AI and Technology")
             relevance_score: Episode's relevance score for digest_topic
+            topic_type: Classification (model_release, use_case, etc.) [v2.01+]
+            novelty_score: 0.0-1.0 novelty score [v2.01+]
+            is_update: Whether this is an update to existing topic [v2.01+]
+            parent_topic_id: ID of parent topic if this is an update [v2.01+]
+            evolution_summary: What changed since parent [v2.01+]
 
         Returns:
             EpisodeTopic: The created or updated topic record
@@ -61,6 +71,12 @@ class TopicTrackingRepository:
                 existing.last_mentioned_at = now
                 existing.updated_at = now
                 existing.mention_count += 1
+                # Update new fields (v2.01+)
+                existing.topic_type = topic_type
+                existing.novelty_score = novelty_score
+                existing.is_update = is_update
+                existing.parent_topic_id = parent_topic_id
+                existing.evolution_summary = evolution_summary
                 session.commit()
                 return existing
             else:
@@ -75,6 +91,13 @@ class TopicTrackingRepository:
                     first_mentioned_at=now,
                     last_mentioned_at=now,
                     mention_count=1,
+                    # New fields (v2.01+)
+                    topic_type=topic_type,
+                    novelty_score=novelty_score,
+                    is_update=is_update,
+                    parent_topic_id=parent_topic_id,
+                    evolution_summary=evolution_summary,
+                    first_seen_at=now,  # Set first_seen_at on creation
                 )
                 session.add(new_topic)
                 session.commit()
@@ -110,22 +133,54 @@ class TopicTrackingRepository:
 
             return [self._to_dict(t) for t in topics]
 
-    def get_topics_for_episode(self, episode_id: int) -> List[Dict]:
+    def get_topics_for_episode(self, episode_id: int, digest_topic: Optional[str] = None) -> List[Dict]:
         """
         Get all topics extracted from a specific episode.
 
         Args:
             episode_id: Episode database ID
+            digest_topic: Optional filter by digest topic
 
         Returns:
             List of topic dictionaries
         """
         with self.db_manager.get_session() as session:
-            topics = (
-                session.query(EpisodeTopic)
-                .filter(EpisodeTopic.episode_id == episode_id)
-                .all()
+            query = session.query(EpisodeTopic).filter(EpisodeTopic.episode_id == episode_id)
+
+            if digest_topic:
+                query = query.filter(EpisodeTopic.digest_topic == digest_topic)
+
+            topics = query.all()
+
+            return [self._to_dict(t) for t in topics]
+
+    def get_topics_last_n_days(
+        self, digest_topic: str, days: int, only_used: bool = False
+    ) -> List[Dict]:
+        """
+        Get topics from last N days for a digest topic.
+        Optionally filter to only topics that have been included in digests.
+
+        Args:
+            digest_topic: Parent topic name
+            days: Number of days to look back
+            only_used: If True, only return topics that have been included in digests
+
+        Returns:
+            List of topic dictionaries sorted by last_mentioned_at DESC
+        """
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        with self.db_manager.get_session() as session:
+            query = session.query(EpisodeTopic).filter(
+                EpisodeTopic.digest_topic == digest_topic,
+                EpisodeTopic.last_mentioned_at >= cutoff_date,
             )
+
+            if only_used:
+                query = query.filter(EpisodeTopic.included_in_digest_id != None)  # noqa: E711
+
+            topics = query.order_by(EpisodeTopic.last_mentioned_at.desc()).all()
 
             return [self._to_dict(t) for t in topics]
 
@@ -295,6 +350,13 @@ class TopicTrackingRepository:
             "relevance_score": topic.relevance_score,
             "included_in_digest_id": topic.included_in_digest_id,
             "included_at": topic.included_at,
+            # New fields (v2.01+)
+            "topic_type": topic.topic_type,
+            "novelty_score": topic.novelty_score,
+            "is_update": topic.is_update,
+            "parent_topic_id": topic.parent_topic_id,
+            "evolution_summary": topic.evolution_summary,
+            "first_seen_at": topic.first_seen_at,
             "created_at": topic.created_at,
             "updated_at": topic.updated_at,
         }

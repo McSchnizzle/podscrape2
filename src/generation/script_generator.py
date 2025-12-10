@@ -285,11 +285,12 @@ class ScriptGenerator:
                                repetition_threshold: float = 0.8) -> Tuple[bool, str]:
         """
         Check if episodes contain too many repetitive topics.
+        Now uses novelty scores instead of binary repetition (v2.01+).
 
         Args:
             episodes: List of episodes to check
             digest_topic: Name of the digest topic
-            repetition_threshold: Fraction of topics that must be repetitive to skip (default 0.8 = 80%)
+            repetition_threshold: Minimum average novelty required (default 0.8 → 0.2 novelty = 20%)
 
         Returns:
             Tuple of (is_too_repetitive, reason_message)
@@ -302,65 +303,46 @@ class ScriptGenerator:
             return False, ""
 
         try:
-            # Get lookback window from config
-            if self.web_config:
-                days_back = self.web_config.get_setting("topic_tracking", "retention_days", 14)
-            else:
-                days_back = 14
-
-            # Get topics from current episodes
-            current_topics = []
+            # Get topics from current episodes with their novelty scores
+            novelty_scores = []
             for episode in episodes:
                 episode_topics = self.topic_tracking_repo.get_topics_for_episode(
                     episode_id=episode.id,
                     digest_topic=digest_topic
                 )
-                current_topics.extend(episode_topics)
+                for topic in episode_topics:
+                    # Get novelty score, default to 1.0 for legacy topics without score
+                    novelty = topic.get('novelty_score', 1.0)
+                    novelty_scores.append(novelty)
 
-            if not current_topics:
+            if not novelty_scores:
                 # No topics extracted yet - not repetitive
                 logger.debug(f"No topics found for episodes, allowing digest")
                 return False, ""
 
-            # Get recent topics (from digests published in last N days)
-            recent_topics = self.topic_tracking_repo.get_topics_last_n_days(
-                digest_topic=digest_topic,
-                days=days_back,
-                only_used=True
-            )
+            # Calculate average novelty
+            avg_novelty = sum(novelty_scores) / len(novelty_scores)
 
-            if not recent_topics:
-                # No recent history - not repetitive
-                logger.debug(f"No recent topics found, allowing digest")
-                return False, ""
+            # Convert repetition threshold to novelty threshold
+            # Old: 80% repetitive = skip
+            # New: 20% novel = skip (inverse)
+            novelty_threshold = 1.0 - repetition_threshold
 
-            # Build set of recent topic slugs for comparison
-            recent_topic_slugs = {t.get('topic_slug') for t in recent_topics if t.get('topic_slug')}
-
-            # Count how many current topics are repetitive
-            repetitive_count = 0
-            for topic in current_topics:
-                topic_slug = topic.get('topic_slug')
-                if topic_slug and topic_slug in recent_topic_slugs:
-                    repetitive_count += 1
-
-            # Calculate repetition percentage
-            total_current = len(current_topics)
-            repetition_pct = repetitive_count / total_current if total_current > 0 else 0.0
-
-            is_too_repetitive = repetition_pct >= repetition_threshold
+            is_too_repetitive = avg_novelty < novelty_threshold
 
             if is_too_repetitive:
                 message = (
-                    f"Skipping digest: {repetitive_count}/{total_current} topics "
-                    f"({repetition_pct:.0%}) are repetitive (threshold: {repetition_threshold:.0%})"
+                    f"Skipping digest: Average novelty {avg_novelty:.0%} "
+                    f"< threshold {novelty_threshold:.0%} "
+                    f"({len(novelty_scores)} topics checked)"
                 )
                 logger.info(message)
                 return True, message
             else:
                 logger.info(
-                    f"Digest has acceptable novelty: {repetitive_count}/{total_current} "
-                    f"({repetition_pct:.0%}) repetitive (threshold: {repetition_threshold:.0%})"
+                    f"Digest has sufficient novelty: {avg_novelty:.0%} "
+                    f">= threshold {novelty_threshold:.0%} "
+                    f"({len(novelty_scores)} topics)"
                 )
                 return False, ""
 

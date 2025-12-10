@@ -14,10 +14,11 @@ from sqlalchemy import (
     Float,
     Index,
     UniqueConstraint,
+    ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import JSON
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 
 class Base(DeclarativeBase):
@@ -356,8 +357,20 @@ class EpisodeTopic(Base):
     relevance_score = Column(Float)
     included_in_digest_id = Column(Integer)  # NULL until included in a digest
     included_at = Column(DateTime(timezone=False))
+
+    # Topic evolution and type classification (v2.01+)
+    topic_type = Column(String(50), nullable=False, default='other')  # model_release, use_case, personality, etc.
+    novelty_score = Column(Float, nullable=False, default=1.0)  # 0.0-1.0, how novel is this info
+    is_update = Column(Boolean, nullable=False, default=False)  # Is this an update to existing topic?
+    parent_topic_id = Column(Integer, ForeignKey('episode_topics.id', ondelete='SET NULL'), nullable=True)
+    evolution_summary = Column(Text, nullable=True)  # What changed since parent topic
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)  # When this topic slug first appeared
+
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    parent_topic = relationship('EpisodeTopic', remote_side=[id], backref='updates', foreign_keys=[parent_topic_id])
 
     __table_args__ = (
         UniqueConstraint('episode_id', 'topic_slug', name='uq_episode_topics_episode_slug'),

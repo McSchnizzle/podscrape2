@@ -12,6 +12,7 @@ from openai import OpenAI
 from src.config.web_config import WebConfigManager
 from src.database.models import get_episode_repo
 from src.database.topic_tracking_repo import get_topic_tracking_repo
+from src.topic_tracking.novelty_detector import NoveltyDetector
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,21 @@ class TopicExtractor:
             "topic_tracking", "max_topics_per_episode", 15
         )
         self.model = "gpt-4o-mini"  # Cost-effective for extraction
+
+        # Initialize novelty detector (v2.01+)
+        try:
+            novelty_threshold = self.web_config.get_setting(
+                "topic_evolution", "novelty_threshold", 0.30
+            )
+            self.novelty_detector = NoveltyDetector(novelty_threshold=novelty_threshold)
+            self.novelty_detection_enabled = self.web_config.get_setting(
+                "topic_evolution", "enable_novelty_detection", True
+            )
+            logger.info(f"Novelty detection enabled: {self.novelty_detection_enabled}, threshold: {novelty_threshold}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize novelty detector: {e}")
+            self.novelty_detector = None
+            self.novelty_detection_enabled = False
 
     def extract_and_store_topics(
         self,
@@ -95,21 +111,60 @@ class TopicExtractor:
                 f"Extracted {len(extracted_topics)} topics from episode {episode_guid}"
             )
 
+            # Get recent topics for novelty detection (v2.01+)
+            recent_topics = []
+            if self.novelty_detection_enabled and self.novelty_detector:
+                try:
+                    recent_topics = self.topic_tracking_repo.get_topics_last_n_days(
+                        digest_topic=digest_topic,
+                        days=14,
+                        only_used=True
+                    )
+                    logger.info(f"Retrieved {len(recent_topics)} recent topics for novelty comparison")
+                except Exception as e:
+                    logger.warning(f"Failed to retrieve recent topics for novelty detection: {e}")
+
             # Store each topic in database (respect max_topics limit)
             stored_topics = []
             for topic_data in extracted_topics[: self.max_topics]:
                 try:
+                    # Calculate novelty score (v2.01+)
+                    novelty_score = 1.0  # Default: assume novel
+                    parent_topic_id = None
+
+                    if self.novelty_detection_enabled and self.novelty_detector and recent_topics:
+                        try:
+                            novelty_score, parent_topic_id = self.novelty_detector.calculate_novelty_score(
+                                current_topic={
+                                    'topic_slug': self.topic_tracking_repo._normalize_topic_name(topic_data['name']),
+                                    'topic_name': topic_data['name'],
+                                    'key_points': topic_data['key_points']
+                                },
+                                recent_topics=recent_topics
+                            )
+                        except Exception as e:
+                            logger.warning(f"Novelty detection failed for '{topic_data['name']}': {e}")
+                            novelty_score = 1.0  # Assume novel on error
+
+                    # Store topic with all fields
                     stored_topic = self.topic_tracking_repo.store_topic(
                         episode_id=episode.id,
                         topic_name=topic_data["name"],
                         key_points=topic_data["key_points"],
                         digest_topic=digest_topic,
                         relevance_score=relevance_score,
+                        topic_type=topic_data.get("type", "other"),
+                        novelty_score=novelty_score,
+                        is_update=topic_data.get("is_update", False),
+                        parent_topic_id=parent_topic_id,
+                        evolution_summary=topic_data.get("evolution_summary"),
                     )
                     stored_topics.append(
                         {
                             "name": topic_data["name"],
+                            "type": topic_data.get("type", "other"),
                             "key_points": topic_data["key_points"],
+                            "novelty_score": novelty_score,
                         }
                     )
                 except Exception as e:
@@ -146,21 +201,35 @@ class TopicExtractor:
 
         return f"""Analyze this podcast transcript and extract ALL significant high-level topics discussed that are relevant to "{digest_topic}".
 
-For each topic:
-1. Provide a clear, specific topic name (e.g., "OpenAI leadership crisis", "GPT-5 release timeline")
-2. List 2-4 key points or insights about that topic
+For each topic, provide:
+1. **Name**: Clear, specific topic name (e.g., "GPT-5 Multimodal Release", "OpenAI Leadership Crisis")
+2. **Type**: Classification from these categories:
+   - model_release: New model announcements, updates, versions
+   - use_case: Applications, implementations, real-world usage
+   - personality: Key people in the news (CEOs, researchers, leaders)
+   - research: Papers, studies, breakthroughs
+   - company_news: Funding, acquisitions, partnerships, business developments
+   - regulation: Policy, legal, governance
+   - technique: New methods, approaches, architectures
+   - other: Miscellaneous or uncategorized
+
+3. **Key Points**: 2-4 bullet points of key information
+4. **Is Update**: Boolean - is this new information about an existing topic?
+5. **Related To**: If is_update=true, what's the root topic? (e.g., "gpt-5-release")
+6. **Evolution Summary**: If is_update=true, briefly describe what changed/what's new
 
 Instructions:
 - Extract EVERY distinct topic, not just the top 1-3
 - Focus on newsworthy events, developments, or discussions
-- Include company news, product releases, policy changes, research findings, industry trends
+- Classify each topic accurately by type
+- Mark as update if it builds on/evolves a known topic
 - Avoid overly generic topics (e.g., "AI is advancing" is too broad)
 - Each topic should be specific enough to track over time
 
 Transcript (first 4000 chars):
 {truncated_transcript}
 
-Extract all significant topics and their key insights."""
+Extract all significant topics with full classification."""
 
     def _create_extraction_schema(self) -> dict:
         """
@@ -181,6 +250,20 @@ Extract all significant topics and their key insights."""
                                 "type": "string",
                                 "description": "Specific topic name",
                             },
+                            "type": {
+                                "type": "string",
+                                "description": "Topic classification",
+                                "enum": [
+                                    "model_release",
+                                    "use_case",
+                                    "personality",
+                                    "research",
+                                    "company_news",
+                                    "regulation",
+                                    "technique",
+                                    "other",
+                                ],
+                            },
                             "key_points": {
                                 "type": "array",
                                 "items": {"type": "string"},
@@ -188,8 +271,20 @@ Extract all significant topics and their key insights."""
                                 "maxItems": 4,
                                 "description": "Key insights about this topic",
                             },
+                            "is_update": {
+                                "type": "boolean",
+                                "description": "Is this new info about an existing topic?",
+                            },
+                            "related_to": {
+                                "type": "string",
+                                "description": "Root topic if this is an update (optional)",
+                            },
+                            "evolution_summary": {
+                                "type": "string",
+                                "description": "What changed/what's new if this is an update (optional)",
+                            },
                         },
-                        "required": ["name", "key_points"],
+                        "required": ["name", "type", "key_points", "is_update"],
                         "additionalProperties": False,
                     },
                     "minItems": 1,
