@@ -276,15 +276,21 @@ Extract all significant topics with full classification."""
                                 "description": "Is this new info about an existing topic?",
                             },
                             "related_to": {
-                                "type": "string",
+                                "anyOf": [
+                                    {"type": "string"},
+                                    {"type": "null"}
+                                ],
                                 "description": "Root topic if this is an update (optional)",
                             },
                             "evolution_summary": {
-                                "type": "string",
+                                "anyOf": [
+                                    {"type": "string"},
+                                    {"type": "null"}
+                                ],
                                 "description": "What changed/what's new if this is an update (optional)",
                             },
                         },
-                        "required": ["name", "type", "key_points", "is_update"],
+                        "required": ["name", "type", "key_points", "is_update", "related_to", "evolution_summary"],
                         "additionalProperties": False,
                     },
                     "minItems": 1,

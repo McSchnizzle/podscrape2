@@ -113,6 +113,8 @@ class Topic:
     use_dialogue_api: bool = False
     dialogue_model: str = 'eleven_turbo_v2_5'
     voice_config: Optional[Dict[str, Any]] = None
+    # Topic tracking and deduplication (v2.00+)
+    enable_topic_tracking: bool = False
 
 
 @dataclass
@@ -1163,7 +1165,8 @@ class TopicRepository:
             updated_at=model.updated_at,
             use_dialogue_api=getattr(model, 'use_dialogue_api', False),
             dialogue_model=getattr(model, 'dialogue_model', 'eleven_turbo_v2_5'),
-            voice_config=getattr(model, 'voice_config', None)
+            voice_config=getattr(model, 'voice_config', None),
+            enable_topic_tracking=getattr(model, 'enable_topic_tracking', False)
         )
 
     def _model_to_instruction_version(self, model: TopicInstructionModel) -> TopicInstructionVersion:

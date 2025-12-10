@@ -16,6 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     ForeignKey,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import JSON
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -349,7 +350,7 @@ class EpisodeTopic(Base):
     episode_id = Column(Integer, nullable=False)
     topic_name = Column(String(512), nullable=False)
     topic_slug = Column(String(255), nullable=False)
-    key_points = Column(JSONB, nullable=False)  # Array of key insight strings
+    key_points = Column(postgresql.ARRAY(Text), nullable=False)  # Array of key insight strings
     first_mentioned_at = Column(DateTime(timezone=False), nullable=False)
     last_mentioned_at = Column(DateTime(timezone=False), nullable=False)
     mention_count = Column(Integer, nullable=False, default=1)

@@ -43,9 +43,12 @@ def seed_topics_for_digest(digest_topic_name: str, days_back: int):
     web_config = WebConfigManager()
 
     # Get the digest topic from database
-    topic = topic_repo.get_topic_by_name(digest_topic_name)
+    all_topics = topic_repo.get_all_topics()
+    topic = next((t for t in all_topics if t.name == digest_topic_name), None)
+
     if not topic:
         logger.error(f"Digest topic '{digest_topic_name}' not found in database")
+        logger.info(f"Available topics: {[t.name for t in all_topics]}")
         return
 
     if not topic.is_active:
@@ -75,7 +78,7 @@ def seed_topics_for_digest(digest_topic_name: str, days_back: int):
     qualifying_episodes = []
     for episode in all_episodes:
         # Check if episode has transcript
-        if not episode.transcript or episode.transcript.strip() == "":
+        if not episode.transcript_content or episode.transcript_content.strip() == "":
             continue
 
         # Check score for this topic
@@ -110,7 +113,7 @@ def seed_topics_for_digest(digest_topic_name: str, days_back: int):
             topics = extractor.extract_and_store_topics(
                 episode_guid=episode.episode_guid,
                 digest_topic=digest_topic_name,
-                transcript=episode.transcript,
+                transcript=episode.transcript_content,
                 relevance_score=episode.scores.get(digest_topic_name, 0.0)
             )
 
