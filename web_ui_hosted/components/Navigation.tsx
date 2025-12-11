@@ -36,8 +36,8 @@ export function Navigation() {
               <a href="/publishing" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Publishing
               </a>
-              <a href="/maintenance" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Maintenance
+              <a href="/recurring-topics" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
+                Recurring Topics
               </a>
               <a href="/settings" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                 Settings
@@ -134,11 +134,11 @@ export function Navigation() {
               Publishing
             </a>
             <a
-              href="/maintenance"
+              href="/recurring-topics"
               className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Maintenance
+              Recurring Topics
             </a>
             <a
               href="/settings"
