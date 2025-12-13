@@ -241,6 +241,60 @@ class TopicTrackingRepository:
             session.commit()
             return result
 
+    def delete_episode_topic(self, topic_id: int) -> bool:
+        """
+        Delete an episode topic by ID.
+        Used by deduplication scripts to remove duplicate topics.
+
+        Args:
+            topic_id: The topic ID to delete
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with self.db_manager.get_session() as session:
+            topic = session.query(EpisodeTopic).filter(
+                EpisodeTopic.id == topic_id
+            ).first()
+
+            if topic:
+                session.delete(topic)
+                session.commit()
+                return True
+            return False
+
+    def update_topic_key_points(
+        self,
+        topic_id: int,
+        key_points: List[str]
+    ) -> bool:
+        """
+        Update key points for an episode topic.
+        Used when merging duplicate topics or extending story arcs.
+
+        Args:
+            topic_id: The topic ID to update
+            key_points: New list of key points
+
+        Returns:
+            True if updated, False if not found
+        """
+        now = datetime.now(timezone.utc)
+
+        with self.db_manager.get_session() as session:
+            topic = session.query(EpisodeTopic).filter(
+                EpisodeTopic.id == topic_id
+            ).first()
+
+            if topic:
+                topic.key_points = key_points
+                topic.last_mentioned_at = now
+                topic.updated_at = now
+                topic.mention_count += 1
+                session.commit()
+                return True
+            return False
+
     def get_topic_stats(self, digest_topic: str, days_back: int = 14) -> Dict:
         """
         Get statistics about topics for a digest topic.

@@ -76,6 +76,7 @@ DEFAULTS = {
     ("topic_tracking", "min_score_for_extraction"): {"type": "float", "default": 0.70, "min": 0.0, "max": 1.0},
     ("topic_tracking", "max_topics_per_episode"): {"type": "int", "default": 15, "min": 3, "max": 20},
     ("topic_tracking", "retention_days"): {"type": "int", "default": 14, "min": 7, "max": 90},
+    ("topic_tracking", "extraction_model"): {"type": "string", "default": "gpt-5-mini"},
 
     # Ad Filtering Configuration
     ("ad_filtering", "enabled"): {"type": "bool", "default": True},
@@ -85,6 +86,7 @@ DEFAULTS = {
     ("topic_evolution", "enable_novelty_detection"): {"type": "bool", "default": True},
     ("topic_evolution", "novelty_threshold"): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
     ("topic_evolution", "embedding_model"): {"type": "string", "default": "text-embedding-3-small"},
+    ("topic_evolution", "similarity_threshold"): {"type": "float", "default": 0.85, "min": 0.5, "max": 1.0},
 
     # AI Configuration - Content Scoring Phase
     ("ai_content_scoring", "model"): {"type": "string", "default": "gpt-5-mini"},

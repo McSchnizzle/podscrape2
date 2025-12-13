@@ -10,7 +10,7 @@ RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription (O
 AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dynamic RSS API) → Retention
 ```
 
-**Current Version**: v1.84 (November 2025)
+**Current Version**: v2.05 (December 2025)
 **Pipeline Architecture**: 6 phases (Discovery, Audio, Digest, TTS, Publishing, Retention)
 
 ### Core Data Flow
@@ -31,8 +31,33 @@ AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dy
 - **feeds**: RSS feed URLs, titles, health status, last checked timestamps
 - **digests**: Generated scripts, MP3 metadata, publishing status
 - **web_settings**: UI configuration (score thresholds, audio processing settings)
+- **episode_topics**: Extracted topics from episodes with story arc tracking (v2.01+)
 
 The system uses PostgreSQL (Supabase) with SQLAlchemy models in `src/database/sqlalchemy_models.py`. Legacy SQLite support available in `src/database/models.py`.
+
+### Topic Tracking and Story Arc System (v2.05+)
+
+The system tracks topics extracted from episodes and consolidates them into evolving story arcs. This enables:
+- **Deduplication**: Prevents creating duplicate topics with slightly different names
+- **Story Arc Tracking**: Groups related topics into evolving narratives (e.g., "GPT-5.2 Rumors" → "GPT-5.2 Release" → "GPT-5.2 Benchmarks")
+- **Digest Context**: Provides story history to digest generation for more informed scripts
+
+**Key Components**:
+- `src/topic_tracking/topic_extractor.py`: Extracts topics from transcripts using GPT with story arc awareness
+- `src/topic_tracking/semantic_matcher.py`: Finds semantically similar topics using embeddings
+- `src/topic_tracking/novelty_detector.py`: Calculates novelty scores for extracted topics
+- `src/database/topic_tracking_repo.py`: Database operations for episode_topics table
+
+**Story Arc Patterns** (defined in `topic_extractor.py`):
+Topics are automatically grouped into story arcs based on keyword patterns. New patterns can be added to `STORY_ARC_PATTERNS` dictionary.
+
+**Configuration** (via web_settings):
+- `topic_tracking.extraction_model`: GPT model for extraction (default: gpt-5-mini)
+- `topic_evolution.similarity_threshold`: Threshold for semantic matching (default: 0.85)
+- `topic_evolution.novelty_threshold`: Minimum novelty to consider topic new (default: 0.30)
+- `topic_evolution.embedding_model`: Model for embeddings (default: text-embedding-3-small)
+
+**Note**: The daily deduplication script runs on the shared database via the AInewsletter project, which also adds episodes and topics to the same database.
 
 ## Development Commands
 
@@ -136,6 +161,49 @@ python3 -m alembic current       # Check current migration status
 # 3. Confirm SUPABASE_SERVICE_ROLE is set for web UI
 # 4. All operations should use service role which bypasses RLS
 ```
+
+### Ad-Hoc Database Queries (Python)
+**CRITICAL**: Always activate the virtual environment before running Python database queries.
+
+```bash
+# Template for ad-hoc database queries
+source .venv/bin/activate && python3 -c "
+from src.database.models import get_database_manager
+from src.database.sqlalchemy_models import Episode, Digest, Feed, Topic
+from src.config.web_config import WebConfigManager
+from datetime import datetime, timedelta
+
+# Get database session
+db_manager = get_database_manager()
+session = db_manager.get_session()
+
+# Example: Query episodes
+episodes = session.query(Episode).filter(Episode.status == 'scored').all()
+print(f'Scored episodes: {len(episodes)}')
+
+# Example: Get web settings
+wc = WebConfigManager()
+retention_days = int(wc.get_setting('retention', 'episode_retention_days', 14))
+print(f'Retention: {retention_days} days')
+
+session.close()
+"
+```
+
+**Key imports and patterns**:
+- `from src.database.models import get_database_manager` - Factory for DatabaseManager
+- `from src.database.sqlalchemy_models import Episode, Digest, Feed, Topic` - SQLAlchemy models
+- `from src.config.web_config import WebConfigManager` - Web UI settings access
+- `db_manager.get_session()` - Returns a SQLAlchemy session (NOT `.Session()`)
+- Always call `session.close()` when done
+
+**Common web_settings keys** (via `WebConfigManager.get_setting(group, key, default)`):
+- `('retention', 'episode_retention_days', 14)` - Episode retention period
+- `('retention', 'digest_retention_days', 14)` - Digest retention period
+- `('retention', 'github_releases_days', 14)` - GitHub release retention
+- `('retention', 'local_mp3_days', 14)` - Local MP3 file retention
+- `('retention', 'logs_days', 3)` - Log file retention
+- `('scoring', 'score_threshold', 0.65)` - Minimum score for inclusion
 
 ## Critical Development Guidelines
 

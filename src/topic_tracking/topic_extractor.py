@@ -1,27 +1,58 @@
 """
 TopicExtractor: Extracts high-level topics from episode transcripts using GPT.
 Used for topic tracking and deduplication in digest generation.
+
+v2.05: Added story arc recognition and semantic matching for topic deduplication.
+       Models are now fully configurable via web_settings.
 """
 
 import os
 import json
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
+
 from openai import OpenAI
 
 from src.config.web_config import WebConfigManager
 from src.database.models import get_episode_repo
 from src.database.topic_tracking_repo import get_topic_tracking_repo
 from src.topic_tracking.novelty_detector import NoveltyDetector
+from src.topic_tracking.semantic_matcher import SemanticTopicMatcher
 
 
 logger = logging.getLogger(__name__)
+
+
+# Story arc patterns - keywords that indicate topics belong to the same evolving story
+# These help consolidate related topics like "GPT-5.2 Release Rumors" and "GPT-5.2 Release"
+STORY_ARC_PATTERNS = {
+    "gemini-3": ["gemini 3", "gemini-3", "gemini3"],
+    "gpt-5-release": ["gpt-5", "gpt 5", "gpt5", "gpt-5.2", "gpt 5.2", "gpt-5.1", "gpt 5.1"],
+    "openai-strategy": ["openai code red", "openai's focus", "openai's shift", "openai financial"],
+    "ai-trust": ["ai trust", "trust in ai", "ai perception", "edelman", "ai sentiment"],
+    "google-glasses": ["google glass", "smart glasses", "project aura", "android xr"],
+    "cybersecurity-ciso": ["ciso", "cybersecurity", "zero trust", "cyber risk"],
+    "ai-benchmarks": ["benchmark", "gdpval", "ai grading", "model performance"],
+    "ai-education": ["ai education", "workforce development", "micro-credential", "educational"],
+    "social-media-regulation": ["tiktok", "social media ban", "first amendment", "fcc", "media regulation"],
+    "streaming-wars": ["netflix", "streaming", "warner bros", "disney acquisition"],
+    "claude-release": ["claude 3", "claude 4", "claude-3", "claude-4", "anthropic claude"],
+    "llama-release": ["llama 3", "llama 4", "llama-3", "llama-4", "meta llama"],
+    "ai-agents": ["ai agent", "ai agents", "autonomous agent", "agent framework"],
+    "ai-regulation": ["ai act", "ai regulation", "ai policy", "ai governance", "eu ai"],
+}
 
 
 class TopicExtractor:
     """
     Extracts high-level topics and key points from episode transcripts.
     Model is configurable via web settings (topic_tracking.extraction_model).
+
+    Features (v2.05):
+    - Story arc recognition to consolidate related topics
+    - Semantic matching to prevent duplicate topic creation
+    - Novelty detection to identify new information
+    - Configurable models via web_settings
     """
 
     def __init__(self):
@@ -30,13 +61,29 @@ class TopicExtractor:
         self.episode_repo = get_episode_repo()
         self.topic_tracking_repo = get_topic_tracking_repo()
 
-        # Load configuration
+        # Load configuration from web_settings
         self.max_topics = self.web_config.get_setting(
             "topic_tracking", "max_topics_per_episode", 15
         )
         self.model = self.web_config.get_setting(
             "topic_tracking", "extraction_model", "gpt-5-mini"
         )
+        self.lookback_days = self.web_config.get_setting(
+            "topic_tracking", "retention_days", 30
+        )
+
+        # Initialize semantic matcher (v2.05+)
+        try:
+            similarity_threshold = self.web_config.get_setting(
+                "topic_evolution", "similarity_threshold", 0.85
+            )
+            self.semantic_matcher = SemanticTopicMatcher(
+                similarity_threshold=similarity_threshold
+            )
+            logger.info(f"Semantic matcher initialized with threshold: {similarity_threshold}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize semantic matcher: {e}")
+            self.semantic_matcher = None
 
         # Initialize novelty detector (v2.01+)
         try:
@@ -63,6 +110,9 @@ class TopicExtractor:
         """
         Extract high-level topics from transcript and store in database.
 
+        Implements story arc recognition and semantic matching to prevent
+        duplicate topics and consolidate evolving stories.
+
         Args:
             episode_guid: Episode GUID
             digest_topic: Parent topic (e.g., "AI and Technology")
@@ -85,12 +135,44 @@ class TopicExtractor:
             f"Extracting topics from episode {episode_guid} for {digest_topic}"
         )
 
-        # Create prompt for GPT
-        prompt = self._create_extraction_prompt(transcript, digest_topic)
+        # Fetch existing topics for context (30 days lookback)
+        existing_topics = []
+        try:
+            existing_topics = self.topic_tracking_repo.get_topics_last_n_days(
+                digest_topic=digest_topic,
+                days=self.lookback_days,
+                only_used=False  # Get all topics, not just used ones
+            )
+            logger.info(f"Retrieved {len(existing_topics)} existing topics for context")
+        except Exception as e:
+            logger.warning(f"Failed to retrieve existing topics: {e}")
+
+        # Generate existing topic names for prompt
+        existing_topic_names = ""
+        if self.semantic_matcher and existing_topics:
+            existing_topic_names = self.semantic_matcher.get_topic_names_for_prompt(
+                existing_topics, max_topics=50
+            )
+
+        # Identify active story arcs
+        story_arc_topics = self._get_active_story_arcs(existing_topics)
+        active_story_arcs_text = ""
+        if self.semantic_matcher and story_arc_topics:
+            active_story_arcs_text = self.semantic_matcher.get_active_story_arcs_for_prompt(
+                existing_topics, story_arc_topics, max_arcs=10
+            )
+
+        # Create prompt with context about existing topics and story arcs
+        prompt = self._create_extraction_prompt(
+            transcript=transcript,
+            digest_topic=digest_topic,
+            existing_topic_names=existing_topic_names,
+            active_story_arcs=active_story_arcs_text
+        )
         schema = self._create_extraction_schema()
 
         try:
-            # Call GPT-4o-mini with structured output
+            # Call GPT with structured output
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
@@ -113,7 +195,7 @@ class TopicExtractor:
                 f"Extracted {len(extracted_topics)} topics from episode {episode_guid}"
             )
 
-            # Get recent topics for novelty detection (v2.01+)
+            # Get recent topics for novelty detection
             recent_topics = []
             if self.novelty_detection_enabled and self.novelty_detector:
                 try:
@@ -130,7 +212,80 @@ class TopicExtractor:
             stored_topics = []
             for topic_data in extracted_topics[: self.max_topics]:
                 try:
-                    # Calculate novelty score (v2.01+)
+                    topic_name = topic_data["name"]
+                    key_points = topic_data["key_points"]
+                    topic_slug = self.topic_tracking_repo._normalize_topic_name(topic_name)
+
+                    # Step 1: Check if this topic belongs to a story arc
+                    story_arc_id = self._identify_story_arc(topic_name, key_points)
+                    if story_arc_id and story_arc_id in story_arc_topics:
+                        # Use the canonical topic from this story arc
+                        canonical = story_arc_topics[story_arc_id][0]  # Oldest topic
+                        logger.info(
+                            f"Topic '{topic_name}' belongs to story arc '{story_arc_id}', "
+                            f"extending canonical topic '{canonical.get('topic_name')}'"
+                        )
+                        # Merge key points
+                        merged_key_points = self.semantic_matcher.merge_key_points(
+                            canonical.get('key_points', []),
+                            key_points,
+                            max_points=6
+                        ) if self.semantic_matcher else key_points
+
+                        # Update the canonical topic with new key points
+                        self.topic_tracking_repo.update_topic_key_points(
+                            topic_id=canonical.get('id'),
+                            key_points=merged_key_points
+                        )
+
+                        stored_topics.append({
+                            "name": canonical.get('topic_name'),
+                            "type": topic_data.get("type", "other"),
+                            "key_points": merged_key_points,
+                            "novelty_score": 0.5,  # Partial novelty for story arc update
+                            "extended_arc": story_arc_id,
+                        })
+                        continue
+
+                    # Step 2: Check for semantic match against existing topics
+                    matched_topic = None
+                    if self.semantic_matcher and existing_topics:
+                        matched_topic = self.semantic_matcher.find_matching_topic(
+                            new_topic_name=topic_name,
+                            new_key_points=key_points,
+                            existing_topics=existing_topics,
+                            digest_topic=digest_topic
+                        )
+
+                    if matched_topic:
+                        # Use existing topic's name and slug, merge key points
+                        logger.info(
+                            f"Semantic match: '{topic_name}' -> '{matched_topic.topic_name}' "
+                            f"(similarity: {matched_topic.similarity:.2f})"
+                        )
+                        merged_key_points = self.semantic_matcher.merge_key_points(
+                            matched_topic.key_points,
+                            key_points,
+                            max_points=6
+                        )
+
+                        # Update existing topic with new key points
+                        self.topic_tracking_repo.update_topic_key_points(
+                            topic_id=matched_topic.topic_id,
+                            key_points=merged_key_points
+                        )
+
+                        stored_topics.append({
+                            "name": matched_topic.topic_name,
+                            "type": topic_data.get("type", "other"),
+                            "key_points": merged_key_points,
+                            "novelty_score": 1.0 - matched_topic.similarity,
+                            "matched_existing": True,
+                        })
+                        continue
+
+                    # Step 3: No match found - create as new topic
+                    # Calculate novelty score
                     novelty_score = 1.0  # Default: assume novel
                     parent_topic_id = None
 
@@ -138,21 +293,21 @@ class TopicExtractor:
                         try:
                             novelty_score, parent_topic_id = self.novelty_detector.calculate_novelty_score(
                                 current_topic={
-                                    'topic_slug': self.topic_tracking_repo._normalize_topic_name(topic_data['name']),
-                                    'topic_name': topic_data['name'],
-                                    'key_points': topic_data['key_points']
+                                    'topic_slug': topic_slug,
+                                    'topic_name': topic_name,
+                                    'key_points': key_points
                                 },
                                 recent_topics=recent_topics
                             )
                         except Exception as e:
-                            logger.warning(f"Novelty detection failed for '{topic_data['name']}': {e}")
+                            logger.warning(f"Novelty detection failed for '{topic_name}': {e}")
                             novelty_score = 1.0  # Assume novel on error
 
                     # Store topic with all fields
                     stored_topic = self.topic_tracking_repo.store_topic(
                         episode_id=episode.id,
-                        topic_name=topic_data["name"],
-                        key_points=topic_data["key_points"],
+                        topic_name=topic_name,
+                        key_points=key_points,
                         digest_topic=digest_topic,
                         relevance_score=relevance_score,
                         topic_type=topic_data.get("type", "other"),
@@ -163,15 +318,15 @@ class TopicExtractor:
                     )
                     stored_topics.append(
                         {
-                            "name": topic_data["name"],
+                            "name": topic_name,
                             "type": topic_data.get("type", "other"),
-                            "key_points": topic_data["key_points"],
+                            "key_points": key_points,
                             "novelty_score": novelty_score,
                         }
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Failed to store topic '{topic_data['name']}': {e}"
+                        f"Failed to store topic '{topic_data.get('name', 'unknown')}': {e}"
                     )
 
             # Log if we hit the limit
@@ -187,13 +342,77 @@ class TopicExtractor:
             logger.error(f"Topic extraction failed for {episode_guid}: {e}")
             raise
 
-    def _create_extraction_prompt(self, transcript: str, digest_topic: str) -> str:
+    def _identify_story_arc(
+        self, topic_name: str, key_points: List[str] = None
+    ) -> Optional[str]:
+        """
+        Identify which story arc a topic belongs to based on keywords.
+
+        Args:
+            topic_name: The topic name to check
+            key_points: Optional list of key points for additional context
+
+        Returns:
+            Story arc ID if found, None otherwise
+        """
+        text_to_check = topic_name.lower()
+        if key_points:
+            text_to_check += " " + " ".join(key_points).lower()
+
+        for arc_id, patterns in STORY_ARC_PATTERNS.items():
+            for pattern in patterns:
+                if pattern in text_to_check:
+                    return arc_id
+
+        return None
+
+    def _get_active_story_arcs(
+        self, existing_topics: List[Dict]
+    ) -> Dict[str, List[Dict]]:
+        """
+        Group existing topics by their story arcs.
+
+        Args:
+            existing_topics: List of existing topic dictionaries
+
+        Returns:
+            Dict mapping arc_id to list of topics in that arc (sorted oldest first)
+        """
+        story_arcs: Dict[str, List[Dict]] = {}
+
+        for topic in existing_topics:
+            arc_id = self._identify_story_arc(
+                topic.get('topic_name', ''),
+                topic.get('key_points', [])
+            )
+            if arc_id:
+                if arc_id not in story_arcs:
+                    story_arcs[arc_id] = []
+                story_arcs[arc_id].append(topic)
+
+        # Sort each arc's topics by first_mentioned_at (oldest first)
+        for arc_id in story_arcs:
+            story_arcs[arc_id].sort(
+                key=lambda t: t.get('first_mentioned_at') or t.get('created_at') or ''
+            )
+
+        return story_arcs
+
+    def _create_extraction_prompt(
+        self,
+        transcript: str,
+        digest_topic: str,
+        existing_topic_names: str = "",
+        active_story_arcs: str = ""
+    ) -> str:
         """
         Create GPT prompt for topic extraction.
 
         Args:
             transcript: Full episode transcript
             digest_topic: Parent topic name
+            existing_topic_names: Formatted list of existing topic names
+            active_story_arcs: Formatted description of active story arcs
 
         Returns:
             Formatted prompt string
@@ -201,10 +420,41 @@ class TopicExtractor:
         # Truncate transcript to 4000 chars (enough context, saves tokens)
         truncated_transcript = transcript[:4000]
 
-        return f"""Analyze this podcast transcript and extract ALL significant high-level topics discussed that are relevant to "{digest_topic}".
+        # Build prompt sections
+        existing_topics_section = ""
+        if existing_topic_names:
+            existing_topics_section = f"""
+IMPORTANT - Existing Topics to Reuse:
+The following topics already exist in our database. If any topic in this transcript
+matches one of these (even if phrased differently), USE THE EXISTING TOPIC NAME EXACTLY:
+{existing_topic_names}
 
+When you find content about an existing topic:
+- Use the EXACT existing topic name (don't create a variation)
+- Mark is_update=true
+- Add only NEW key points not covered before
+"""
+
+        story_arcs_section = ""
+        if active_story_arcs:
+            story_arcs_section = f"""
+ACTIVE STORY ARCS:
+The following stories are currently being tracked. If this transcript discusses any of these,
+you should EXTEND the existing story rather than create a new topic:
+{active_story_arcs}
+
+When extending a story arc:
+- Use the existing topic name exactly
+- Add NEW developments as key points
+- Mark is_update=true
+"""
+
+        return f"""Analyze this podcast transcript and extract ALL significant high-level topics discussed that are relevant to "{digest_topic}".
+{existing_topics_section}
+{story_arcs_section}
 For each topic, provide:
 1. **Name**: Clear, specific topic name (e.g., "GPT-5 Multimodal Release", "OpenAI Leadership Crisis")
+   - If the topic matches an existing one above, use the EXACT existing name
 2. **Type**: Classification from these categories:
    - model_release: New model announcements, updates, versions
    - use_case: Applications, implementations, real-world usage
@@ -221,6 +471,7 @@ For each topic, provide:
 6. **Evolution Summary**: If is_update=true, briefly describe what changed/what's new
 
 Instructions:
+- PRIORITIZE reusing existing topic names when the content matches
 - Extract EVERY distinct topic, not just the top 1-3
 - Focus on newsworthy events, developments, or discussions
 - Classify each topic accurately by type
