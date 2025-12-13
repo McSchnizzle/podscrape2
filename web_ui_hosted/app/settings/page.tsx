@@ -333,6 +333,9 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
+                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
+                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
                     <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
@@ -400,6 +403,9 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
+                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
+                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
                     <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
@@ -471,6 +477,9 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
+                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
+                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
+                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
                     <option value="gpt-5.1">GPT-5.1</option>
                     <option value="gpt-5">GPT-5</option>
                     <option value="gpt-5-mini">GPT-5 Mini</option>
@@ -605,6 +614,30 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Extraction Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('topic_tracking', 'extraction_model', 'gpt-5-mini')}
+                    onChange={(e) => updateLocalSetting('topic_tracking', 'extraction_model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
+                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
+                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
+                    <option value="gpt-5.1">GPT-5.1</option>
+                    <option value="gpt-5">GPT-5</option>
+                    <option value="gpt-5-mini">GPT-5 Mini</option>
+                    <option value="gpt-5-nano">GPT-5 Nano</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Model used for extracting topics from transcripts
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Min Score for Extraction
                   </label>
                   <input
@@ -734,6 +767,23 @@ export default function SettingsPage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Minimum novelty required to include topic (0.0-1.0, lower = more lenient)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Embedding Model
+                  </label>
+                  <select
+                    className="input"
+                    value={getSetting('topic_evolution', 'embedding_model', 'text-embedding-3-small')}
+                    onChange={(e) => updateLocalSetting('topic_evolution', 'embedding_model', e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="text-embedding-3-small">text-embedding-3-small (Fast, $0.02/1M)</option>
+                    <option value="text-embedding-3-large">text-embedding-3-large (Higher quality, $0.13/1M)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    OpenAI embedding model for semantic similarity comparisons
                   </p>
                 </div>
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">

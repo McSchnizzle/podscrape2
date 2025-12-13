@@ -9,6 +9,8 @@ from openai import OpenAI
 import numpy as np
 from datetime import datetime, timezone
 
+from src.config.web_config import WebConfigManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,10 @@ class NoveltyDetector:
                              Default 0.30 means 30% novelty required.
         """
         self.client = OpenAI()
-        self.embedding_model = "text-embedding-3-small"  # Fast, cheap
+        self.web_config = WebConfigManager()
+        self.embedding_model = self.web_config.get_setting(
+            "topic_evolution", "embedding_model", "text-embedding-3-small"
+        )
         self.novelty_threshold = novelty_threshold
 
     def calculate_novelty_score(

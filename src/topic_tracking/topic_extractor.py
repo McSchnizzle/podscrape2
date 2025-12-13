@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class TopicExtractor:
     """
     Extracts high-level topics and key points from episode transcripts.
-    Uses GPT-4o-mini for cost-effective topic analysis.
+    Model is configurable via web settings (topic_tracking.extraction_model).
     """
 
     def __init__(self):
@@ -34,7 +34,9 @@ class TopicExtractor:
         self.max_topics = self.web_config.get_setting(
             "topic_tracking", "max_topics_per_episode", 15
         )
-        self.model = "gpt-4o-mini"  # Cost-effective for extraction
+        self.model = self.web_config.get_setting(
+            "topic_tracking", "extraction_model", "gpt-5-mini"
+        )
 
         # Initialize novelty detector (v2.01+)
         try:
