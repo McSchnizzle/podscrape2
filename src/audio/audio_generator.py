@@ -594,9 +594,13 @@ class AudioGenerator:
                 )
                 response.raise_for_status()
 
-                # Verify we have audio content
+                # Verify we have audio content - retry on empty response
                 if not response.content:
-                    raise AudioGenerationError("Received empty response from Text-to-Dialogue API")
+                    if attempt < max_retries:
+                        logger.warning(f"Received empty response from Text-to-Dialogue API (attempt {attempt + 1}/{max_retries + 1}), retrying...")
+                        continue
+                    else:
+                        raise AudioGenerationError("Received empty response from Text-to-Dialogue API after all retries")
 
                 # Check content type
                 content_type = response.headers.get('content-type', '')
