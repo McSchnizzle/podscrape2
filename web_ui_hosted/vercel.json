@@ -3,6 +3,10 @@
     {
       "source": "/daily-digest.xml",
       "destination": "/api/rss/daily-digest"
+    },
+    {
+      "source": "/ai-tech-digest.xml",
+      "destination": "/api/rss/ai-tech-digest"
     }
   ]
 }
