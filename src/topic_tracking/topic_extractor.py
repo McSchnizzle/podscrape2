@@ -100,6 +100,17 @@ class TopicExtractor:
             self.novelty_detector = None
             self.novelty_detection_enabled = False
 
+    def _get_token_param_name(self) -> str:
+        """
+        Get the correct token parameter name based on model.
+
+        GPT-5.2* models use 'max_completion_tokens' instead of 'max_tokens'
+        for the chat.completions API.
+        """
+        if self.model.startswith("gpt-5.2"):
+            return "max_completion_tokens"
+        return "max_tokens"
+
     def extract_and_store_topics(
         self,
         episode_guid: str,
@@ -173,10 +184,11 @@ class TopicExtractor:
 
         try:
             # Call GPT with structured output
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={
+            # Build kwargs with model-appropriate token parameter
+            api_kwargs = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "topic_extraction",
@@ -184,8 +196,9 @@ class TopicExtractor:
                         "strict": True,
                     },
                 },
-                max_tokens=2000,  # Enough for 15 topics with key points
-            )
+                self._get_token_param_name(): 2000,  # Enough for 15 topics with key points
+            }
+            response = self.client.chat.completions.create(**api_kwargs)
 
             # Parse response
             topics_data = json.loads(response.choices[0].message.content)

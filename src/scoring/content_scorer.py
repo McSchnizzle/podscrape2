@@ -108,6 +108,17 @@ class ContentScorer:
 
         return requested_tokens
 
+    def _get_reasoning_effort(self, model: str) -> str:
+        """
+        Determine appropriate reasoning effort based on model capabilities.
+
+        GPT-5.2* models only support 'medium' reasoning effort.
+        Other models (like gpt-5-mini) support 'minimal' for faster/cheaper scoring.
+        """
+        if model.startswith("gpt-5.2"):
+            return "medium"
+        return "minimal"
+
     def _create_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
         """
         Create AI model prompt for transcript scoring.
@@ -216,12 +227,13 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             schema = self._create_json_schema(self.topics)
             
             # Call configured AI model using Responses API (correct format from gpt5-implementation-learnings.md)
+            reasoning_effort = self._get_reasoning_effort(self.ai_model)
             response = self.client.responses.create(
                 model=self.ai_model,
                 input=[
                     {"role": "user", "content": prompt}
                 ],
-                reasoning={"effort": "minimal"},  # Minimal effort for scoring tasks
+                reasoning={"effort": reasoning_effort},  # Model-aware reasoning effort
                 max_output_tokens=self.max_tokens,
                 text={
                     "format": {

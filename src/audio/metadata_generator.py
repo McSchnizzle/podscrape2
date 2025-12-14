@@ -80,6 +80,17 @@ class MetadataGenerator:
 
         return requested_tokens
 
+    def _get_reasoning_effort(self, model: str) -> str:
+        """
+        Determine appropriate reasoning effort based on model capabilities.
+
+        GPT-5.2* models only support 'medium' reasoning effort.
+        Other models (like gpt-5-mini) support 'minimal' for faster/cheaper metadata generation.
+        """
+        if model.startswith("gpt-5.2"):
+            return "medium"
+        return "minimal"
+
     def _extract_script_content(self, script_path: str) -> str:
         """Extract clean content from script file for analysis"""
         script_file = Path(script_path)
@@ -187,13 +198,14 @@ Generate metadata that accurately reflects the content and would attract the tar
         try:
             logger.info(f"Calling {self.ai_model} for metadata generation...")
             
+            reasoning_effort = self._get_reasoning_effort(self.ai_model)
             response = self.client.responses.create(
                 model=self.ai_model,  # Use configured model
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                reasoning={"effort": "minimal"},
+                reasoning={"effort": reasoning_effort},  # Model-aware reasoning effort
                 max_output_tokens=self.max_description_tokens,  # Use configured token limit
                 text={
                     "format": {
