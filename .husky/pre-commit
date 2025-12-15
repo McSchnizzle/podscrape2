@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# Pre-commit hook: Ensure no build errors or warnings
+# This hook runs the Next.js build to catch issues before commit
+
+echo "Running pre-commit checks..."
+
+# Check if any web_ui_hosted files are staged
+STAGED_WEB_UI=$(git diff --cached --name-only | grep "^web_ui_hosted/" || true)
+
+if [ -n "$STAGED_WEB_UI" ]; then
+  echo "Web UI files staged, running build check..."
+
+  cd web_ui_hosted
+
+  # Run TypeScript check
+  echo "Checking TypeScript..."
+  if ! npx tsc --noEmit 2>&1; then
+    echo ""
+    echo "TypeScript check failed! Fix errors before committing."
+    exit 1
+  fi
+
+  # Run Next.js build and capture exit code
+  echo "Running Next.js build..."
+  npm run build > /tmp/nextjs-build.log 2>&1
+  BUILD_EXIT_CODE=$?
+
+  # Show last 20 lines of output
+  tail -20 /tmp/nextjs-build.log
+
+  # Check exit code - if build command itself failed
+  if [ $BUILD_EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "Build failed with exit code $BUILD_EXIT_CODE! Check /tmp/nextjs-build.log for details."
+    exit 1
+  fi
+
+  # Check for critical build errors (actual failures, not warnings)
+  if grep -qE "Build error occurred|> Build error|Failed to collect page data|Error: Build failed" /tmp/nextjs-build.log; then
+    echo ""
+    echo "Build completed with critical errors! Fix before committing."
+    exit 1
+  fi
+
+  cd ..
+  echo "Web UI build check passed!"
+fi
+
+echo "Pre-commit checks passed!"

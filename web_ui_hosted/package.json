@@ -7,7 +7,8 @@
     "build": "BUILD_TIME=$(date -Iseconds) next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/postgrest-js": "^1.15.0",
@@ -29,6 +30,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.36.0",
     "eslint-config-next": "15.5.3",
+    "husky": "^9.1.7",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.0"

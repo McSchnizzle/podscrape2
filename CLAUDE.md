@@ -74,6 +74,20 @@ export const VERSION = "0.78"; // Increment by 0.01 from previous version
 - Every commit increments by 0.01 (e.g., 0.77 → 0.78 → 0.79)
 - Include version in commit message: `feat: add feature (v0.78)`
 
+### **CRITICAL: No Errors or Warnings Policy**
+**NEVER commit code with build errors or warnings**. Before every commit:
+
+1. **Run the Next.js build**: `cd web_ui_hosted && npm run build`
+2. **Run TypeScript check**: `npx tsc --noEmit`
+3. **Both must pass with zero errors and zero warnings**
+
+**Common build-time issues to avoid**:
+- **Module-level Supabase client creation**: Never create Supabase clients at module load time (top-level `const client = createClient()`). Use lazy getters or create clients inside functions.
+- **Missing `export const dynamic = 'force-dynamic'`**: API routes that use environment variables need this export to prevent prerendering.
+- **TypeScript Set iteration**: Use `Array.from(new Set(...))` instead of `[...new Set(...)]` for ES target compatibility.
+
+**Pre-commit hooks enforce this policy automatically** - see `.husky/pre-commit`.
+
 ### Environment Setup
 ```bash
 # Use python3 explicitly (required on macOS)

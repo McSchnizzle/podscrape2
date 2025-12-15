@@ -1,7 +1,22 @@
 import { createClient } from '@/utils/supabase/client'
 
-// Create client-side Supabase client for authentication
-export const supabaseAuth = createClient()
+// Lazy getter for client-side Supabase client for authentication
+// This prevents the client from being created during build time
+let _supabaseAuth: ReturnType<typeof createClient> | null = null
+
+function getSupabaseAuth() {
+  if (!_supabaseAuth) {
+    _supabaseAuth = createClient()
+  }
+  return _supabaseAuth
+}
+
+// Export getter as property for backward compatibility
+export const supabaseAuth = {
+  get auth() {
+    return getSupabaseAuth().auth
+  }
+}
 
 // Allowed email for authentication
 const ALLOWED_EMAIL = 'brownpr0@gmail.com'
