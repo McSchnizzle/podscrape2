@@ -1113,4 +1113,278 @@ export class DatabaseClient {
       throw error
     }
   }
+
+  // ==================== WORKFLOW ANALYSIS ====================
+
+  async getWorkflowAnalysis(hoursBack: number = 24) {
+    try {
+      const cutoffDate = new Date()
+      cutoffDate.setHours(cutoffDate.getHours() - hoursBack)
+
+      // Get distinct run IDs from pipeline_logs in the last 24 hours
+      const { data: recentLogs, error: logsError } = await supabase
+        .from('pipeline_logs')
+        .select('run_id, phase, message, level, timestamp, extra')
+        .gte('timestamp', cutoffDate.toISOString())
+        .order('timestamp', { ascending: true })
+
+      if (logsError) throw logsError
+
+      // Group logs by run_id
+      const runGroups: Record<string, PipelineLogRecord[]> = {}
+      for (const log of recentLogs || []) {
+        if (!log.run_id) continue
+        if (!runGroups[log.run_id]) {
+          runGroups[log.run_id] = []
+        }
+        runGroups[log.run_id].push(log as PipelineLogRecord)
+      }
+
+      // Get web settings for thresholds
+      const { data: settings, error: settingsError } = await supabase
+        .from('web_settings')
+        .select('setting_key, setting_value')
+        .in('setting_key', ['score_threshold', 'min_episodes_per_digest'])
+
+      const scoreThreshold = settings?.find((s: { setting_key: string; setting_value: string }) => s.setting_key === 'score_threshold')?.setting_value || '0.65'
+      const minEpisodes = settings?.find((s: { setting_key: string; setting_value: string }) => s.setting_key === 'min_episodes_per_digest')?.setting_value || '3'
+
+      // Get active topics
+      const { data: topics, error: topicsError } = await supabase
+        .from('topics')
+        .select('name, slug')
+        .eq('is_active', true)
+
+      if (topicsError) throw topicsError
+
+      // Analyze each workflow run
+      const workflows = []
+      for (const [runId, logs] of Object.entries(runGroups)) {
+        const analysis = this.analyzeWorkflowRun(runId, logs, topics || [], parseFloat(scoreThreshold), parseInt(minEpisodes))
+        workflows.push(analysis)
+      }
+
+      // Sort by most recent first
+      workflows.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+
+      // Get current state analysis - episodes with status 'scored'
+      const { data: scoredEpisodes, error: scoredError } = await supabase
+        .from('episodes')
+        .select('id, title, scores, published_date')
+        .eq('status', 'scored')
+        .order('published_date', { ascending: false })
+
+      if (scoredError) throw scoredError
+
+      const episodesBelowThreshold = (scoredEpisodes || []).map((ep: any) => {
+        const scores = ep.scores || {}
+        const entries = Object.entries(scores) as [string, number][]
+        const highestEntry = entries.reduce((max, curr) =>
+          curr[1] > (max[1] || 0) ? curr : max, ['', 0] as [string, number])
+
+        return {
+          id: ep.id,
+          title: ep.title,
+          scores: scores,
+          highestScore: highestEntry[1],
+          highestTopic: highestEntry[0],
+          threshold: parseFloat(scoreThreshold),
+          meetsThreshold: highestEntry[1] >= parseFloat(scoreThreshold)
+        }
+      })
+
+      return {
+        workflows: workflows.slice(0, 5), // Last 5 workflows
+        currentState: {
+          scoredEpisodesWaiting: scoredEpisodes?.length || 0,
+          episodesBelowThreshold: episodesBelowThreshold,
+          scoreThreshold: parseFloat(scoreThreshold),
+          minEpisodesRequired: parseInt(minEpisodes)
+        },
+        analyzedAt: new Date().toISOString()
+      }
+    } catch (error) {
+      console.error('Failed to get workflow analysis:', error)
+      throw error
+    }
+  }
+
+  private analyzeWorkflowRun(
+    runId: string,
+    logs: PipelineLogRecord[],
+    topics: Array<{name: string, slug: string}>,
+    scoreThreshold: number,
+    minEpisodes: number
+  ) {
+    const sortedLogs = [...logs].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    )
+
+    const startedAt = sortedLogs[0]?.timestamp || new Date().toISOString()
+    const finishedAt = sortedLogs[sortedLogs.length - 1]?.timestamp || startedAt
+
+    // Count outcomes from log messages
+    let episodesDiscovered = 0
+    let episodesTranscribed = 0
+    let episodesScored = 0
+    let digestsGenerated = 0
+    let audioFilesCreated = 0
+    const topicsCovered: string[] = []
+    const noDigestReasons: Array<{
+      topic: string
+      reason: string
+      details: string
+      episodesFound?: number
+      minRequired?: number
+      threshold?: number
+    }> = []
+
+    // Parse logs for outcomes
+    for (const log of logs) {
+      const msg = log.message.toLowerCase()
+
+      // Discovery phase
+      if (msg.includes('found') && msg.includes('episode')) {
+        const match = log.message.match(/found (\d+)/i)
+        if (match) episodesDiscovered = Math.max(episodesDiscovered, parseInt(match[1]))
+      }
+
+      // Audio/transcription phase
+      if (msg.includes('transcribed') || msg.includes('transcription complete')) {
+        const match = log.message.match(/(\d+)/i)
+        if (match) episodesTranscribed = Math.max(episodesTranscribed, parseInt(match[1]))
+      }
+
+      // Scoring
+      if (msg.includes('scored') && !msg.includes('below')) {
+        const match = log.message.match(/(\d+)/i)
+        if (match) episodesScored = Math.max(episodesScored, parseInt(match[1]))
+      }
+
+      // Digest generation outcomes
+      if (msg.includes('generated digest') || msg.includes('✅ generated digest')) {
+        digestsGenerated++
+        // Extract topic name
+        for (const topic of topics) {
+          if (log.message.includes(topic.name)) {
+            if (!topicsCovered.includes(topic.name)) {
+              topicsCovered.push(topic.name)
+            }
+          }
+        }
+      }
+
+      // TTS/Audio generation
+      if (msg.includes('generated:') && msg.includes('mp3')) {
+        const match = log.message.match(/(\d+)\s*mp3/i)
+        if (match) audioFilesCreated = parseInt(match[1])
+      }
+
+      // Parse "no digest" reasons
+      if (msg.includes('insufficient episodes')) {
+        const topicMatch = log.message.match(/for ([^:]+):/i) || log.message.match(/for (.+?) digest/i)
+        const countMatch = log.message.match(/(\d+)\s*<\s*(\d+)/i)
+        if (topicMatch) {
+          noDigestReasons.push({
+            topic: topicMatch[1].trim(),
+            reason: 'insufficient_episodes',
+            details: countMatch ? `${countMatch[1]} episodes found, ${countMatch[2]} required` : 'Not enough episodes',
+            episodesFound: countMatch ? parseInt(countMatch[1]) : undefined,
+            minRequired: countMatch ? parseInt(countMatch[2]) : minEpisodes
+          })
+        }
+      }
+
+      if (msg.includes('no qualifying episodes') || msg.includes('no episodes scored')) {
+        const topicMatch = log.message.match(/for ([^(]+)/i) || log.message.match(/topic:\s*([^)]+)/i)
+        if (topicMatch) {
+          noDigestReasons.push({
+            topic: topicMatch[1].trim(),
+            reason: 'scores_below_threshold',
+            details: `No episodes scored ≥${scoreThreshold}`,
+            threshold: scoreThreshold
+          })
+        }
+      }
+
+      if (msg.includes('already exists') || msg.includes('returning existing digest')) {
+        const topicMatch = log.message.match(/for ([^(]+)/i) || log.message.match(/topic:\s*([^)]+)/i)
+        if (topicMatch) {
+          // This is not really a "no digest reason" - it means a digest already existed
+          // Only add if there wasn't also a generation
+          const topicName = topicMatch[1].trim()
+          if (!topicsCovered.includes(topicName)) {
+            noDigestReasons.push({
+              topic: topicName,
+              reason: 'already_digested',
+              details: 'Digest already exists for this date'
+            })
+          }
+        }
+      }
+    }
+
+    // Determine overall status
+    const hasErrors = logs.some(l => ['ERROR', 'CRITICAL'].includes(l.level))
+    const hasWarnings = logs.some(l => l.level === 'WARNING')
+
+    let status: 'success' | 'failure' | 'partial' | 'no_output' = 'success'
+    if (hasErrors) {
+      status = 'failure'
+    } else if (digestsGenerated === 0 && audioFilesCreated === 0) {
+      status = 'no_output'
+    } else if (hasWarnings || noDigestReasons.length > 0) {
+      status = 'partial'
+    }
+
+    // Generate summary message
+    let summary = ''
+    if (status === 'failure') {
+      summary = 'Workflow failed with errors. Check logs for details.'
+    } else if (digestsGenerated > 0 && audioFilesCreated > 0) {
+      summary = `Generated ${digestsGenerated} digest(s) and ${audioFilesCreated} audio file(s) for: ${topicsCovered.join(', ')}`
+    } else if (digestsGenerated > 0) {
+      summary = `Generated ${digestsGenerated} digest script(s) but no audio files were created.`
+    } else if (noDigestReasons.length > 0) {
+      const reasonSummary = noDigestReasons.map(r => `${r.topic}: ${r.details}`).join('; ')
+      summary = `No digests generated. ${reasonSummary}`
+    } else {
+      summary = 'Workflow completed but no new content was generated.'
+    }
+
+    return {
+      workflowId: runId,
+      startedAt,
+      finishedAt,
+      durationSeconds: (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000,
+      status,
+      episodesDiscovered,
+      episodesTranscribed,
+      episodesScored,
+      digestsGenerated,
+      audioFilesCreated,
+      topicsCovered,
+      noDigestReasons,
+      summary,
+      errorCount: logs.filter(l => ['ERROR', 'CRITICAL'].includes(l.level)).length,
+      warningCount: logs.filter(l => l.level === 'WARNING').length
+    }
+  }
+
+  async getScoredEpisodesWithScores() {
+    try {
+      const { data, error } = await supabase
+        .from('episodes')
+        .select('id, title, scores, published_date, status')
+        .eq('status', 'scored')
+        .order('published_date', { ascending: false })
+        .limit(20)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get scored episodes:', error)
+      return []
+    }
+  }
 }

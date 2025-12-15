@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
+import { WorkflowAnalysis } from '@/components/WorkflowAnalysis'
 import { PipelineStatus } from '@/components/PipelineStatus'
 import { EnhancedRecentActivity } from '@/components/EnhancedRecentActivity'
 import { TranscriptAnalytics } from '@/components/TranscriptAnalytics'
@@ -68,6 +69,11 @@ export default function DashboardPage() {
           Overview of your podcast digest system
         </p>
       </div>
+
+      {/* Workflow Analysis - Full Width at Top */}
+      <Suspense fallback={<div className="card animate-pulse h-48" />}>
+        <WorkflowAnalysis />
+      </Suspense>
 
       {/* Main Dashboard Grid: Pipeline Status on Left, Everything Else Stacked on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
