@@ -651,18 +651,24 @@ export class DatabaseClient {
         limit = 100
       } = filters
 
+      // Build query with filter FIRST, then order and limit
+      // This ensures the filter is properly applied before pagination
       let query = supabase
         .from('episodes')
         .select('*')
-        .order(sortBy, { ascending: sortDir === 'asc' })
-        .limit(limit)
 
-      // Apply status filter
+      // Apply status filter BEFORE order/limit
       if (status) {
         query = query.eq('status', status)
       }
 
+      // Now apply order and limit
+      query = query.order(sortBy, { ascending: sortDir === 'asc' }).limit(limit)
+
       const { data, error } = await query
+
+      // Debug logging
+      console.log(`[Supabase] Query for status='${status}' returned ${data?.length || 0} episodes`)
 
       if (error) throw error
 
