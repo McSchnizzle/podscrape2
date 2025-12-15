@@ -86,13 +86,17 @@ export default function EpisodesPage() {
   };
 
   const handleApplyFilters = () => {
+    // Debug: Log when Apply is clicked
+    console.log('[Episodes] Apply clicked, pendingFilters:', JSON.stringify(pendingFilters));
     // Use pendingFilters directly to avoid React state timing issues
     setFilters(pendingFilters);
     loadEpisodesWithFilters(pendingFilters);
   };
 
   const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
+    console.log('[Episodes] loadEpisodesWithFilters called with filterOverride:', JSON.stringify(filterOverride));
     const activeFilters = filterOverride || filters;
+    console.log('[Episodes] activeFilters:', JSON.stringify(activeFilters));
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -103,7 +107,7 @@ export default function EpisodesPage() {
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
 
-      console.log('Fetching episodes with params:', params.toString());
+      console.log('[Episodes] Fetching episodes with params:', params.toString());
 
       const response = await fetch(`/api/episodes?${params}`, {
         cache: 'no-store',
