@@ -86,6 +86,8 @@ export default function EpisodesPage() {
   };
 
   const handleApplyFilters = () => {
+    // Debug: Alert to test if function is called
+    alert('Apply clicked! Status: ' + pendingFilters.status);
     // Debug: Log when Apply is clicked
     console.log('[Episodes] Apply clicked, pendingFilters:', JSON.stringify(pendingFilters));
     // Use pendingFilters directly to avoid React state timing issues
