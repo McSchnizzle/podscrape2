@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from 'react'
 import { WorkflowAnalysis } from '@/components/WorkflowAnalysis'
-import { PipelineStatus } from '@/components/PipelineStatus'
 import { EnhancedRecentActivity } from '@/components/EnhancedRecentActivity'
 import { TranscriptAnalytics } from '@/components/TranscriptAnalytics'
 import { PerformanceInsights } from '@/components/PerformanceInsights'
@@ -76,14 +75,9 @@ export default function DashboardPage() {
         <WorkflowAnalysis />
       </Suspense>
 
-      {/* Main Dashboard Grid: Pipeline Status on Left, Everything Else Stacked on Right */}
+      {/* Main Dashboard Grid: Two columns with analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Pipeline Status */}
-        <Suspense fallback={<div className="card animate-pulse h-64" />}>
-          <PipelineStatus />
-        </Suspense>
-
-        {/* Right Column: Recent Activity, Transcript Analytics, Performance Insights */}
+        {/* Left Column: Recent Activity, Transcript Analytics */}
         <div className="space-y-6">
           <Suspense fallback={<div className="card animate-pulse h-64" />}>
             <EnhancedRecentActivity />
@@ -92,7 +86,10 @@ export default function DashboardPage() {
           <Suspense fallback={<div className="card animate-pulse h-64" />}>
             <TranscriptAnalytics />
           </Suspense>
+        </div>
 
+        {/* Right Column: Performance Insights, Error Analytics */}
+        <div className="space-y-6">
           <Suspense fallback={<div className="card animate-pulse h-64" />}>
             <PerformanceInsights />
           </Suspense>

@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     DateTime,
     Date,
@@ -303,7 +304,7 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id = Column(String(64), primary_key=True)
-    workflow_run_id = Column(Integer)
+    workflow_run_id = Column(BigInteger)
     workflow_name = Column(String(255))
     trigger = Column(String(128))
     status = Column(String(64))
@@ -412,7 +413,7 @@ class WorkflowError(Base):
     error_date = Column(Date, nullable=False)
     occurred_at = Column(DateTime(timezone=True), nullable=False)
     run_id = Column(String(128), nullable=False)
-    workflow_run_id = Column(Integer)
+    workflow_run_id = Column(BigInteger)
     error_category = Column(String(64), nullable=False)
     phase = Column(String(64), nullable=False)
     severity = Column(String(16), nullable=False, default='error')
