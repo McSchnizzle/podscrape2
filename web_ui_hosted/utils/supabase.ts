@@ -1330,30 +1330,76 @@ export class DatabaseClient {
       }
     }
 
-    // Determine overall status
-    const hasErrors = logs.some(l => ['ERROR', 'CRITICAL'].includes(l.level))
-    const hasWarnings = logs.some(l => l.level === 'WARNING')
+    // Categorize errors - some are critical, some are minor
+    const errorLogs = logs.filter(l => ['ERROR', 'CRITICAL'].includes(l.level))
+    const warningLogs = logs.filter(l => l.level === 'WARNING')
 
+    // Minor errors: feed fetch failures (403, 404, timeout) - don't fail the whole workflow
+    const minorErrorPatterns = [
+      /failed to fetch feed/i,
+      /403.*forbidden/i,
+      /404.*not found/i,
+      /timeout/i,
+      /connection.*refused/i
+    ]
+
+    // Critical errors: TTS failures, scoring failures, pipeline crashes
+    const criticalErrors = errorLogs.filter(log =>
+      !minorErrorPatterns.some(pattern => pattern.test(log.message))
+    )
+    const minorErrors = errorLogs.filter(log =>
+      minorErrorPatterns.some(pattern => pattern.test(log.message))
+    )
+
+    // Determine overall status based on critical errors and output
     let status: 'success' | 'failure' | 'partial' | 'no_output' = 'success'
-    if (hasErrors) {
-      status = 'failure'
+
+    if (criticalErrors.length > 0) {
+      // Critical errors - but if we still produced output, it's partial success
+      if (digestsGenerated > 0 || audioFilesCreated > 0) {
+        status = 'partial'
+      } else {
+        status = 'failure'
+      }
     } else if (digestsGenerated === 0 && audioFilesCreated === 0) {
       status = 'no_output'
-    } else if (hasWarnings || noDigestReasons.length > 0) {
+    } else if (warningLogs.length > 0 || minorErrors.length > 0 || noDigestReasons.length > 0) {
       status = 'partial'
     }
 
-    // Generate summary message
+    // Generate summary message with actual error details
     let summary = ''
+
+    // Build error summary for display
+    const errorSummaries: string[] = []
+    if (criticalErrors.length > 0) {
+      // Get unique error messages (truncated)
+      const uniqueErrors = [...new Set(criticalErrors.map(e => {
+        const msg = e.message.replace(/^[\s❌✗]+/, '').trim()
+        return msg.length > 80 ? msg.substring(0, 77) + '...' : msg
+      }))]
+      errorSummaries.push(...uniqueErrors.slice(0, 3))
+    }
+
     if (status === 'failure') {
-      summary = 'Workflow failed with errors. Check logs for details.'
+      summary = errorSummaries.length > 0
+        ? `Failed: ${errorSummaries.join(' | ')}`
+        : 'Workflow failed with errors.'
     } else if (digestsGenerated > 0 && audioFilesCreated > 0) {
       summary = `Generated ${digestsGenerated} digest(s) and ${audioFilesCreated} audio file(s) for: ${topicsCovered.join(', ')}`
+      if (errorSummaries.length > 0) {
+        summary += ` (with errors: ${errorSummaries[0]})`
+      }
     } else if (digestsGenerated > 0) {
       summary = `Generated ${digestsGenerated} digest script(s) but no audio files were created.`
+      if (errorSummaries.length > 0) {
+        summary += ` Error: ${errorSummaries[0]}`
+      }
     } else if (noDigestReasons.length > 0) {
       const reasonSummary = noDigestReasons.map(r => `${r.topic}: ${r.details}`).join('; ')
       summary = `No digests generated. ${reasonSummary}`
+    } else if (minorErrors.length > 0) {
+      summary = `Completed with ${minorErrors.length} minor error(s) (feed issues).`
     } else {
       summary = 'Workflow completed but no new content was generated.'
     }
@@ -1372,8 +1418,8 @@ export class DatabaseClient {
       topicsCovered,
       noDigestReasons,
       summary,
-      errorCount: logs.filter(l => ['ERROR', 'CRITICAL'].includes(l.level)).length,
-      warningCount: logs.filter(l => l.level === 'WARNING').length
+      errorCount: criticalErrors.length,
+      warningCount: warningLogs.length + minorErrors.length
     }
   }
 

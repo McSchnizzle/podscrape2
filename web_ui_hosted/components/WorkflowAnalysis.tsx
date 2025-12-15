@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface NoDigestReason {
   topic: string
@@ -113,25 +113,35 @@ export function WorkflowAnalysis() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const hasDataRef = useRef(false)
 
   useEffect(() => {
-    fetchAnalysis()
-    const interval = setInterval(fetchAnalysis, 60000) // Refresh every minute
+    fetchAnalysis(true)
+    const interval = setInterval(() => fetchAnalysis(false), 60000) // Refresh every minute
     return () => clearInterval(interval)
   }, [])
 
-  const fetchAnalysis = async () => {
+  const fetchAnalysis = async (isInitialLoad: boolean) => {
     try {
       const response = await fetch('/api/workflow/analysis?hours=48')
       if (!response.ok) throw new Error('Failed to fetch')
       const result = await response.json()
       setData(result)
       setError(null)
+      setLastUpdated(new Date())
+      hasDataRef.current = true
     } catch (err) {
       console.error('Failed to fetch workflow analysis:', err)
-      setError('Failed to load workflow analysis')
+      // Only set error if we don't have existing data (preserve data during refresh failures)
+      if (!hasDataRef.current) {
+        setError('Failed to load workflow analysis')
+      }
+      // Don't overwrite good data with error state during refresh
     } finally {
-      setLoading(false)
+      if (isInitialLoad) {
+        setLoading(false)
+      }
     }
   }
 
