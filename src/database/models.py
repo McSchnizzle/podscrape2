@@ -23,6 +23,7 @@ from .sqlalchemy_models import (
     DigestEpisodeLink as DigestEpisodeLinkModel,
     PipelineRun as PipelineRunModel,
     PipelineLog as PipelineLogModel,
+    WorkflowError as WorkflowErrorModel,
 )
 from src.config.env import require_database_url
 
@@ -168,6 +169,32 @@ class PipelineLog:
     message: str = ""
     extra: Optional[Dict[str, Any]] = None
     id: Optional[int] = None
+
+
+@dataclass
+class WorkflowError:
+    """Persistent error record for workflow pattern analysis"""
+    error_date: date
+    occurred_at: datetime
+    run_id: str
+    error_category: str
+    phase: str
+    error_message: str
+    workflow_run_id: Optional[int] = None
+    severity: str = 'error'
+    feed_id: Optional[int] = None
+    feed_url: Optional[str] = None
+    error_code: Optional[str] = None
+    error_summary: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+    source_log_id: Optional[int] = None
+    resolved: bool = False
+    resolved_at: Optional[datetime] = None
+    resolution_notes: Optional[str] = None
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 
 class DatabaseManager:
     """
@@ -1351,6 +1378,255 @@ class PipelineLogRepository:
             extra=model.extra,
         )
 
+
+class WorkflowErrorRepository:
+    """Repository for persistent workflow error tracking and pattern analysis."""
+
+    def __init__(self, db_manager: DatabaseManager):
+        self.db = db_manager
+
+    def create(self, error: WorkflowError) -> int:
+        """Create a single workflow error record and return ID."""
+        with self.db.get_session() as session:
+            try:
+                model = WorkflowErrorModel(
+                    error_date=error.error_date,
+                    occurred_at=error.occurred_at,
+                    run_id=error.run_id,
+                    workflow_run_id=error.workflow_run_id,
+                    error_category=error.error_category,
+                    phase=error.phase,
+                    severity=error.severity,
+                    feed_id=error.feed_id,
+                    feed_url=error.feed_url,
+                    error_code=error.error_code,
+                    error_message=error.error_message,
+                    error_summary=error.error_summary,
+                    extra=error.extra,
+                    source_log_id=error.source_log_id,
+                    resolved=error.resolved,
+                    resolved_at=error.resolved_at,
+                    resolution_notes=error.resolution_notes,
+                )
+                session.add(model)
+                session.commit()
+                session.refresh(model)
+                return model.id
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to create workflow error: {exc}")
+                raise
+
+    def bulk_insert(self, errors: List[WorkflowError]) -> int:
+        """Bulk insert workflow errors. Returns count of inserted records."""
+        if not errors:
+            return 0
+        with self.db.get_session() as session:
+            try:
+                models = [
+                    WorkflowErrorModel(
+                        error_date=e.error_date,
+                        occurred_at=e.occurred_at,
+                        run_id=e.run_id,
+                        workflow_run_id=e.workflow_run_id,
+                        error_category=e.error_category,
+                        phase=e.phase,
+                        severity=e.severity,
+                        feed_id=e.feed_id,
+                        feed_url=e.feed_url,
+                        error_code=e.error_code,
+                        error_message=e.error_message,
+                        error_summary=e.error_summary,
+                        extra=e.extra,
+                        source_log_id=e.source_log_id,
+                        resolved=e.resolved,
+                        resolved_at=e.resolved_at,
+                        resolution_notes=e.resolution_notes,
+                    )
+                    for e in errors
+                ]
+                session.bulk_save_objects(models)
+                session.commit()
+                return len(models)
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to bulk insert workflow errors: {exc}")
+                raise
+
+    def get_by_date_range(self, start_date: date, end_date: date,
+                          category: Optional[str] = None,
+                          phase: Optional[str] = None,
+                          feed_id: Optional[int] = None,
+                          resolved: Optional[bool] = None) -> List[WorkflowError]:
+        """Get errors within a date range with optional filters."""
+        with self.db.get_session() as session:
+            query = session.query(WorkflowErrorModel).filter(
+                WorkflowErrorModel.error_date >= start_date,
+                WorkflowErrorModel.error_date <= end_date
+            )
+            if category:
+                query = query.filter(WorkflowErrorModel.error_category == category)
+            if phase:
+                query = query.filter(WorkflowErrorModel.phase == phase)
+            if feed_id is not None:
+                query = query.filter(WorkflowErrorModel.feed_id == feed_id)
+            if resolved is not None:
+                query = query.filter(WorkflowErrorModel.resolved == resolved)
+
+            models = query.order_by(WorkflowErrorModel.occurred_at.desc()).all()
+            return [self._model_to_error(m) for m in models]
+
+    def get_error_counts_by_category(self, start_date: date, end_date: date) -> Dict[str, int]:
+        """Get error counts grouped by category for a date range."""
+        with self.db.get_session() as session:
+            results = session.query(
+                WorkflowErrorModel.error_category,
+                func.count(WorkflowErrorModel.id)
+            ).filter(
+                WorkflowErrorModel.error_date >= start_date,
+                WorkflowErrorModel.error_date <= end_date
+            ).group_by(WorkflowErrorModel.error_category).all()
+
+            return {category: count for category, count in results}
+
+    def get_error_counts_by_phase(self, start_date: date, end_date: date) -> Dict[str, int]:
+        """Get error counts grouped by phase for a date range."""
+        with self.db.get_session() as session:
+            results = session.query(
+                WorkflowErrorModel.phase,
+                func.count(WorkflowErrorModel.id)
+            ).filter(
+                WorkflowErrorModel.error_date >= start_date,
+                WorkflowErrorModel.error_date <= end_date
+            ).group_by(WorkflowErrorModel.phase).all()
+
+            return {phase: count for phase, count in results}
+
+    def get_feed_error_frequency(self, days_back: int = 30, min_errors: int = 1) -> List[Dict[str, Any]]:
+        """Get feeds ranked by error frequency in the last N days."""
+        start_date = date.today() - timedelta(days=days_back)
+        with self.db.get_session() as session:
+            results = session.query(
+                WorkflowErrorModel.feed_id,
+                WorkflowErrorModel.feed_url,
+                func.count(WorkflowErrorModel.id).label('error_count'),
+                func.max(WorkflowErrorModel.occurred_at).label('last_error')
+            ).filter(
+                WorkflowErrorModel.error_date >= start_date,
+                WorkflowErrorModel.feed_id.isnot(None)
+            ).group_by(
+                WorkflowErrorModel.feed_id,
+                WorkflowErrorModel.feed_url
+            ).having(
+                func.count(WorkflowErrorModel.id) >= min_errors
+            ).order_by(
+                func.count(WorkflowErrorModel.id).desc()
+            ).all()
+
+            return [
+                {
+                    'feed_id': r.feed_id,
+                    'feed_url': r.feed_url,
+                    'error_count': r.error_count,
+                    'last_error': r.last_error
+                }
+                for r in results
+            ]
+
+    def get_by_run_id(self, run_id: str) -> List[WorkflowError]:
+        """Get all errors for a specific workflow run."""
+        with self.db.get_session() as session:
+            models = session.query(WorkflowErrorModel).filter(
+                WorkflowErrorModel.run_id == run_id
+            ).order_by(WorkflowErrorModel.occurred_at.asc()).all()
+            return [self._model_to_error(m) for m in models]
+
+    def mark_resolved(self, error_id: int, resolution_notes: Optional[str] = None) -> bool:
+        """Mark an error as resolved."""
+        with self.db.get_session() as session:
+            try:
+                model = session.query(WorkflowErrorModel).filter(
+                    WorkflowErrorModel.id == error_id
+                ).first()
+                if not model:
+                    return False
+                model.resolved = True
+                model.resolved_at = datetime.now(timezone.utc)
+                model.resolution_notes = resolution_notes
+                model.updated_at = datetime.now(timezone.utc)
+                session.commit()
+                return True
+            except SQLAlchemyError as exc:
+                session.rollback()
+                logger.error(f"Failed to mark error {error_id} as resolved: {exc}")
+                raise
+
+    def get_unresolved_errors(self, severity: Optional[str] = None,
+                               limit: int = 100) -> List[WorkflowError]:
+        """Get unresolved errors, optionally filtered by severity."""
+        with self.db.get_session() as session:
+            query = session.query(WorkflowErrorModel).filter(
+                WorkflowErrorModel.resolved == False  # noqa: E712
+            )
+            if severity:
+                query = query.filter(WorkflowErrorModel.severity == severity)
+            models = query.order_by(
+                WorkflowErrorModel.occurred_at.desc()
+            ).limit(limit).all()
+            return [self._model_to_error(m) for m in models]
+
+    def get_error_trend(self, days_back: int = 14) -> List[Dict[str, Any]]:
+        """Get daily error counts for trend analysis."""
+        start_date = date.today() - timedelta(days=days_back)
+        with self.db.get_session() as session:
+            results = session.query(
+                WorkflowErrorModel.error_date,
+                WorkflowErrorModel.error_category,
+                func.count(WorkflowErrorModel.id).label('count')
+            ).filter(
+                WorkflowErrorModel.error_date >= start_date
+            ).group_by(
+                WorkflowErrorModel.error_date,
+                WorkflowErrorModel.error_category
+            ).order_by(
+                WorkflowErrorModel.error_date.asc()
+            ).all()
+
+            return [
+                {
+                    'date': r.error_date,
+                    'category': r.error_category,
+                    'count': r.count
+                }
+                for r in results
+            ]
+
+    def _model_to_error(self, model: WorkflowErrorModel) -> WorkflowError:
+        """Convert SQLAlchemy model to dataclass."""
+        return WorkflowError(
+            id=model.id,
+            error_date=model.error_date,
+            occurred_at=model.occurred_at,
+            run_id=model.run_id,
+            workflow_run_id=model.workflow_run_id,
+            error_category=model.error_category,
+            phase=model.phase,
+            severity=model.severity,
+            feed_id=model.feed_id,
+            feed_url=model.feed_url,
+            error_code=model.error_code,
+            error_message=model.error_message,
+            error_summary=model.error_summary,
+            extra=model.extra,
+            source_log_id=model.source_log_id,
+            resolved=model.resolved,
+            resolved_at=model.resolved_at,
+            resolution_notes=model.resolution_notes,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+
 def get_feed_repo(db_manager: DatabaseManager = None) -> FeedRepository:
     """Get feed repository"""
     if db_manager is None:
@@ -1396,3 +1672,10 @@ def get_pipeline_log_repo(db_manager: DatabaseManager = None) -> PipelineLogRepo
     if db_manager is None:
         db_manager = get_database_manager()
     return PipelineLogRepository(db_manager)
+
+
+def get_workflow_error_repo(db_manager: DatabaseManager = None) -> WorkflowErrorRepository:
+    """Get workflow error repository"""
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return WorkflowErrorRepository(db_manager)

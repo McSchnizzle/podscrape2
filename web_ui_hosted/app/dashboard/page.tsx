@@ -6,6 +6,7 @@ import { PipelineStatus } from '@/components/PipelineStatus'
 import { EnhancedRecentActivity } from '@/components/EnhancedRecentActivity'
 import { TranscriptAnalytics } from '@/components/TranscriptAnalytics'
 import { PerformanceInsights } from '@/components/PerformanceInsights'
+import { ErrorAnalytics } from '@/components/ErrorAnalytics'
 
 export default function DashboardPage() {
   const [pipelineLoading, setPipelineLoading] = useState(false)
@@ -94,6 +95,10 @@ export default function DashboardPage() {
 
           <Suspense fallback={<div className="card animate-pulse h-64" />}>
             <PerformanceInsights />
+          </Suspense>
+
+          <Suspense fallback={<div className="card animate-pulse h-64" />}>
+            <ErrorAnalytics />
           </Suspense>
         </div>
       </div>

@@ -402,3 +402,37 @@ class CommonAd(Base):
         Index('ix_common_ads_active', 'is_active'),
         Index('ix_common_ads_advertiser', 'advertiser_name'),
     )
+
+
+class WorkflowError(Base):
+    """Persistent error tracking for workflow pattern analysis"""
+    __tablename__ = "workflow_errors"
+
+    id = Column(Integer, primary_key=True)
+    error_date = Column(Date, nullable=False)
+    occurred_at = Column(DateTime(timezone=True), nullable=False)
+    run_id = Column(String(128), nullable=False)
+    workflow_run_id = Column(Integer)
+    error_category = Column(String(64), nullable=False)
+    phase = Column(String(64), nullable=False)
+    severity = Column(String(16), nullable=False, default='error')
+    feed_id = Column(Integer)
+    feed_url = Column(String(2048))
+    error_code = Column(String(32))
+    error_message = Column(Text, nullable=False)
+    error_summary = Column(String(512))
+    extra = Column(JSONB)
+    source_log_id = Column(Integer)
+    resolved = Column(Boolean, nullable=False, default=False)
+    resolved_at = Column(DateTime(timezone=True))
+    resolution_notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_workflow_errors_date", "error_date"),
+        Index("ix_workflow_errors_run_id", "run_id"),
+        Index("ix_workflow_errors_category", "error_category"),
+        Index("ix_workflow_errors_phase", "phase"),
+        Index("ix_workflow_errors_feed_id", "feed_id"),
+    )

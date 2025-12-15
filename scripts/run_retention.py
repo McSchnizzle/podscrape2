@@ -30,6 +30,7 @@ sys.path.insert(0, str(project_root))
 
 from src.publishing.retention_manager import create_retention_manager
 from src.config.web_config import WebConfigManager
+from src.error_tracking import extract_errors_after_workflow
 
 # Configure logging
 logging.basicConfig(
@@ -82,6 +83,19 @@ def run_retention_phase() -> dict:
             logger.warning(f"Retention cleanup completed with {len(cleanup_stats.errors)} error(s)")
             for err in cleanup_stats.errors:
                 logger.warning(f"  - {err}")
+
+        # Extract and persist errors from this workflow run
+        # This must happen before logs are cleaned up
+        logger.info("Extracting workflow errors for pattern analysis...")
+        try:
+            errors_saved = extract_errors_after_workflow()
+            if errors_saved > 0:
+                logger.info(f"  Saved {errors_saved} errors to workflow_errors table")
+            else:
+                logger.info("  No errors to persist")
+        except Exception as e:
+            logger.warning(f"  Failed to extract workflow errors: {e}")
+            # Don't fail the phase for error extraction failure
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()

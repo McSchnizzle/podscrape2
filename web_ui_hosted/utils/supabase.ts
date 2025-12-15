@@ -161,6 +161,29 @@ export interface WebSetting {
   updated_at: string
 }
 
+export interface WorkflowErrorRecord {
+  id: number
+  error_date: string
+  occurred_at: string
+  run_id: string
+  workflow_run_id?: number
+  error_category: string
+  phase: string
+  severity: string
+  feed_id?: number
+  feed_url?: string
+  error_code?: string
+  error_message: string
+  error_summary?: string
+  extra?: Record<string, any>
+  source_log_id?: number
+  resolved: boolean
+  resolved_at?: string
+  resolution_notes?: string
+  created_at: string
+  updated_at: string
+}
+
 // Singleton database client instance
 let databaseClientInstance: DatabaseClient | null = null
 
@@ -1515,6 +1538,142 @@ export class DatabaseClient {
     } catch (error) {
       console.error('Failed to get scored episodes:', error)
       return []
+    }
+  }
+
+  // ==================== ERROR ANALYTICS ====================
+
+  async getErrorAnalytics(daysBack: number = 30) {
+    try {
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+      const cutoffStr = cutoffDate.toISOString().split('T')[0]
+
+      // Get errors in date range
+      const { data: errors, error: errorsError } = await supabase
+        .from('workflow_errors')
+        .select('*')
+        .gte('error_date', cutoffStr)
+        .order('occurred_at', { ascending: false })
+
+      if (errorsError) throw errorsError
+
+      // Calculate summary statistics
+      const byCategory: Record<string, number> = {}
+      const byPhase: Record<string, number> = {}
+      const bySeverity: Record<string, number> = {}
+      const byDay: Record<string, number> = {}
+      const feedErrors: Record<string, { count: number, lastError: string, feedUrl?: string }> = {}
+
+      for (const err of errors || []) {
+        // By category
+        byCategory[err.error_category] = (byCategory[err.error_category] || 0) + 1
+
+        // By phase
+        byPhase[err.phase] = (byPhase[err.phase] || 0) + 1
+
+        // By severity
+        bySeverity[err.severity] = (bySeverity[err.severity] || 0) + 1
+
+        // By day
+        byDay[err.error_date] = (byDay[err.error_date] || 0) + 1
+
+        // Track problematic feeds
+        if (err.feed_id || err.feed_url) {
+          const feedKey = err.feed_id ? `id:${err.feed_id}` : err.feed_url || 'unknown'
+          if (!feedErrors[feedKey]) {
+            feedErrors[feedKey] = { count: 0, lastError: err.occurred_at, feedUrl: err.feed_url }
+          }
+          feedErrors[feedKey].count++
+          if (new Date(err.occurred_at) > new Date(feedErrors[feedKey].lastError)) {
+            feedErrors[feedKey].lastError = err.occurred_at
+          }
+        }
+      }
+
+      // Get feed titles for problematic feeds
+      const feedIds = Object.keys(feedErrors)
+        .filter(k => k.startsWith('id:'))
+        .map(k => parseInt(k.replace('id:', '')))
+
+      let feedTitles: Record<number, string> = {}
+      if (feedIds.length > 0) {
+        const { data: feeds } = await supabase
+          .from('feeds')
+          .select('id, title')
+          .in('id', feedIds)
+
+        if (feeds) {
+          feedTitles = Object.fromEntries(feeds.map((f: Feed) => [f.id, f.title]))
+        }
+      }
+
+      // Build problematic feeds list with titles
+      const problematicFeeds = Object.entries(feedErrors)
+        .map(([key, data]) => {
+          const feedId = key.startsWith('id:') ? parseInt(key.replace('id:', '')) : undefined
+          return {
+            feedId,
+            feedUrl: data.feedUrl,
+            title: feedId ? feedTitles[feedId] || 'Unknown Feed' : (data.feedUrl ? new URL(data.feedUrl).hostname : 'Unknown'),
+            errorCount: data.count,
+            lastError: data.lastError
+          }
+        })
+        .sort((a, b) => b.errorCount - a.errorCount)
+        .slice(0, 10)
+
+      // Calculate trend (compare last 7 days to previous 7 days)
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      const fourteenDaysAgo = new Date()
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+
+      const recentErrors = (errors || []).filter(
+        (e: WorkflowErrorRecord) => new Date(e.occurred_at) >= sevenDaysAgo
+      ).length
+      const previousErrors = (errors || []).filter(
+        (e: WorkflowErrorRecord) => new Date(e.occurred_at) >= fourteenDaysAgo && new Date(e.occurred_at) < sevenDaysAgo
+      ).length
+
+      const trendDirection = recentErrors > previousErrors ? 'up' : recentErrors < previousErrors ? 'down' : 'stable'
+      const trendPercent = previousErrors > 0
+        ? Math.round(((recentErrors - previousErrors) / previousErrors) * 100)
+        : recentErrors > 0 ? 100 : 0
+
+      // Get recent unresolved errors
+      const unresolvedErrors = (errors || [])
+        .filter((e: WorkflowErrorRecord) => !e.resolved)
+        .slice(0, 5)
+        .map((e: WorkflowErrorRecord) => ({
+          id: e.id,
+          category: e.error_category,
+          phase: e.phase,
+          severity: e.severity,
+          summary: e.error_summary || e.error_message.substring(0, 100),
+          occurredAt: e.occurred_at,
+          feedUrl: e.feed_url
+        }))
+
+      return {
+        totalErrors: errors?.length || 0,
+        byCategory,
+        byPhase,
+        bySeverity,
+        byDay,
+        problematicFeeds,
+        unresolvedErrors,
+        trend: {
+          direction: trendDirection,
+          percent: Math.abs(trendPercent),
+          recentCount: recentErrors,
+          previousCount: previousErrors
+        },
+        analyzedAt: new Date().toISOString()
+      }
+    } catch (error) {
+      console.error('Failed to get error analytics:', error)
+      throw error
     }
   }
 }
