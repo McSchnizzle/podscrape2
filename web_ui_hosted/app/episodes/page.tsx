@@ -78,12 +78,62 @@ export default function EpisodesPage() {
     loadEpisodes();
   }, []);
 
+  // Track pending filter changes that haven't been applied yet
+  const [pendingFilters, setPendingFilters] = useState(filters);
+
   const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const handleApplyFilters = () => {
-    loadEpisodes();
+    // Use pendingFilters directly to avoid React state timing issues
+    setFilters(pendingFilters);
+    loadEpisodesWithFilters(pendingFilters);
+  };
+
+  const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
+    const activeFilters = filterOverride || filters;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      Object.entries(activeFilters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+
+      // Add cache-busting timestamp to prevent stale data
+      params.append('_t', Date.now().toString());
+
+      console.log('Fetching episodes with params:', params.toString());
+
+      const response = await fetch(`/api/episodes?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('API returned:', data.episodes?.length, 'episodes');
+        setEpisodes(data.episodes || []);
+        setMessage(null);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to load episodes:', errorData);
+        setMessage({
+          type: 'error',
+          text: `Failed to load episodes: ${errorData.error || 'Unknown error'}`
+        });
+      }
+    } catch (error) {
+      console.error('Error loading episodes:', error);
+      setMessage({
+        type: 'error',
+        text: `Network error loading episodes: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEpisodeAction = async (episodeId: number, action: string) => {
@@ -140,7 +190,7 @@ export default function EpisodesPage() {
             <label className="block text-xs text-gray-600 mb-1">Search</label>
             <input
               type="text"
-              value={filters.q}
+              value={pendingFilters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
               placeholder="Search title or feed"
               className="border px-3 py-2 rounded w-full"
@@ -150,7 +200,7 @@ export default function EpisodesPage() {
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-600 mb-1">Status</label>
             <select
-              value={filters.status}
+              value={pendingFilters.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >
@@ -166,7 +216,7 @@ export default function EpisodesPage() {
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-600 mb-1">Sort By</label>
             <select
-              value={filters.sortBy}
+              value={pendingFilters.sortBy}
               onChange={(e) => handleFilterChange('sortBy', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >
@@ -181,7 +231,7 @@ export default function EpisodesPage() {
           <div className="md:col-span-1">
             <label className="block text-xs text-gray-600 mb-1">Dir</label>
             <select
-              value={filters.sortDir}
+              value={pendingFilters.sortDir}
               onChange={(e) => handleFilterChange('sortDir', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >

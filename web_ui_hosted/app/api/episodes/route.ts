@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const sortDir = searchParams.get('sortDir') || 'desc';
     const limit = parseInt(searchParams.get('limit') || '100');
 
-    console.log(`Episodes API request with filters:`, { q, status, sortBy, sortDir, limit });
+    console.log(`[Episodes API] Request filters:`, { q, status, sortBy, sortDir, limit });
 
     const db = DatabaseClient.getInstance();
 
@@ -24,6 +24,16 @@ export async function GET(request: NextRequest) {
       sortDir,
       limit
     });
+
+    // Log what we got back to debug filtering issues
+    if (status) {
+      const statusMismatch = episodes.filter((ep: Episode) => ep.status !== status);
+      if (statusMismatch.length > 0) {
+        console.error(`[Episodes API] BUG: Filter requested status='${status}' but got ${statusMismatch.length} episodes with different status:`,
+          statusMismatch.map((ep: Episode) => ({ id: ep.id, status: ep.status, title: ep.title?.substring(0, 40) }))
+        );
+      }
+    }
 
     // Process episodes for display
     const processedEpisodes = episodes.map((ep: Episode & { feeds?: { title: string } }) => {
