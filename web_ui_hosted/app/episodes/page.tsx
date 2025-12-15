@@ -31,6 +31,14 @@ export default function EpisodesPage() {
     sortBy: 'scored_at',
     sortDir: 'desc'
   });
+  // Track pending filter changes that haven't been applied yet
+  // IMPORTANT: This must be declared with other useState hooks (React rules of hooks)
+  const [pendingFilters, setPendingFilters] = useState({
+    q: '',
+    status: '',
+    sortBy: 'scored_at',
+    sortDir: 'desc'
+  });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const loadEpisodes = async () => {
@@ -78,27 +86,17 @@ export default function EpisodesPage() {
     loadEpisodes();
   }, []);
 
-  // Track pending filter changes that haven't been applied yet
-  const [pendingFilters, setPendingFilters] = useState(filters);
-
   const handleFilterChange = (key: string, value: string) => {
     setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const handleApplyFilters = () => {
-    // Debug: Alert to test if function is called
-    alert('Apply clicked! Status: ' + pendingFilters.status);
-    // Debug: Log when Apply is clicked
-    console.log('[Episodes] Apply clicked, pendingFilters:', JSON.stringify(pendingFilters));
-    // Use pendingFilters directly to avoid React state timing issues
     setFilters(pendingFilters);
     loadEpisodesWithFilters(pendingFilters);
   };
 
   const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
-    console.log('[Episodes] loadEpisodesWithFilters called with filterOverride:', JSON.stringify(filterOverride));
     const activeFilters = filterOverride || filters;
-    console.log('[Episodes] activeFilters:', JSON.stringify(activeFilters));
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -109,8 +107,6 @@ export default function EpisodesPage() {
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
 
-      console.log('[Episodes] Fetching episodes with params:', params.toString());
-
       const response = await fetch(`/api/episodes?${params}`, {
         cache: 'no-store',
         headers: {
@@ -120,7 +116,6 @@ export default function EpisodesPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        console.log('API returned:', data.episodes?.length, 'episodes');
         setEpisodes(data.episodes || []);
         setMessage(null);
       } else {
