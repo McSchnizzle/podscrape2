@@ -124,79 +124,116 @@ def parse_github_logs(log_content: str) -> List[Dict[str, Any]]:
     """
     entries = []
 
-    # Pattern for GitHub Actions log lines
-    # Format: YYYY-MM-DDTHH:MM:SS.sssZ [LEVEL] message
-    # Or: job_name\tYYYY-MM-DDTHH:MM:SS.sssZ message
-    timestamp_pattern = re.compile(
-        r'^(?:(\S+)\t)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(.*)$'
+    # GitHub Actions log format:
+    # Job Name\tStep Name\tTimestamp Message
+    # e.g.: Run Validated Pipeline\tUNKNOWN STEP\t2025-12-15T05:33:40.1348948Z 05:33:40 - ERROR - message
+    line_pattern = re.compile(
+        r'^([^\t]+)\t([^\t]+)\t(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(.*)$'
     )
 
-    # Error indicators in log messages
+    # Error indicators in log messages - match our Python logging format
+    # Our logs look like: "05:33:40 - ERROR -   ✗ Failed to fetch feed..."
     error_indicators = [
+        r' - ERROR - ',
+        r' - CRITICAL - ',
+        r' - FATAL - ',
         r'\[ERROR\]',
         r'\[CRITICAL\]',
-        r'\[FATAL\]',
         r'ERROR:',
         r'CRITICAL:',
-        r'FATAL:',
-        r'Error:',
-        r'error:',
-        r'Failed',
-        r'failed',
-        r'Exception',
-        r'Traceback',
-        r'\b4\d{2}\b.*?(Forbidden|Not Found|Error)',
-        r'\b5\d{2}\b.*?(Error|Internal)',
+        r'✗.*[Ff]ailed',
+        r'❌.*[Ff]ailed',
+        r'Failed to fetch feed',
+        r'Failed to download',
+        r'Failed to score',
+        r'Scoring failed',
+        r'Immediate scoring failed',
+        r'httpx\.HTTPStatusError',
+        r'403 Client Error',
+        r'404 Client Error',
+        r'400 Bad Request',
+        r'500 Server Error',
+        r'502 Bad Gateway',
+        r'503 Service',
+        r'504 Gateway',
+        r'rate limit',
+        r'RateLimitError',
+        r'invalid_request_error',
+        r'Error code: \d{3}',
+        r'##\[error\]',
     ]
     error_pattern = re.compile('|'.join(error_indicators), re.IGNORECASE)
 
+    # Lines to skip - not actual errors we want to track
+    skip_patterns = [
+        r'^Collecting\s+',           # pip install output
+        r'^Using cached\s+',         # pip cache
+        r'^Installing collected',    # pip install
+        r'^Successfully installed',  # pip success
+        r'^Traceback \(most recent', # Just the header, not useful alone
+        r'^File "/',                 # Just file path from traceback
+        r'^\s+raise\s+',             # raise statement from traceback
+        r' - INFO - .*❌ Failed:',   # INFO summary lines (not actual errors)
+        r' - INFO - \[\d+/\d+\] ❌', # INFO progress lines
+    ]
+    skip_pattern = re.compile('|'.join(skip_patterns))
+
     # Phase indicators
     phase_map = {
-        'discovery': ['discover', 'rss', 'feed'],
-        'audio': ['audio', 'download', 'transcri', 'whisper'],
-        'digest': ['digest', 'script', 'gpt', 'openai', 'scor'],
-        'tts': ['tts', 'elevenlabs', 'voice'],
+        'discovery': ['discover', 'rss', 'feed', 'checking'],
+        'audio': ['audio', 'download', 'transcri', 'whisper', 'chunk'],
+        'digest': ['digest', 'script', 'gpt', 'openai', 'scor', 'generation'],
+        'tts': ['tts', 'elevenlabs', 'voice', 'audio_generat'],
         'publishing': ['publish', 'github', 'release', 'upload'],
-        'retention': ['retention', 'cleanup', 'delete'],
+        'retention': ['retention', 'cleanup', 'delete', 'prun'],
     }
 
     current_phase = 'unknown'
 
     for line in log_content.split('\n'):
-        # Try to parse timestamp
-        match = timestamp_pattern.match(line)
+        # Try to parse the GitHub Actions log format
+        match = line_pattern.match(line)
         if match:
-            job_name = match.group(1) or ''
-            timestamp_str = match.group(2)
-            message = match.group(3)
+            job_name = match.group(1)
+            step_name = match.group(2)
+            timestamp_str = match.group(3)
+            message = match.group(4)
 
-            # Detect phase from job name or message
-            combined = (job_name + ' ' + message).lower()
+            # Detect phase from message content
+            msg_lower = message.lower()
             for phase, indicators in phase_map.items():
-                if any(ind in combined for ind in indicators):
+                if any(ind in msg_lower for ind in indicators):
                     current_phase = phase
                     break
 
-            # Check if this is an error
-            if error_pattern.search(message):
+            # Check if this is an error (and not a line we should skip)
+            if error_pattern.search(message) and not skip_pattern.search(message):
                 try:
                     timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                 except ValueError:
                     timestamp = datetime.now(timezone.utc)
 
-                # Determine level
+                # Determine level from our log format "HH:MM:SS - LEVEL - message"
                 level = 'ERROR'
-                if 'CRITICAL' in message or 'FATAL' in message:
+                if ' - CRITICAL - ' in message or ' - FATAL - ' in message:
                     level = 'CRITICAL'
-                elif 'WARNING' in message or 'warn' in message.lower():
+                elif ' - WARNING - ' in message:
                     level = 'WARNING'
+
+                # Extract the actual message content (after our log prefix)
+                # Format: "05:33:40 - ERROR -   ✗ Failed to fetch..."
+                clean_message = message
+                log_prefix_match = re.match(r'\d{2}:\d{2}:\d{2} - \w+ - \s*', message)
+                if log_prefix_match:
+                    clean_message = message[log_prefix_match.end():]
 
                 entries.append({
                     'timestamp': timestamp,
                     'level': level,
                     'phase': current_phase,
-                    'message': message,
+                    'message': clean_message.strip(),
                     'job_name': job_name,
+                    'step_name': step_name,
                 })
 
     return entries

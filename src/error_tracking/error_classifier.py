@@ -74,6 +74,14 @@ ERROR_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r'504\s*(Gateway Timeout)?',
         r'GPT.*?(error|failed)',
         r'model.*?(error|failed|unavailable)',
+        r'httpx\.HTTPStatusError',
+        r'Client error.*?Bad Request',
+        r'Error code: 4\d{2}',
+        r'invalid_request_error',
+        r'HTTP/1\.1\s+4\d{2}',
+        r'HTTP Response:.*4\d{2}',
+        r'HTTP Request:.*4\d{2}',
+        r'"4\d{2}\s+Bad Request"',
     ]),
 
     # Scoring errors
@@ -81,6 +89,8 @@ ERROR_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r'Scor(e|ing).*?(error|failed)',
         r'Failed to score',
         r'Content.*?scoring.*?(error|failed)',
+        r'Immediate scoring failed',
+        r'unsupported_value.*?reasoning',
     ]),
 
     # Script generation errors
@@ -98,6 +108,8 @@ ERROR_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r'Release.*?(error|failed)',
         r'Upload.*?(error|failed)',
         r'gh\s+.*?(error|failed)',
+        r'Failed to create GitHub Release',
+        r'GitHub Release.*?(error|failed)',
     ]),
 
     # Database errors
@@ -121,6 +133,8 @@ ERROR_PATTERNS: List[Tuple[str, str, List[str]]] = [
         r'MemoryError',
         r'OSError',
         r'IOError',
+        r'##\[error\]',  # GitHub Actions error marker
+        r'Process completed with exit code [1-9]',
     ]),
 ]
 
