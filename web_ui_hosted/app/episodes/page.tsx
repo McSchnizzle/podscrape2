@@ -250,11 +250,16 @@ export default function EpisodesPage() {
 
           <div className="md:col-span-2">
             <button
-              onClick={handleApplyFilters}
+              type="button"
+              onClick={(e) => {
+                console.log('[Episodes] Apply button onClick fired, loading:', loading, 'event:', e.type);
+                e.preventDefault();
+                handleApplyFilters();
+              }}
               disabled={loading}
               className="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 w-full disabled:opacity-50"
             >
-              Apply
+              {loading ? 'Loading...' : 'Apply'}
             </button>
           </div>
         </div>
