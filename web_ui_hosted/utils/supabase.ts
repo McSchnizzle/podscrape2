@@ -1166,16 +1166,16 @@ export class DatabaseClient {
       // Get all feeds for title lookup
       const { data: allFeeds } = await supabase
         .from('feeds')
-        .select('url, title')
+        .select('feed_url, title')
 
       // Create a map of feed URL patterns to titles
       const feedUrlToTitle = new Map<string, string>()
       if (allFeeds) {
         for (const feed of allFeeds) {
-          if (feed.url && feed.title) {
-            feedUrlToTitle.set(feed.url.toLowerCase(), feed.title)
+          if (feed.feed_url && feed.title) {
+            feedUrlToTitle.set(feed.feed_url.toLowerCase(), feed.title)
             try {
-              const hostname = new URL(feed.url).hostname.toLowerCase()
+              const hostname = new URL(feed.feed_url).hostname.toLowerCase()
               if (!feedUrlToTitle.has(hostname)) {
                 feedUrlToTitle.set(hostname, feed.title)
               }
