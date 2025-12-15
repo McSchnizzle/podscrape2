@@ -1374,10 +1374,11 @@ export class DatabaseClient {
     const errorSummaries: string[] = []
     if (criticalErrors.length > 0) {
       // Get unique error messages (truncated)
-      const uniqueErrors = [...new Set(criticalErrors.map(e => {
+      const errorMessages = criticalErrors.map(e => {
         const msg = e.message.replace(/^[\s❌✗]+/, '').trim()
         return msg.length > 80 ? msg.substring(0, 77) + '...' : msg
-      }))]
+      })
+      const uniqueErrors = Array.from(new Set(errorMessages))
       errorSummaries.push(...uniqueErrors.slice(0, 3))
     }
 
