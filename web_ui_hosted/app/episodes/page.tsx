@@ -87,16 +87,20 @@ export default function EpisodesPage() {
   }, []);
 
   const handleFilterChange = (key: string, value: string) => {
+    console.log('[Episodes] handleFilterChange:', key, '=', value);
     setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const handleApplyFilters = () => {
+    console.log('[Episodes] handleApplyFilters called, pendingFilters:', pendingFilters);
     setFilters(pendingFilters);
     loadEpisodesWithFilters(pendingFilters);
   };
 
   const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
+    console.log('[Episodes] loadEpisodesWithFilters called, filterOverride:', filterOverride);
     const activeFilters = filterOverride || filters;
+    console.log('[Episodes] activeFilters:', activeFilters);
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -107,6 +111,7 @@ export default function EpisodesPage() {
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
 
+      console.log('[Episodes] loadEpisodesWithFilters: Making API request to:', `/api/episodes?${params}`);
       const response = await fetch(`/api/episodes?${params}`, {
         cache: 'no-store',
         headers: {
@@ -114,13 +119,15 @@ export default function EpisodesPage() {
           'Pragma': 'no-cache'
         }
       });
+      console.log('[Episodes] loadEpisodesWithFilters: Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('[Episodes] loadEpisodesWithFilters: Got', data.episodes?.length, 'episodes');
         setEpisodes(data.episodes || []);
         setMessage(null);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to load episodes:', errorData);
+        console.error('[Episodes] loadEpisodesWithFilters: Failed to load episodes:', errorData);
         setMessage({
           type: 'error',
           text: `Failed to load episodes: ${errorData.error || 'Unknown error'}`
