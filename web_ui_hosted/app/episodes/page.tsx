@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Episode {
   id: number;
@@ -40,6 +40,9 @@ export default function EpisodesPage() {
     sortDir: 'desc'
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Track if this is the first render to avoid double-loading
+  const isFirstRender = useRef(true);
 
   const loadEpisodes = async () => {
     setLoading(true);
@@ -85,6 +88,19 @@ export default function EpisodesPage() {
   useEffect(() => {
     loadEpisodes();
   }, []);
+
+  // Auto-apply filters when dropdown values change (skip search field for debouncing)
+  useEffect(() => {
+    // Skip the first render (initial load handles it)
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    console.log('[Episodes] Auto-applying filters due to change:', pendingFilters);
+    setFilters(pendingFilters);
+    loadEpisodesWithFilters(pendingFilters);
+  }, [pendingFilters.status, pendingFilters.sortBy, pendingFilters.sortDir]);
 
   const handleFilterChange = (key: string, value: string) => {
     console.log('[Episodes] handleFilterChange:', key, '=', value);
