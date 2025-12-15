@@ -1351,6 +1351,39 @@ export class DatabaseClient {
       minorErrorPatterns.some(pattern => pattern.test(log.message))
     )
 
+    // Extract detailed feed error information
+    const feedErrors: Array<{url: string, error: string}> = []
+    for (const log of minorErrors) {
+      // Try to extract feed URL and error type
+      const urlMatch = log.message.match(/url:\s*(https?:\/\/[^\s]+)/i) ||
+                       log.message.match(/(https?:\/\/feeds[^\s]+)/i) ||
+                       log.message.match(/(https?:\/\/[^\s]+)/i)
+      const errorMatch = log.message.match(/(\d{3})\s*(Client Error|Server Error)?:?\s*(\w+)?/i)
+
+      if (urlMatch) {
+        const url = urlMatch[1]
+        // Extract just the domain for cleaner display
+        let domain = 'Unknown feed'
+        try {
+          domain = new URL(url).hostname.replace('www.', '')
+        } catch {}
+
+        let errorType = 'fetch failed'
+        if (errorMatch) {
+          errorType = `${errorMatch[1]} ${errorMatch[3] || ''}`
+        } else if (log.message.toLowerCase().includes('timeout')) {
+          errorType = 'timeout'
+        } else if (log.message.toLowerCase().includes('connection')) {
+          errorType = 'connection refused'
+        }
+
+        // Avoid duplicates
+        if (!feedErrors.some(e => e.url === domain)) {
+          feedErrors.push({ url: domain, error: errorType.trim() })
+        }
+      }
+    }
+
     // Determine overall status based on critical errors and output
     let status: 'success' | 'failure' | 'partial' | 'no_output' = 'success'
 
@@ -1400,9 +1433,26 @@ export class DatabaseClient {
       const reasonSummary = noDigestReasons.map(r => `${r.topic}: ${r.details}`).join('; ')
       summary = `No digests generated. ${reasonSummary}`
     } else if (minorErrors.length > 0) {
-      summary = `Completed with ${minorErrors.length} minor error(s) (feed issues).`
+      // Include feed error details
+      const feedErrorSummary = feedErrors.length > 0
+        ? feedErrors.map(f => `${f.url} (${f.error})`).join(', ')
+        : 'feed issues'
+      summary = `Completed with ${minorErrors.length} feed error(s): ${feedErrorSummary}`
     } else {
       summary = 'Workflow completed but no new content was generated.'
+    }
+
+    // If no output and no digest reasons captured, add explanation for each topic
+    if (status === 'no_output' && noDigestReasons.length === 0 && topics.length > 0) {
+      for (const topic of topics) {
+        if (!noDigestReasons.some(r => r.topic === topic.name)) {
+          noDigestReasons.push({
+            topic: topic.name,
+            reason: 'no_new_episodes',
+            details: 'No new qualifying episodes found'
+          })
+        }
+      }
     }
 
     return {
@@ -1418,6 +1468,7 @@ export class DatabaseClient {
       audioFilesCreated,
       topicsCovered,
       noDigestReasons,
+      feedErrors,
       summary,
       errorCount: criticalErrors.length,
       warningCount: warningLogs.length + minorErrors.length

@@ -11,6 +11,11 @@ interface NoDigestReason {
   threshold?: number
 }
 
+interface FeedError {
+  url: string
+  error: string
+}
+
 interface WorkflowRun {
   workflowId: string
   startedAt: string
@@ -24,6 +29,7 @@ interface WorkflowRun {
   audioFilesCreated: number
   topicsCovered: string[]
   noDigestReasons: NoDigestReason[]
+  feedErrors: FeedError[]
   summary: string
   errorCount: number
   warningCount: number
@@ -240,6 +246,22 @@ export function WorkflowAnalysis() {
                     <span className="font-medium text-gray-700">{reason.topic}:</span>{' '}
                     <span className="text-gray-600">{reason.details}</span>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Feed Errors */}
+        {latestWorkflow.feedErrors && latestWorkflow.feedErrors.length > 0 && (
+          <div className="border-t border-gray-200 pt-3 mt-3">
+            <div className="text-xs font-medium text-amber-700 mb-2">Feed Issues</div>
+            <div className="space-y-1">
+              {latestWorkflow.feedErrors.map((feedError, idx) => (
+                <div key={idx} className="flex items-center space-x-2 text-sm">
+                  <span className="text-amber-400">⚠</span>
+                  <span className="text-gray-600 font-mono text-xs">{feedError.url}</span>
+                  <span className="text-amber-600 text-xs">({feedError.error})</span>
                 </div>
               ))}
             </div>
