@@ -107,12 +107,6 @@ export default function EpisodesPage() {
     setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleApplyFilters = () => {
-    console.log('[Episodes] handleApplyFilters called, pendingFilters:', pendingFilters);
-    setFilters(pendingFilters);
-    loadEpisodesWithFilters(pendingFilters);
-  };
-
   const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
     console.log('[Episodes] loadEpisodesWithFilters called, filterOverride:', filterOverride);
     const activeFilters = filterOverride || filters;
@@ -209,13 +203,19 @@ export default function EpisodesPage() {
         )}
 
         {/* Filters */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-10 gap-2 items-end">
           <div className="md:col-span-5">
-            <label className="block text-xs text-gray-600 mb-1">Search</label>
+            <label className="block text-xs text-gray-600 mb-1">Search (press Enter)</label>
             <input
               type="text"
               value={pendingFilters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setFilters(prev => ({ ...prev, q: pendingFilters.q }));
+                  loadEpisodesWithFilters({ ...pendingFilters });
+                }
+              }}
               placeholder="Search title or feed"
               className="border px-3 py-2 rounded w-full"
             />
@@ -262,21 +262,6 @@ export default function EpisodesPage() {
               <option value="desc">Desc</option>
               <option value="asc">Asc</option>
             </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <button
-              type="button"
-              onClick={(e) => {
-                console.log('[Episodes] Apply button onClick fired, loading:', loading, 'event:', e.type);
-                e.preventDefault();
-                handleApplyFilters();
-              }}
-              disabled={loading}
-              className="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 w-full disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : 'Apply'}
-            </button>
           </div>
         </div>
 
