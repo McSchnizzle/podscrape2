@@ -1163,10 +1163,31 @@ export class DatabaseClient {
 
       if (topicsError) throw topicsError
 
+      // Get all feeds for title lookup
+      const { data: allFeeds } = await supabase
+        .from('feeds')
+        .select('url, title')
+
+      // Create a map of feed URL patterns to titles
+      const feedUrlToTitle = new Map<string, string>()
+      if (allFeeds) {
+        for (const feed of allFeeds) {
+          if (feed.url && feed.title) {
+            feedUrlToTitle.set(feed.url.toLowerCase(), feed.title)
+            try {
+              const hostname = new URL(feed.url).hostname.toLowerCase()
+              if (!feedUrlToTitle.has(hostname)) {
+                feedUrlToTitle.set(hostname, feed.title)
+              }
+            } catch {}
+          }
+        }
+      }
+
       // Analyze each workflow run
       const workflows = []
       for (const [runId, logs] of Object.entries(runGroups)) {
-        const analysis = this.analyzeWorkflowRun(runId, logs, topics || [], parseFloat(scoreThreshold), parseInt(minEpisodes))
+        const analysis = this.analyzeWorkflowRun(runId, logs, topics || [], parseFloat(scoreThreshold), parseInt(minEpisodes), feedUrlToTitle)
         workflows.push(analysis)
       }
 
@@ -1220,7 +1241,8 @@ export class DatabaseClient {
     logs: PipelineLogRecord[],
     topics: Array<{name: string, slug: string}>,
     scoreThreshold: number,
-    minEpisodes: number
+    minEpisodes: number,
+    feedUrlToTitle: Map<string, string>
   ) {
     const sortedLogs = [...logs].sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -1351,8 +1373,8 @@ export class DatabaseClient {
       minorErrorPatterns.some(pattern => pattern.test(log.message))
     )
 
-    // Extract detailed feed error information
-    const feedErrors: Array<{url: string, error: string}> = []
+    // Extract detailed feed error information using passed-in feed title map
+    const feedErrors: Array<{title: string, url: string, error: string}> = []
     for (const log of minorErrors) {
       // Try to extract feed URL and error type
       const urlMatch = log.message.match(/url:\s*(https?:\/\/[^\s]+)/i) ||
@@ -1361,12 +1383,16 @@ export class DatabaseClient {
       const errorMatch = log.message.match(/(\d{3})\s*(Client Error|Server Error)?:?\s*(\w+)?/i)
 
       if (urlMatch) {
-        const url = urlMatch[1]
-        // Extract just the domain for cleaner display
-        let domain = 'Unknown feed'
+        const url = urlMatch[1].replace(/[,;)\]]+$/, '') // Clean trailing punctuation
+        let hostname = 'unknown'
         try {
-          domain = new URL(url).hostname.replace('www.', '')
+          hostname = new URL(url).hostname.toLowerCase().replace('www.', '')
         } catch {}
+
+        // Look up feed title - try full URL first, then hostname
+        let feedTitle = feedUrlToTitle.get(url.toLowerCase()) ||
+                        feedUrlToTitle.get(hostname) ||
+                        hostname // Fallback to hostname if no title found
 
         let errorType = 'fetch failed'
         if (errorMatch) {
@@ -1377,9 +1403,9 @@ export class DatabaseClient {
           errorType = 'connection refused'
         }
 
-        // Avoid duplicates
-        if (!feedErrors.some(e => e.url === domain)) {
-          feedErrors.push({ url: domain, error: errorType.trim() })
+        // Avoid duplicates (by title)
+        if (!feedErrors.some(e => e.title === feedTitle)) {
+          feedErrors.push({ title: feedTitle, url: hostname, error: errorType.trim() })
         }
       }
     }
@@ -1433,9 +1459,9 @@ export class DatabaseClient {
       const reasonSummary = noDigestReasons.map(r => `${r.topic}: ${r.details}`).join('; ')
       summary = `No digests generated. ${reasonSummary}`
     } else if (minorErrors.length > 0) {
-      // Include feed error details
+      // Include feed error details with titles
       const feedErrorSummary = feedErrors.length > 0
-        ? feedErrors.map(f => `${f.url} (${f.error})`).join(', ')
+        ? feedErrors.map(f => `${f.title} (${f.error})`).join(', ')
         : 'feed issues'
       summary = `Completed with ${minorErrors.length} feed error(s): ${feedErrorSummary}`
     } else {

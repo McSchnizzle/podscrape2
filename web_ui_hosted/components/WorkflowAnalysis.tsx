@@ -12,6 +12,7 @@ interface NoDigestReason {
 }
 
 interface FeedError {
+  title: string
   url: string
   error: string
 }
@@ -258,10 +259,12 @@ export function WorkflowAnalysis() {
             <div className="text-xs font-medium text-amber-700 mb-2">Feed Issues</div>
             <div className="space-y-1">
               {latestWorkflow.feedErrors.map((feedError, idx) => (
-                <div key={idx} className="flex items-center space-x-2 text-sm">
-                  <span className="text-amber-400">⚠</span>
-                  <span className="text-gray-600 font-mono text-xs">{feedError.url}</span>
-                  <span className="text-amber-600 text-xs">({feedError.error})</span>
+                <div key={idx} className="flex items-start space-x-2 text-sm">
+                  <span className="text-amber-400 mt-0.5">⚠</span>
+                  <div>
+                    <span className="text-gray-700 font-medium">{feedError.title}</span>
+                    <span className="text-amber-600 text-xs ml-2">({feedError.error})</span>
+                  </div>
                 </div>
               ))}
             </div>
