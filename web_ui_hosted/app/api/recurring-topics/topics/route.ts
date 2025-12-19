@@ -10,6 +10,66 @@ function getSupabaseClient() {
   )
 }
 
+// Create a new episode topic
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = getSupabaseClient()
+    const body = await request.json()
+
+    const {
+      episode_id,
+      topic_name,
+      topic_slug,
+      key_points,
+      digest_topic,
+      relevance_score,
+      topic_type,
+      novelty_score,
+      is_update,
+      parent_topic_id,
+      evolution_summary
+    } = body
+
+    if (!topic_name) {
+      return NextResponse.json({ error: 'topic_name is required' }, { status: 400 })
+    }
+
+    // Generate slug if not provided
+    const slug = topic_slug || topic_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+    const { data, error } = await supabase
+      .from('episode_topics')
+      .insert({
+        episode_id,
+        topic_name,
+        topic_slug: slug,
+        key_points: key_points || [],
+        digest_topic,
+        relevance_score: relevance_score || 0,
+        topic_type: topic_type || 'other',
+        novelty_score: novelty_score || 1.0,
+        is_update: is_update || false,
+        parent_topic_id,
+        evolution_summary,
+        first_seen_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating topic:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ topic: data }, { status: 201 })
+  } catch (error) {
+    console.error('Error in POST topics:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseClient()

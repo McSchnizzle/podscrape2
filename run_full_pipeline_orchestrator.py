@@ -456,18 +456,20 @@ class PipelineOrchestrator:
 
             audio_result = self.run_phase_script('scripts/run_audio.py', discovery_result)
 
-            if not audio_result.get('success'):
-                self.logger.error(f"Audio phase failed: {audio_result.get('error')}")
+            audio_failed = not audio_result.get('success')
+            if audio_failed:
+                self.logger.warning(f"⚠️  Audio phase failed: {audio_result.get('error')}")
+                self.logger.info("📝 Continuing to digest phase to process already-scored episodes...")
                 self._record_phase_event('audio', 'failed', {
                     'error': audio_result.get('error')
                 })
-                return self._log_failure(start_time, "Audio phase failed")
-
-            episodes_processed = audio_result.get('episodes_processed', 0)
-            self.logger.info(f"🎵 Episodes processed: {episodes_processed}")
-            self._record_phase_event('audio', 'completed', {
-                'episodes_processed': episodes_processed
-            })
+                episodes_processed = 0
+            else:
+                episodes_processed = audio_result.get('episodes_processed', 0)
+                self.logger.info(f"🎵 Episodes processed: {episodes_processed}")
+                self._record_phase_event('audio', 'completed', {
+                    'episodes_processed': episodes_processed
+                })
 
             if self.phase_stop == 'audio':
                 self.logger.info("Stopping after audio phase as requested")

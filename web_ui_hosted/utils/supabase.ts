@@ -1492,14 +1492,40 @@ export class DatabaseClient {
     }
 
     // If no output and no digest reasons captured, add explanation for each topic
-    if (status === 'no_output' && noDigestReasons.length === 0 && topics.length > 0) {
+    if ((status === 'no_output' || status === 'failure') && noDigestReasons.length === 0 && topics.length > 0) {
+      // Check if audio phase failed - this is the most common reason for no output
+      const audioPhaseError = criticalErrors.find(e =>
+        e.message.toLowerCase().includes('audio') ||
+        e.message.toLowerCase().includes('whisper') ||
+        e.message.toLowerCase().includes('transcri')
+      )
+
+      // Check if digest phase was skipped (didn't run due to earlier failure)
+      const digestPhaseSkipped = criticalErrors.length > 0 && !logs.some(l =>
+        l.message.toLowerCase().includes('digest phase') && l.message.toLowerCase().includes('completed')
+      )
+
       for (const topic of topics) {
         if (!noDigestReasons.some(r => r.topic === topic.name)) {
-          noDigestReasons.push({
-            topic: topic.name,
-            reason: 'no_new_episodes',
-            details: 'No new qualifying episodes found'
-          })
+          if (audioPhaseError) {
+            noDigestReasons.push({
+              topic: topic.name,
+              reason: 'audio_phase_failed',
+              details: 'Audio processing failed - digest generation may not have run'
+            })
+          } else if (digestPhaseSkipped && criticalErrors.length > 0) {
+            noDigestReasons.push({
+              topic: topic.name,
+              reason: 'pipeline_failed',
+              details: 'Pipeline failed before digest generation could run'
+            })
+          } else {
+            noDigestReasons.push({
+              topic: topic.name,
+              reason: 'no_new_episodes',
+              details: 'No new qualifying episodes found'
+            })
+          }
         }
       }
     }

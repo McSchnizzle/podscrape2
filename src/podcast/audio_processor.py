@@ -316,11 +316,12 @@ class AudioProcessor:
                 try:
                     # Remove timeout and fix output buffering to prevent deadlock
                     # FFmpeg is very verbose - capturing all output can fill OS pipe buffer
+                    # NOTE: Use bytes mode to avoid UTF-8 decoding errors from non-ASCII metadata
                     result = subprocess.run(
                         cmd,
                         stdout=subprocess.DEVNULL,  # Don't capture verbose output
                         stderr=subprocess.PIPE,     # Keep stderr for error messages
-                        text=True
+                        # NO text=True - handle encoding manually to avoid UTF-8 errors
                         # NO timeout - let FFmpeg run as long as needed for large files
                     )
                     chunk_duration = (datetime.now() - chunk_start_time).total_seconds()
@@ -328,7 +329,9 @@ class AudioProcessor:
                     if result.returncode != 0:
                         error_msg = f"FFmpeg failed for chunk {chunk_num+1}: exit code {result.returncode}"
                         if result.stderr:
-                            error_msg += f"\nSTDERR: {result.stderr[:500]}"
+                            # Decode stderr safely, replacing invalid bytes
+                            stderr_text = result.stderr.decode('utf-8', errors='replace')[:500]
+                            error_msg += f"\nSTDERR: {stderr_text}"
                         logger.error(error_msg)
                         raise PodcastError(error_msg)
 
@@ -463,15 +466,17 @@ class AudioProcessor:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                text=True
+                # No text=True - handle encoding manually to avoid UTF-8 errors from metadata
                 # Removed timeout - ffprobe should be fast but shouldn't fail on large files
             )
             if result.returncode != 0:
                 logger.warning(f"FFprobe failed for {audio_file_path}: exit code {result.returncode}")
                 return {}
-            
+
             import json
-            probe_data = json.loads(result.stdout)
+            # Decode stdout safely, replacing invalid bytes
+            stdout_text = result.stdout.decode('utf-8', errors='replace')
+            probe_data = json.loads(stdout_text)
             
             # Extract relevant info
             format_info = probe_data.get('format', {})
@@ -556,11 +561,12 @@ class AudioProcessor:
                     ['ffmpeg', '-v', 'error', '-i', chunk_path, '-t', '5',
                      '-f', 'null', '-'],
                     capture_output=True,
-                    text=True,
+                    # No text=True - handle encoding manually to avoid UTF-8 errors
                     timeout=10
                 )
                 if test_result.returncode != 0:
-                    logger.warning(f"Audio decode test failed for {chunk_path}: {test_result.stderr[:200]}")
+                    stderr_text = test_result.stderr.decode('utf-8', errors='replace')[:200] if test_result.stderr else ''
+                    logger.warning(f"Audio decode test failed for {chunk_path}: {stderr_text}")
                     return False
             except subprocess.TimeoutExpired:
                 logger.warning(f"Audio decode test timed out for {chunk_path}")

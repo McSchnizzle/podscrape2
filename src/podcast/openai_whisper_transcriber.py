@@ -133,22 +133,29 @@ class OpenAIWhisperTranscriber:
                 logger.warning(f"Detected corrupted Whisper model cache: {error_str}")
 
                 # Try to clean up corrupted model file
-                try:
-                    import os
-                    cache_dir = Path.home() / ".cache" / "whisper"
-                    model_file = cache_dir / f"{self.model}.pt"
+                cache_dir = Path.home() / ".cache" / "whisper"
+                model_file = cache_dir / f"{self.model}.pt"
 
+                try:
                     if model_file.exists():
                         logger.info(f"Deleting corrupted model cache: {model_file}")
                         model_file.unlink()
-                        logger.info("Corrupted cache deleted - will retry download on next attempt")
+                        logger.info("Corrupted cache deleted")
                 except Exception as cleanup_error:
                     logger.warning(f"Failed to clean up corrupted cache: {cleanup_error}")
 
-                # Raise regular Exception (not PodcastError) to allow retry
-                error_msg = f"Whisper model cache corrupted (SHA256 mismatch) - cache cleaned, retry needed: {e}"
-                logger.error(error_msg)
-                raise Exception(error_msg) from e
+                # Immediately retry loading - this will trigger a fresh download
+                logger.info("Attempting to re-download and load Whisper model...")
+                try:
+                    self._whisper_model = whisper.load_model(self.model, device=device)
+                    self._device = device
+                    self._initialized = True
+                    logger.info(f"Whisper model '{self.model}' re-downloaded and loaded successfully on {device}")
+                    return  # Success after recovery
+                except Exception as retry_error:
+                    error_msg = f"Failed to re-download Whisper model after cache cleanup: {retry_error}"
+                    logger.error(error_msg)
+                    raise PodcastError(error_msg) from retry_error
             else:
                 # Other RuntimeError - treat as permanent failure
                 error_msg = f"Failed to load Whisper model: {e}"
