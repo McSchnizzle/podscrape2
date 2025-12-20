@@ -522,9 +522,10 @@ def main():
                        help='Dry run mode - show what would be done without making changes')
     parser.add_argument('--log-file', 
                        help='Custom log file path')
-    parser.add_argument('--verbose', '-v', action='store_true', 
+    parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose logging')
-    
+    parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
+
     args = parser.parse_args()
     
     if args.verbose:
@@ -546,8 +547,9 @@ def main():
             'message': 'Publishing pipeline completed successfully' if success else 'Publishing pipeline failed',
             'phase': 'publishing'
         }
-        print(json.dumps(result))
-        sys.stdout.flush()
+
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(result, args.output_json)
 
         sys.exit(0 if success else 1)
         
@@ -558,10 +560,11 @@ def main():
             'error': str(e),
             'phase': 'publishing'
         }
-        print(json.dumps(error_result))
-        sys.stdout.flush()
 
-        print(f"❌ Failed to run publishing pipeline: {e}")
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(error_result, args.output_json)
+
+        print(f"Failed to run publishing pipeline: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

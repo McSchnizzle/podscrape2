@@ -113,69 +113,72 @@ class PipelineOrchestrator:
             self.pipeline_run_repo = None
 
     def run_phase_script(self, script_name: str, input_data=None, **kwargs):
-        """Run a phase script and return the result"""
+        """Run a phase script and return the result using file-based output contract."""
 
         script_path = self.scripts_dir / script_name
         if not script_path.exists():
             raise FileNotFoundError(f"Phase script not found: {script_path}")
 
-        # Build command
-        cmd = ['python3', str(script_path)]
-
-        # Set environment variable to indicate orchestrated execution (to skip log cleanup)
-        env = os.environ.copy()
-        env['ORCHESTRATED_EXECUTION'] = '1'
-        env['PIPELINE_RUN_ID'] = self.pipeline_run_id
-        env['PIPELINE_PHASE'] = script_name
-
-        # Add output flag for orchestrator compatibility - use stdout
-        # (no need to specify --output since default is stdout)
-
-        # Add common flags
-        if self.dry_run:
-            cmd.append('--dry-run')
-        if self.limit and script_name not in ['scripts/run_discovery.py', 'scripts/run_publishing.py']:  # Discovery has its own limit handling, Publishing doesn't support limit
-            cmd.extend(['--limit', str(self.limit)])
-        if self.verbose:
-            cmd.append('--verbose')
-
-        # Add script-specific flags
-        if script_name == 'scripts/run_discovery.py':
-            if self.days_back:
-                cmd.extend(['--days-back', str(self.days_back)])
-            if self.episode_guid:
-                cmd.extend(['--episode-guid', self.episode_guid])
-            if self.limit:
-                cmd.extend(['--limit', str(self.limit)])
-
-        # Add Web UI settings as CLI flags for scripts that support them
-        if script_name == 'scripts/run_scoring.py':
-            self._add_scoring_web_settings(cmd)
-        # Note: digest and TTS scripts read Web UI settings directly, no CLI args needed
-
-        # Add additional kwargs as flags
-        for key, value in kwargs.items():
-            if value is not None:
-                cmd.extend([f'--{key.replace("_", "-")}', str(value)])
-
-        self.logger.info(f"🚀 Running: {' '.join(cmd)}")
+        # Create temp file for JSON output (deterministic output channel)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tf:
+            output_json_path = tf.name
 
         try:
+            # Build command
+            cmd = ['python3', str(script_path)]
+
+            # Set environment variable to indicate orchestrated execution
+            env = os.environ.copy()
+            env['ORCHESTRATED_EXECUTION'] = '1'
+            env['PIPELINE_RUN_ID'] = self.pipeline_run_id
+            env['PIPELINE_PHASE'] = script_name
+
+            # Add output flag for deterministic JSON output
+            cmd.extend(['--output-json', output_json_path])
+
+            # Add common flags
+            if self.dry_run:
+                cmd.append('--dry-run')
+            if self.limit and script_name not in ['scripts/run_discovery.py', 'scripts/run_publishing.py', 'scripts/run_retention.py']:
+                cmd.extend(['--limit', str(self.limit)])
+            if self.verbose:
+                cmd.append('--verbose')
+
+            # Add script-specific flags
+            if script_name == 'scripts/run_discovery.py':
+                if self.days_back:
+                    cmd.extend(['--days-back', str(self.days_back)])
+                if self.episode_guid:
+                    cmd.extend(['--episode-guid', self.episode_guid])
+                if self.limit:
+                    cmd.extend(['--limit', str(self.limit)])
+
+            # Add Web UI settings as CLI flags for scripts that support them
+            if script_name == 'scripts/run_scoring.py':
+                self._add_scoring_web_settings(cmd)
+
+            # Add additional kwargs as flags
+            for key, value in kwargs.items():
+                if value is not None:
+                    cmd.extend([f'--{key.replace("_", "-")}', str(value)])
+
+            self.logger.info(f"Running: {' '.join(cmd)}")
+
             # Prepare input data
             input_json = None
             if input_data is not None:
                 input_json = json.dumps(input_data)
 
-            # Run the script with real-time output streaming
+            # Run the script with real-time log streaming
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # Combine stderr with stdout
+                stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1,  # Line buffered
+                bufsize=1,
                 universal_newlines=True,
-                env=env  # Pass environment with orchestration flag
+                env=env
             )
 
             # Send input if provided
@@ -183,12 +186,7 @@ class PipelineOrchestrator:
                 process.stdin.write(input_json)
                 process.stdin.close()
 
-            # Stream output in real-time without timeout
-            # For production: audio processing of multi-hour podcasts cannot have arbitrary time limits
-            stdout_lines = []
-            json_output = None
-            json_buffer = []  # For accumulating multi-line JSON
-
+            # Stream stdout to logs (no more JSON parsing needed!)
             while True:
                 line = process.stdout.readline()
                 if not line and process.poll() is not None:
@@ -196,98 +194,48 @@ class PipelineOrchestrator:
 
                 if line:
                     line = line.rstrip()
-                    stdout_lines.append(line)
-
-                    # Check if this might be part of JSON output
-                    if line.strip().startswith('{') or line.strip().startswith('[') or json_buffer:
-                        json_buffer.append(line)
-                        # Try to parse accumulated JSON
-                        json_text = '\n'.join(json_buffer)
-                        try:
-                            json_output = json.loads(json_text)
-                            # Successfully parsed, clear buffer
-                            json_buffer = []
-                            self.logger.debug(f"Captured complete JSON output: {json_text[:100]}...")
-                        except json.JSONDecodeError:
-                            # Not complete yet, continue accumulating
-                            # But don't let buffer grow too large (prevent memory issues)
-                            if len(json_buffer) > 50:
-                                json_buffer = []
-                            pass
-
-                    # Stream progress to log (filter out JSON output lines)
-                    elif any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG']):
+                    # Stream all output to log (logs only, no JSON mixing)
+                    if any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG']):
                         self.logger.info(f"  {line}")
 
             # Wait for process to complete
             return_code = process.wait()
 
-            # Parse final output
+            # Read result from output file (deterministic!)
             if return_code == 0:
-                if json_output:
-                    self.logger.info(f"✅ Phase completed successfully")
+                try:
+                    from src.utils.phase_output import read_phase_result
+                    json_output = read_phase_result(output_json_path)
+                    self.logger.info(f"Phase completed successfully")
                     return json_output
-                else:
-                    # Try to find JSON in the output - look for complete JSON objects
-                    self.logger.debug("No JSON captured during streaming, attempting to parse from output")
-
-                    # Try single lines first
-                    for line in reversed(stdout_lines[-20:]):
-                        if (line.strip().startswith('{') and line.strip().endswith('}')) or \
-                           (line.strip().startswith('[') and line.strip().endswith(']')):
-                            try:
-                                json_output = json.loads(line)
-                                self.logger.info(f"✅ Phase completed successfully")
-                                return json_output
-                            except json.JSONDecodeError:
-                                continue
-
-                    # Try multi-line JSON by combining consecutive lines
-                    for i in range(max(0, len(stdout_lines) - 20), len(stdout_lines)):
-                        for j in range(i + 1, min(i + 10, len(stdout_lines) + 1)):
-                            combined = '\n'.join(stdout_lines[i:j])
-                            if combined.strip().startswith(('{', '[')):
-                                try:
-                                    json_output = json.loads(combined)
-                                    self.logger.info(f"✅ Phase completed successfully")
-                                    return json_output
-                                except json.JSONDecodeError:
-                                    continue
-
-                    self.logger.error(f"No valid JSON output found from {script_name}")
-                    return {'success': False, 'error': 'No valid JSON output'}
+                except FileNotFoundError:
+                    self.logger.error(f"Output file not found: {output_json_path}")
+                    return {'success': False, 'error': 'Phase script did not write output file'}
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Invalid JSON in output file: {e}")
+                    return {'success': False, 'error': f'Invalid JSON output: {e}'}
             else:
-                self.logger.error(f"❌ Phase failed with exit code {return_code}")
-                # Look for error JSON in output using same robust parsing
-                for line in reversed(stdout_lines[-20:]):
-                    if (line.strip().startswith('{') and line.strip().endswith('}')) or \
-                       (line.strip().startswith('[') and line.strip().endswith(']')):
-                        try:
-                            error_data = json.loads(line)
-                            return error_data
-                        except json.JSONDecodeError:
-                            continue
-
-                # Try multi-line error JSON
-                for i in range(max(0, len(stdout_lines) - 20), len(stdout_lines)):
-                    for j in range(i + 1, min(i + 5, len(stdout_lines) + 1)):
-                        combined = '\n'.join(stdout_lines[i:j])
-                        if combined.strip().startswith(('{', '[')):
-                            try:
-                                error_data = json.loads(combined)
-                                return error_data
-                            except json.JSONDecodeError:
-                                continue
-
-                return {'success': False, 'error': f'Script failed with exit code {return_code}'}
+                self.logger.error(f"Phase failed with exit code {return_code}")
+                # Try to read error result from file
+                try:
+                    from src.utils.phase_output import read_phase_result
+                    error_result = read_phase_result(output_json_path)
+                    return error_result
+                except Exception:
+                    return {'success': False, 'error': f'Script failed with exit code {return_code}'}
 
         except subprocess.TimeoutExpired as e:
-            # This should not happen since we removed timeouts, but keep for subprocess.wait() calls
-            self.logger.error(f"❌ Phase subprocess timeout: {e}")
+            self.logger.error(f"Phase subprocess timeout: {e}")
             return {'success': False, 'error': f'Subprocess timeout: {e}'}
         except Exception as e:
-            self.logger.error(f"❌ Phase failed with exception: {e}")
+            self.logger.error(f"Phase failed with exception: {e}")
             return {'success': False, 'error': str(e)}
+        finally:
+            # Clean up temp file
+            try:
+                Path(output_json_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def _load_web_config(self):
         """Load WebConfigManager safely"""

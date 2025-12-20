@@ -204,7 +204,7 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of digests')
     parser.add_argument('--date', help='Target date (YYYY-MM-DD, default: today)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
-    parser.add_argument('--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
 
     args = parser.parse_args()
 
@@ -231,13 +231,9 @@ def main():
 
         result = runner.generate_digests(target_date=target_date)
 
-        # Output JSON
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(result, f, indent=2)
-        else:
-            print(json.dumps(result))
-            sys.stdout.flush()
+        # Output JSON result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(result, args.output_json)
 
         # Exit code
         sys.exit(0 if result['success'] else 1)
@@ -250,12 +246,9 @@ def main():
             'digests': []
         }
 
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(error_result, f, indent=2)
-        else:
-            print(json.dumps(error_result))
-            sys.stdout.flush()
+        # Output JSON error result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(error_result, args.output_json)
 
         sys.exit(1)
 

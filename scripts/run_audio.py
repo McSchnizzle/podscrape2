@@ -39,7 +39,7 @@ from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.utils.logging_config import setup_phase_logging
 from src.scoring.content_scorer import ContentScorer
-from src.topic_tracking.topic_extractor import TopicExtractor
+from src.topic_tracking.topic_extractor import StoryArcExtractor
 
 
 class AudioProcessor_Runner:
@@ -70,12 +70,12 @@ class AudioProcessor_Runner:
         # Initialize content scorer for immediate relevance checking
         self.content_scorer = ContentScorer()
 
-        # Initialize topic extractor for topic tracking
+        # Initialize story arc extractor for story arc tracking
         try:
-            self.topic_extractor = TopicExtractor()
+            self.story_arc_extractor = StoryArcExtractor()
         except Exception as e:
-            self.logger.warning(f"Topic extractor initialization failed: {e}")
-            self.topic_extractor = None
+            self.logger.warning(f"Story arc extractor initialization failed: {e}")
+            self.story_arc_extractor = None
 
         # Verify dependencies
         self._verify_dependencies()
@@ -937,8 +937,8 @@ class AudioProcessor_Runner:
                     f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}"
                 )
 
-                # Extract topics for tracking (non-blocking)
-                self._extract_topics_for_tracking(episode_guid, db_episode.transcript_content, scoring_result.scores)
+                # Extract story arcs for tracking (non-blocking)
+                self._extract_story_arcs_for_tracking(episode_guid, db_episode.transcript_content, scoring_result.scores)
 
                 return {'success': True, 'scores': scoring_result.scores}
 
@@ -951,25 +951,33 @@ class AudioProcessor_Runner:
             self.logger.error(f"Immediate scoring failed: {error_message}")
             return {'success': False, 'error': error_message, 'scores': {}}
 
-    def _extract_topics_for_tracking(self, episode_guid: str, transcript: str, scores: Dict[str, float]):
+    def _extract_story_arcs_for_tracking(self, episode_guid: str, transcript: str, scores: Dict[str, float]):
         """
-        Extract topics for tracking if enabled (non-blocking).
+        Extract story arcs for tracking if enabled (non-blocking).
 
         Args:
             episode_guid: Episode GUID
             transcript: Full episode transcript
             scores: Dictionary of topic scores
         """
-        if not self.topic_extractor:
-            self.logger.debug("Topic extractor not available, skipping topic extraction")
+        if not self.story_arc_extractor:
+            self.logger.debug("Story arc extractor not available, skipping story arc extraction")
             return
 
         try:
             # Get topics from database that have topic tracking enabled
             from src.database.sqlalchemy_models import Topic
-            from src.database.models import get_database_manager
+            from src.database.models import get_database_manager, get_episode_repo
 
             db_manager = get_database_manager()
+            episode_repo = get_episode_repo()
+
+            # Get episode details for the new API
+            episode = episode_repo.get_by_episode_guid(episode_guid)
+            if not episode:
+                self.logger.warning(f"Episode not found for story arc extraction: {episode_guid}")
+                return
+
             with db_manager.get_session() as session:
                 # Query for topics with enable_topic_tracking=True
                 topics_with_tracking = session.query(Topic).filter(
@@ -978,11 +986,11 @@ class AudioProcessor_Runner:
                 ).all()
 
                 if not topics_with_tracking:
-                    self.logger.debug("No topics have topic tracking enabled")
+                    self.logger.debug("No topics have story arc tracking enabled")
                     return
 
-                # Extract topics for each relevant digest topic
-                extraction_count = 0
+                # Extract story arcs for each relevant digest topic
+                arc_count = 0
                 for topic in topics_with_tracking:
                     topic_name = topic.name
                     topic_score = scores.get(topic_name, 0.0)
@@ -990,33 +998,39 @@ class AudioProcessor_Runner:
                     # Only extract if score is above threshold
                     if topic_score >= self.score_threshold:
                         try:
-                            self.logger.info(f"🔍 Extracting topics for '{topic_name}' (score: {topic_score:.2f})")
+                            self.logger.info(f"🔍 Extracting story arcs for '{topic_name}' (score: {topic_score:.2f})")
 
-                            extracted_topics = self.topic_extractor.extract_and_store_topics(
+                            extracted_arcs = self.story_arc_extractor.extract_and_store_story_arcs(
+                                episode_id=episode.id,
                                 episode_guid=episode_guid,
+                                feed_id=episode.feed_id,
                                 digest_topic=topic_name,
                                 transcript=transcript,
+                                episode_title=episode.title,
+                                episode_published_date=episode.published_date,
                                 relevance_score=topic_score
                             )
 
-                            extraction_count += len(extracted_topics)
+                            arc_count += len(extracted_arcs)
+                            new_arcs = len([a for a in extracted_arcs if a.get('is_new')])
+                            continued_arcs = len([a for a in extracted_arcs if not a.get('is_new')])
                             self.logger.info(
-                                f"✓ Extracted {len(extracted_topics)} topics for '{topic_name}'"
+                                f"✓ Story arcs for '{topic_name}': {new_arcs} new, {continued_arcs} continued"
                             )
 
                         except Exception as e:
                             # Non-blocking: log warning but continue
                             self.logger.warning(
-                                f"Topic extraction failed for '{topic_name}': {e}"
+                                f"Story arc extraction failed for '{topic_name}': {e}"
                             )
                             continue
 
-                if extraction_count > 0:
-                    self.logger.info(f"📋 Total topics extracted: {extraction_count}")
+                if arc_count > 0:
+                    self.logger.info(f"📋 Total story arcs processed: {arc_count}")
 
         except Exception as e:
             # Non-blocking: log warning but don't fail the pipeline
-            self.logger.warning(f"Topic extraction process failed: {e}")
+            self.logger.warning(f"Story arc extraction process failed: {e}")
 
     def _log_processing_summary(self, processed_episodes, relevant_count, not_relevant_count, total_processed):
         """Log comprehensive processing summary as requested"""
@@ -1045,7 +1059,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Show what would be processed')
     parser.add_argument('--limit', type=int, help='Limit number of episodes')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
-    parser.add_argument('--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
     parser.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (use sequential)')
 
     args = parser.parse_args()
@@ -1133,13 +1147,9 @@ def main():
             runner.logger.info(f"  ❌ Not Relevant: {not_relevant_count}")
             runner.logger.info("=" * 60)
 
-        # Output JSON
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(result, f, indent=2)
-        else:
-            print(json.dumps(result))
-            sys.stdout.flush()
+        # Output JSON result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(result, args.output_json)
 
         # Exit code
         sys.exit(0 if result['success'] else 1)
@@ -1152,12 +1162,9 @@ def main():
             'episodes': []
         }
 
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(error_result, f, indent=2)
-        else:
-            print(json.dumps(error_result))
-            sys.stdout.flush()
+        # Output JSON error result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(error_result, args.output_json)
 
         sys.exit(1)
 

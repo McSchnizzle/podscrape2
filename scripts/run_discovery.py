@@ -353,7 +353,7 @@ def main():
     parser.add_argument('--days-back', type=int, help='Days back to search', default=7)
     parser.add_argument('--episode-guid', help='Process specific episode by GUID')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
-    parser.add_argument('--output', help='Output JSON file (default: stdout)')
+    parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
 
     args = parser.parse_args()
 
@@ -396,14 +396,9 @@ def main():
             runner.logger.info(f"Total: {result['episodes_found']} episode{'s' if result['episodes_found'] != 1 else ''} discovered across {len(episodes_by_feed)} feed{'s' if len(episodes_by_feed) != 1 else ''}")
             runner.logger.info("=" * 60)
 
-        # Output JSON
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(result, f, indent=2)
-        else:
-            # Output JSON on single line for orchestrator compatibility
-            print(json.dumps(result))
-            sys.stdout.flush()  # Ensure JSON output is flushed
+        # Output JSON result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(result, args.output_json)
 
         # Exit code
         sys.exit(0 if result['success'] else 1)
@@ -416,13 +411,9 @@ def main():
             'episodes': []
         }
 
-        if args.output:
-            with open(args.output, 'w') as f:
-                json.dump(error_result, f, indent=2)
-        else:
-            # Output JSON on single line for orchestrator compatibility
-            print(json.dumps(error_result))
-            sys.stdout.flush()  # Ensure JSON output is flushed
+        # Output JSON error result (file or stdout)
+        from src.utils.phase_output import write_phase_result
+        write_phase_result(error_result, args.output_json)
 
         sys.exit(1)
 

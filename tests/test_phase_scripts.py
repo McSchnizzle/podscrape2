@@ -383,6 +383,29 @@ class TestPhaseScripts(unittest.TestCase):
         except Exception as e:
             self.fail(f"Model validation test failed: {e}")
 
+    def test_output_json_flag(self):
+        """Test that all phase scripts accept --output-json flag"""
+        script_files = [
+            "run_discovery.py",
+            "run_audio.py",
+            "run_digest.py",
+            "run_tts.py",
+            "run_publishing.py",
+            "run_retention.py"
+        ]
+
+        for script_name in script_files:
+            script_path = self.scripts_dir / script_name
+            if script_path.exists():
+                result = subprocess.run(
+                    [sys.executable, str(script_path), "--help"],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.project_root)
+                )
+                self.assertIn("--output-json", result.stdout + result.stderr,
+                             f"{script_name} should have --output-json flag")
+
 
 if __name__ == '__main__':
     # Set up test environment

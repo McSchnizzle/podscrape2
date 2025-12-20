@@ -145,19 +145,27 @@ def run_retention_phase() -> dict:
 
 def main():
     """Main entry point for retention phase."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Retention Management Phase')
+    parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
     result = run_retention_phase()
 
-    # Output JSON for orchestrator
-    print("\n" + "=" * 80)
-    print("RETENTION_PHASE_RESULT_JSON")
-    print(json.dumps(result, indent=2))
-    print("=" * 80)
+    # Output JSON result for orchestrator
+    from src.utils.phase_output import write_phase_result
+    write_phase_result(result, args.output_json)
 
     # Exit with appropriate code
     if result["status"] == "error":
         sys.exit(1)
     elif result["status"] == "skipped":
-        sys.exit(0)  # Not an error, just skipped
+        sys.exit(0)
     else:
         sys.exit(0)
 
