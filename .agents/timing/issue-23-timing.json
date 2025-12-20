@@ -9,7 +9,7 @@
     "test_and_cleanup": "5m"
   },
   "total_duration": "32m",
-  "commit": "pending",
+  "commit": "246fd18",
   "version": "2.45",
   "status": "COMPLETE"
 }
