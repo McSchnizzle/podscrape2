@@ -3,7 +3,7 @@
  * Update VERSION on every commit to track releases
  */
 
-export const VERSION = "2.45";
+export const VERSION = "2.46";
 
 // Get build-time information
 export const getBuildInfo = () => {

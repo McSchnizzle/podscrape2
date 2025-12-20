@@ -39,14 +39,6 @@ function EpisodesContent() {
     sortBy: searchParams.get('sortBy') || 'scored_at',
     sortDir: searchParams.get('sortDir') || 'desc'
   });
-  // Track pending filter changes that haven't been applied yet
-  // IMPORTANT: This must be declared with other useState hooks (React rules of hooks)
-  const [pendingFilters, setPendingFilters] = useState({
-    q: searchParams.get('q') || '',
-    status: searchParams.get('status') || '',
-    sortBy: searchParams.get('sortBy') || 'scored_at',
-    sortDir: searchParams.get('sortDir') || 'desc'
-  });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Pagination state - initialize from URL
@@ -122,15 +114,14 @@ function EpisodesContent() {
   }, []);
 
   const handleFilterChange = (key: string, value: string) => {
-    setPendingFilters(prev => ({ ...prev, [key]: value }));
+    setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  // Apply current pending filters
+  // Apply current filters
   const applyFilters = () => {
-    setFilters(pendingFilters);
     setCurrentPage(0);
-    updateUrl(pendingFilters, 0);
-    loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
+    updateUrl(filters, 0);
+    loadEpisodesWithFilters({ ...filters, page: 0 });
   };
 
   // Reset all filters to defaults
@@ -141,7 +132,6 @@ function EpisodesContent() {
       sortBy: 'scored_at',
       sortDir: 'desc'
     };
-    setPendingFilters(defaultFilters);
     setFilters(defaultFilters);
     setCurrentPage(0);
     updateUrl(defaultFilters, 0);
@@ -161,7 +151,6 @@ function EpisodesContent() {
       sortDir: 'desc'
     };
     const newFilters = { ...filters, [key]: defaultValues[key] };
-    setPendingFilters(newFilters);
     setFilters(newFilters);
     setCurrentPage(0);
     updateUrl(newFilters, 0);
@@ -271,13 +260,8 @@ function EpisodesContent() {
             <label className="block text-xs text-gray-600 mb-1">Search</label>
             <input
               type="text"
-              value={pendingFilters.q}
+              value={filters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  applyFilters();
-                }
-              }}
               placeholder="Search episode title"
               className="border px-3 py-2 rounded w-full"
             />
@@ -286,7 +270,7 @@ function EpisodesContent() {
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-600 mb-1">Status</label>
             <select
-              value={pendingFilters.status}
+              value={filters.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >
@@ -302,7 +286,7 @@ function EpisodesContent() {
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-600 mb-1">Sort By</label>
             <select
-              value={pendingFilters.sortBy}
+              value={filters.sortBy}
               onChange={(e) => handleFilterChange('sortBy', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >
@@ -317,7 +301,7 @@ function EpisodesContent() {
           <div className="md:col-span-1">
             <label className="block text-xs text-gray-600 mb-1">Dir</label>
             <select
-              value={pendingFilters.sortDir}
+              value={filters.sortDir}
               onChange={(e) => handleFilterChange('sortDir', e.target.value)}
               className="border px-2 py-2 rounded w-full"
             >
