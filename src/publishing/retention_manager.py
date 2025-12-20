@@ -350,9 +350,9 @@ class RetentionManager:
                             
                             stats.directories_deleted += 1
                     
-                    except OSError:
-                        # Directory not empty or other error, skip
-                        pass
+                    except OSError as e:
+                        # Directory not empty or permission/disk error - log but continue
+                        logger.debug(f"Could not remove directory {dir_path}: {e}")
                     except Exception as e:
                         error_msg = f"Failed to remove directory {dir_path}: {e}"
                         logger.error(error_msg)
@@ -569,11 +569,11 @@ def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
                 if key:
                     try:
                         p.retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, key, p.retention_days))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Could not load retention setting for {p.name}, using default ({p.retention_days} days): {e}")
             return rm
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Could not load retention settings from WebConfig, using defaults: {e}")
     return RetentionManager(retention_policies, github_publisher, github_days, database_manager)
 
 
