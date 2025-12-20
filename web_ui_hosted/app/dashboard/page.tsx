@@ -6,6 +6,7 @@ import { EnhancedRecentActivity } from '@/components/EnhancedRecentActivity'
 import { TranscriptAnalytics } from '@/components/TranscriptAnalytics'
 import { PerformanceInsights } from '@/components/PerformanceInsights'
 import { ErrorAnalytics } from '@/components/ErrorAnalytics'
+import { toast } from '@/components/Toast'
 
 export default function DashboardPage() {
   const [pipelineLoading, setPipelineLoading] = useState(false)
@@ -21,14 +22,27 @@ export default function DashboardPage() {
       })
 
       if (response.ok) {
-        alert('Full pipeline triggered successfully! Check the Recent Activity section for progress.')
+        toast.success('Pipeline triggered successfully!', {
+          description: 'Check Recent Activity for progress.',
+          action: {
+            label: 'View Logs',
+            onClick: () => window.location.href = '/logs'
+          },
+          duration: 6000
+        })
       } else {
-        const error = await response.json()
-        alert(`Failed to trigger pipeline: ${error.error}`)
+        const errorData = await response.json()
+        toast.error('Failed to trigger pipeline', {
+          description: errorData.error,
+          duration: 8000
+        })
       }
-    } catch (error) {
-      alert('Failed to trigger full pipeline')
-      console.error('Pipeline trigger error:', error)
+    } catch (err) {
+      toast.error('Failed to trigger full pipeline', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
+      console.error('Pipeline trigger error:', err)
     } finally {
       setPipelineLoading(false)
     }
@@ -44,14 +58,27 @@ export default function DashboardPage() {
       })
 
       if (response.ok) {
-        alert('Publishing workflow triggered successfully! Check the Recent Activity section for progress.')
+        toast.success('Publishing workflow triggered!', {
+          description: 'Check Recent Activity for progress.',
+          action: {
+            label: 'View Logs',
+            onClick: () => window.location.href = '/logs'
+          },
+          duration: 6000
+        })
       } else {
-        const error = await response.json()
-        alert(`Failed to trigger publishing: ${error.error}`)
+        const errorData = await response.json()
+        toast.error('Failed to trigger publishing', {
+          description: errorData.error,
+          duration: 8000
+        })
       }
-    } catch (error) {
-      alert('Failed to trigger publishing')
-      console.error('Publishing trigger error:', error)
+    } catch (err) {
+      toast.error('Failed to trigger publishing', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
+      console.error('Publishing trigger error:', err)
     } finally {
       setPublishingLoading(false)
     }

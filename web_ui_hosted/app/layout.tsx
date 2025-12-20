@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Navigation } from '@/components/Navigation'
 import { AuthProvider } from '@/components/AuthProvider'
 import { AuthGuard } from '@/components/AuthGuard'
+import { ToastProvider } from '@/components/Toast'
 import Footer from '@/components/Footer'
 import './globals.css'
 
@@ -34,6 +35,7 @@ export default function RootLayout({
             <Footer />
           </AuthGuard>
         </AuthProvider>
+        <ToastProvider />
       </body>
     </html>
   )

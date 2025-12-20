@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/components/Toast'
 
 interface DashboardResponse {
   stats: {
@@ -102,15 +103,28 @@ export function PipelineStatus() {
       })
 
       if (response.ok) {
-        alert('Pipeline triggered successfully! Check Recent Activity for progress.')
+        toast.success('Pipeline triggered successfully!', {
+          description: 'Check Recent Activity for progress.',
+          action: {
+            label: 'View Logs',
+            onClick: () => window.location.href = '/logs'
+          },
+          duration: 6000
+        })
         setTimeout(fetchStatus, 2000)
       } else {
-        const error = await response.json()
-        alert(`Failed to trigger pipeline: ${error.error}`)
+        const errorData = await response.json()
+        toast.error('Failed to trigger pipeline', {
+          description: errorData.error,
+          duration: 8000
+        })
       }
-    } catch (error) {
-      console.error('Pipeline trigger error', error)
-      alert('Failed to trigger pipeline')
+    } catch (err) {
+      console.error('Pipeline trigger error', err)
+      toast.error('Failed to trigger pipeline', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     } finally {
       setTriggering(false)
     }
