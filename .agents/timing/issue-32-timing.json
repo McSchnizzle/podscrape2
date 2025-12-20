@@ -1,0 +1,7 @@
+{
+  "issue": "32",
+  "workflow": "3-agent",
+  "workflow_start": "2025-12-20T19:02:34.000Z",
+  "test_cleanup_start": "2025-12-20T19:30:00.000Z",
+  "test_cleanup_end": "2025-12-20T19:40:00.000Z"
+}

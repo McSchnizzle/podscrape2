@@ -12,13 +12,15 @@ export async function GET() {
     // Get all web settings from database
     const data = await db.getSettings()
 
-    // Group settings by category
+    // Group settings by category with values and metadata
     const settings: Record<string, Record<string, any>> = {}
+    const settingsMeta: Record<string, Record<string, { updated_at: string | null }>> = {}
 
     if (data) {
       for (const row of data) {
         if (!settings[row.category]) {
           settings[row.category] = {}
+          settingsMeta[row.category] = {}
         }
 
         // Parse value based on data type (if available)
@@ -34,10 +36,13 @@ export async function GET() {
         }
 
         settings[row.category][row.setting_key] = parsedValue
+        settingsMeta[row.category][row.setting_key] = {
+          updated_at: row.updated_at || null
+        }
       }
     }
 
-    return NextResponse.json({ settings })
+    return NextResponse.json({ settings, settingsMeta })
   } catch (error) {
     console.error('Settings API error:', error)
     return NextResponse.json(

@@ -28,6 +28,22 @@ interface Section {
   categories: string[]
 }
 
+interface SectionValidation {
+  validCount: number
+  warningCount: number
+  errorCount: number
+  hasChanges: boolean
+  lastSaved: string | null  // ISO timestamp of most recent save in section
+}
+
+interface SettingsMeta {
+  [category: string]: {
+    [key: string]: {
+      updated_at: string | null
+    }
+  }
+}
+
 const SECTIONS: Section[] = [
   { id: 'content', label: 'Content Filtering', categories: ['content_filtering'] },
   { id: 'pipeline', label: 'Pipeline', categories: ['pipeline'] },
@@ -54,6 +70,7 @@ export default function SettingsPage() {
   const [hasChanges, setHasChanges] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [activeSection, setActiveSection] = useState<string>('content')
+  const [settingsMeta, setSettingsMeta] = useState<SettingsMeta>({})
 
   useEffect(() => {
     // Fetch both schema and settings in parallel
@@ -80,6 +97,7 @@ export default function SettingsPage() {
           const settingsData = await settingsResponse.json()
           setSettings(settingsData.settings || {})
           setOriginalSettings(settingsData.settings || {})
+          setSettingsMeta(settingsData.settingsMeta || {})
         } else {
           const data = await settingsResponse.json()
           setMessage({ type: 'error', text: data.error || 'Failed to load settings' })
@@ -208,6 +226,87 @@ export default function SettingsPage() {
     return count
   }
 
+  const getSectionValidation = (section: Section): SectionValidation => {
+    let validCount = 0
+    let warningCount = 0
+    let errorCount = 0
+    let hasChanges = false
+    let latestTimestamp: string | null = null
+
+    for (const category of section.categories) {
+      const categorySettings = settings[category] || {}
+      const categorySchema = schema[category] || {}
+      const categoryMeta = settingsMeta[category] || {}
+      const originalCategorySettings = originalSettings[category] || {}
+
+      for (const [key, value] of Object.entries(categorySettings)) {
+        const settingSchema = categorySchema[key]
+        const settingMeta = categoryMeta[key]
+
+        // Check for changes
+        const originalValue = originalCategorySettings[key]
+        if (JSON.stringify(value) !== JSON.stringify(originalValue)) {
+          hasChanges = true
+        }
+
+        // Track latest timestamp
+        if (settingMeta?.updated_at) {
+          if (!latestTimestamp || settingMeta.updated_at > latestTimestamp) {
+            latestTimestamp = settingMeta.updated_at
+          }
+        }
+
+        // Validate against schema constraints
+        if (settingSchema) {
+          let isValid = true
+
+          if (settingSchema.type === 'int' || settingSchema.type === 'float') {
+            const numValue = Number(value)
+            if (settingSchema.min !== null && settingSchema.min !== undefined && numValue < settingSchema.min) {
+              isValid = false
+            }
+            if (settingSchema.max !== null && settingSchema.max !== undefined && numValue > settingSchema.max) {
+              isValid = false
+            }
+          }
+
+          if (!isValid) {
+            errorCount++
+          } else {
+            validCount++
+          }
+        } else {
+          validCount++ // No schema means no constraints violated
+        }
+      }
+    }
+
+    return {
+      validCount,
+      warningCount,
+      errorCount,
+      hasChanges,
+      lastSaved: latestTimestamp
+    }
+  }
+
+  const formatRelativeTime = (timestamp: string | null): string | null => {
+    if (!timestamp) return null
+
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / (1000 * 60))
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
+    return date.toLocaleDateString()
+  }
+
   // Get setting value, falling back to schema default
   const getSetting = (category: string, key: string) => {
     const value = settings[category]?.[key]
@@ -246,19 +345,46 @@ export default function SettingsPage() {
       <nav className="hidden lg:block w-56 shrink-0">
         <div className="sticky top-20 space-y-1">
           <h2 className="text-sm font-semibold text-gray-900 mb-3">Settings</h2>
-          {SECTIONS.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => scrollToSection(section.id)}
-              className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                activeSection === section.id
-                  ? 'bg-primary-50 text-primary-700 font-medium'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {section.label}
-            </button>
-          ))}
+          {SECTIONS.map((section) => {
+            const validation = getSectionValidation(section)
+            const lastSavedText = formatRelativeTime(validation.lastSaved)
+
+            return (
+              <button
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                  activeSection === section.id
+                    ? 'bg-primary-50 text-primary-700 font-medium'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{section.label}</span>
+                  <div className="flex items-center gap-1">
+                    {validation.hasChanges && (
+                      <span className="w-2 h-2 rounded-full bg-warning-500" title="Unsaved changes" />
+                    )}
+                    {validation.errorCount > 0 && (
+                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-error-100 text-error-700">
+                        {validation.errorCount}
+                      </span>
+                    )}
+                    {validation.errorCount === 0 && validation.validCount > 0 && (
+                      <span className="px-1.5 py-0.5 text-xs rounded-full bg-success-100 text-success-700">
+                        {validation.validCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {lastSavedText && (
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    Saved {lastSavedText}
+                  </div>
+                )}
+              </button>
+            )
+          })}
         </div>
       </nav>
 
