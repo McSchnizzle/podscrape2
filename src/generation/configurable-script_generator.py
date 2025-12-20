@@ -12,7 +12,7 @@ from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
 
-from ..database.models import Episode, get_episode_repo, Digest, get_digest_repo
+from ..database.models import Episode, get_episode_repo, Digest, get_digest_repo, DigestEpisodeLink, get_digest_episode_link_repo
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager, SettingsKeys
 
@@ -38,12 +38,23 @@ class ScriptGenerator:
     Loads instructions from digest_instructions/ directory and enforces word limits.
     """
     
-    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None):
+    def __init__(self, config_manager: ConfigManager = None, web_config: WebConfigManager = None,
+                 digest_episode_link_repo = None):
         self.web_config = web_config
         self.config = config_manager or ConfigManager(web_config=web_config)
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+        # Initialize digest episode link repository for join table (Issue #10)
+        if digest_episode_link_repo is None:
+            try:
+                self.digest_episode_link_repo = get_digest_episode_link_repo()
+            except Exception as exc:
+                logger.debug("Digest episode link repository unavailable: %s", exc)
+                self.digest_episode_link_repo = None
+        else:
+            self.digest_episode_link_repo = digest_episode_link_repo
         # Per-digest episode cap (from web config if available)
         self.max_episodes_per_digest = 5
         if self.web_config:
@@ -344,12 +355,12 @@ Thank you for your understanding, and we'll see you tomorrow!
         script_path = self.save_script(topic, digest_date, script_content, word_count, digest_timestamp)
 
         # Create new digest (each run creates a unique digest with timestamp)
+        # Note: episode_ids is deprecated (Issue #10), use digest_episode_links instead
         digest = Digest(
             topic=topic,
             digest_date=digest_date,
             digest_timestamp=digest_timestamp,
-            episode_ids=[ep.id for ep in episodes],
-            episode_count=len(episodes),
+            episode_count=len(episodes),  # episode_ids removed - using join table
             script_path=script_path,
             script_word_count=word_count,
             average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
@@ -357,6 +368,10 @@ Thank you for your understanding, and we'll see you tomorrow!
 
         digest_id = self.digest_repo.create(digest)
         digest.id = digest_id
+
+        # Persist episode links to join table (Issue #10)
+        if digest.id:
+            self._persist_digest_links(digest, topic, episodes)
 
         # Store script content in database
         self.digest_repo.update_script(digest_id, script_path, word_count, script_content)
@@ -460,19 +475,23 @@ Thank you for your understanding, and we'll see you tomorrow!
             return existing_general
         else:
             # Create new digest
+            # Note: episode_ids is deprecated (Issue #10), use digest_episode_links instead
             digest = Digest(
                 topic="General Summary",
                 digest_date=digest_date,
-                episode_ids=[ep.id for ep in episodes],
-                episode_count=len(episodes),
+                episode_count=len(episodes),  # episode_ids removed - using join table
                 script_path=script_path,
                 script_word_count=word_count,
                 average_score=0.0  # No topic-specific score for general summary
             )
-            
+
             digest_id = self.digest_repo.create(digest)
             digest.id = digest_id
-            
+
+            # Persist episode links for general summary (Issue #10)
+            if digest.id:
+                self._persist_digest_links(digest, "General Summary", episodes)
+
             logger.info(f"Created general summary digest {digest_id}: {word_count} words, {len(episodes)} episodes")
             return digest
     
@@ -591,7 +610,38 @@ Thank you for your understanding, and we'll see you tomorrow with fresh insights
 *This digest was automatically generated from episodes that didn't meet specific topic thresholds.*"""
             
             return basic_script, len(basic_script.split())
-    
+
+    def _persist_digest_links(self, digest: Digest, topic_name: str, episodes: List[Episode]):
+        """Persist digest <-> episode relationships for UI reporting.
+
+        Issue #10: Uses digest_episode_links join table as single source of truth.
+        """
+        if not self.digest_episode_link_repo or not digest.id or not episodes:
+            return
+
+        links: List[DigestEpisodeLink] = []
+        for position, episode in enumerate(episodes, start=1):
+            if episode.id is None:
+                continue
+            score = None
+            if episode.scores and topic_name in episode.scores:
+                score = episode.scores.get(topic_name)
+            links.append(DigestEpisodeLink(
+                digest_id=digest.id,
+                episode_id=episode.id,
+                topic=topic_name,
+                score=score,
+                position=position
+            ))
+
+        if not links:
+            return
+
+        try:
+            self.digest_episode_link_repo.replace_links_for_digest(digest.id, links)
+        except Exception as exc:
+            logger.debug("Failed to persist digest episode links for digest %s: %s", digest.id, exc)
+
     def mark_episode_as_digested(self, episode: Episode) -> None:
         """Mark episode as digested and move transcript to digested folder"""
         logger.info(f"Marking episode {episode.id} as digested: {episode.title}")
@@ -618,11 +668,19 @@ Thank you for your understanding, and we'll see you tomorrow with fresh insights
                 logger.error(f"Failed to move transcript for episode {episode.id}: {e}")
     
     def mark_digest_episodes_as_digested(self, digest: Digest) -> None:
-        """Mark all episodes in a digest as digested"""
-        if not digest.episode_ids:
+        """Mark all episodes in a digest as digested using join table.
+
+        Issue #10: Uses digest_episode_links as single source of truth.
+        """
+        if not digest.id:
             return
-        
-        for episode_id in digest.episode_ids:
+
+        # Use join table as source of truth for episode IDs
+        episode_ids = []
+        if self.digest_episode_link_repo:
+            episode_ids = self.digest_episode_link_repo.get_episode_ids_for_digest(digest.id)
+
+        for episode_id in episode_ids:
             episode = self.episode_repo.get_by_id(episode_id)
             if episode:
                 self.mark_episode_as_digested(episode)

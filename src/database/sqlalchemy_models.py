@@ -170,8 +170,7 @@ class Digest(Base):
     mp3_duration_seconds = Column(Integer)
     mp3_title = Column(String(1024))
     mp3_summary = Column(Text)
-    # DEPRECATED: Use digest_episode_links table instead. Issue #10.
-    episode_ids = Column(JSON)  # [int] - database-agnostic JSON - DEPRECATED
+    # Issue #10/#29: episode_ids column removed. Use digest_episode_links table.
     episode_count = Column(Integer, nullable=False, default=0)
     average_score = Column(Integer)
     github_url = Column(String(4096))
@@ -219,8 +218,7 @@ class Digest(Base):
         if self.published_at and not self.github_url:
             errors.append("digest with published_at should have github_url")
 
-        # Note: episode_ids is deprecated (Issue #10). Use digest_episode_links table.
-        # Removed validation that required episode_ids matching episode_count.
+        # Issue #10/#29: episode_ids column removed. Use digest_episode_links table.
 
         return (len(errors) == 0, errors)
 

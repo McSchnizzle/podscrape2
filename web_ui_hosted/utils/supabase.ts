@@ -87,8 +87,7 @@ export interface Digest {
   status: 'generated' | 'audio_generated' | 'published' | 'failed'
   script_content?: string
   mp3_path?: string
-  /** @deprecated Use digest_episode_links join table instead. Issue #10. */
-  episode_ids?: number[]
+  // Issue #10/#29: episode_ids field removed. Use digest_episode_links table.
   digest_date?: string
   created_at: string
   updated_at: string

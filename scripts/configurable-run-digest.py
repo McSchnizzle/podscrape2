@@ -150,7 +150,10 @@ class DigestRunner:
 
 
     def _digest_to_dict(self, digest):
-        """Convert digest object to dictionary"""
+        """Convert digest object to dictionary.
+
+        Issue #10/#29: episode_ids field removed - use digest_episode_links table.
+        """
         return {
             'id': digest.id,
             'topic': digest.topic,
@@ -158,7 +161,6 @@ class DigestRunner:
             'script_path': digest.script_path,
             'script_word_count': digest.script_word_count,
             'episode_count': digest.episode_count,
-            'episode_ids': getattr(digest, 'episode_ids', []),
             'mp3_path': getattr(digest, 'mp3_path', None),
             'mp3_title': getattr(digest, 'mp3_title', None),
             'mp3_summary': getattr(digest, 'mp3_summary', None)

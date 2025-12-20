@@ -104,8 +104,7 @@ class Digest:
     mp3_duration_seconds: Optional[int] = None
     mp3_title: Optional[str] = None
     mp3_summary: Optional[str] = None
-    # DEPRECATED: Use digest_episode_links table instead. Issue #10.
-    episode_ids: Optional[List[int]] = None
+    # Issue #10/#29: episode_ids field removed. Use digest_episode_links table.
     episode_count: int = 0
     average_score: Optional[float] = None
     github_url: Optional[str] = None
@@ -1052,7 +1051,10 @@ class DigestRepository:
             return [self._model_to_digest(model) for model in digest_models]
 
     def _model_to_digest(self, model: DigestModel) -> Digest:
-        """Convert SQLAlchemy model to dataclass"""
+        """Convert SQLAlchemy model to dataclass.
+
+        Issue #10/#29: episode_ids field removed - use digest_episode_links table.
+        """
         return Digest(
             id=model.id,
             topic=model.topic,
@@ -1065,7 +1067,6 @@ class DigestRepository:
             mp3_duration_seconds=model.mp3_duration_seconds,
             mp3_title=model.mp3_title,
             mp3_summary=model.mp3_summary,
-            episode_ids=model.episode_ids,
             episode_count=model.episode_count,
             average_score=model.average_score,
             github_url=model.github_url,
