@@ -1,0 +1,24 @@
+{
+  "issue": "30",
+  "workflow": "3-agent",
+  "workflow_start": "2025-12-20T18:41:27.000Z",
+  "workflow_end": "2025-12-20T18:55:00.000Z",
+  "phases": {
+    "scout_and_plan": {
+      "start": "2025-12-20T18:41:27.000Z",
+      "end": "2025-12-20T18:45:00.000Z",
+      "duration_minutes": 4
+    },
+    "build": {
+      "start": "2025-12-20T18:45:00.000Z",
+      "end": "2025-12-20T18:50:00.000Z",
+      "duration_minutes": 5
+    },
+    "test_and_cleanup": {
+      "start": "2025-12-20T18:50:00.000Z",
+      "end": "2025-12-20T18:55:00.000Z",
+      "duration_minutes": 5
+    }
+  },
+  "total_duration_minutes": 14
+}

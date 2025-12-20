@@ -699,10 +699,28 @@ export class DatabaseClient {
         query = query.eq('status', status)
       }
 
-      // Apply text search on episode title (database-level)
-      // Note: Feed title search not available at database level - search by episode title only
+      // Phase 1: Find feeds matching search term (two-phase query for feed title search)
+      let matchingFeedIds: number[] = []
       if (q) {
-        query = query.ilike('title', `%${q}%`)
+        const { data: matchingFeeds, error: feedSearchError } = await supabase
+          .from('feeds')
+          .select('id')
+          .ilike('title', `%${q}%`)
+
+        if (!feedSearchError && matchingFeeds) {
+          matchingFeedIds = matchingFeeds.map((f: { id: number }) => f.id)
+        }
+      }
+
+      // Apply text search on episode title and feed title (two-phase query)
+      if (q) {
+        if (matchingFeedIds.length > 0) {
+          // Search both episode title AND feed_id
+          query = query.or(`title.ilike.%${q}%,feed_id.in.(${matchingFeedIds.join(',')})`)
+        } else {
+          // No matching feeds, just search episode title
+          query = query.ilike('title', `%${q}%`)
+        }
       }
 
       // Apply ordering

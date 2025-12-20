@@ -271,7 +271,7 @@ function EpisodesContent() {
               type="text"
               value={filters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
-              placeholder="Search episode title"
+              placeholder="Search episode or feed title"
               className="border px-3 py-2 rounded w-full"
             />
           </div>
