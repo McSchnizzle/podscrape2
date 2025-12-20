@@ -21,6 +21,28 @@ interface SettingsSchema {
   }
 }
 
+interface Section {
+  id: string
+  label: string
+  categories: string[]
+}
+
+const SECTIONS: Section[] = [
+  { id: 'content', label: 'Content Filtering', categories: ['content_filtering'] },
+  { id: 'pipeline', label: 'Pipeline', categories: ['pipeline'] },
+  { id: 'audio', label: 'Audio Processing', categories: ['audio_processing'] },
+  { id: 'ai-scoring', label: 'AI Content Scoring', categories: ['ai_content_scoring'] },
+  { id: 'ai-digest', label: 'AI Digest Generation', categories: ['ai_digest_generation'] },
+  { id: 'ai-metadata', label: 'AI Metadata', categories: ['ai_metadata_generation'] },
+  { id: 'ai-tts', label: 'AI TTS', categories: ['ai_tts_generation'] },
+  { id: 'ai-stt', label: 'AI STT', categories: ['ai_stt_transcription'] },
+  { id: 'topic-tracking', label: 'Topic Tracking', categories: ['topic_tracking'] },
+  { id: 'topic-evolution', label: 'Topic Evolution', categories: ['topic_evolution'] },
+  { id: 'ad-filtering', label: 'Ad Filtering', categories: ['ad_filtering'] },
+  { id: 'transcript', label: 'Transcript Processing', categories: ['transcript_processing'] },
+  { id: 'retention', label: 'Retention', categories: ['retention'] },
+]
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({})
   const [originalSettings, setOriginalSettings] = useState<Settings>({})
@@ -30,6 +52,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [activeSection, setActiveSection] = useState<string>('content')
 
   useEffect(() => {
     // Fetch both schema and settings in parallel
@@ -69,6 +92,35 @@ export default function SettingsPage() {
 
     fetchAll()
   }, [])
+
+  useEffect(() => {
+    // Set up intersection observer to track which section is in view
+    const observerOptions = {
+      root: null,
+      rootMargin: '-100px 0px -66%', // Trigger when section is near top
+      threshold: 0
+    }
+
+    const observerCallback: IntersectionObserverCallback = (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id)
+        }
+      })
+    }
+
+    const observer = new IntersectionObserver(observerCallback, observerOptions)
+
+    // Observe all section elements
+    SECTIONS.forEach((section) => {
+      const element = document.getElementById(section.id)
+      if (element) {
+        observer.observe(element)
+      }
+    })
+
+    return () => observer.disconnect()
+  }, [schemaLoaded]) // Re-run when schema loads and sections render
 
   const updateLocalSetting = (category: string, key: string, value: any) => {
     setSettings(prev => ({
@@ -134,6 +186,27 @@ export default function SettingsPage() {
     setMessage(null)
   }
 
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveSection(sectionId)
+    }
+  }
+
+  const getChangedSettingsCount = (): number => {
+    let count = 0
+    for (const [category, categorySettings] of Object.entries(settings)) {
+      for (const [key, value] of Object.entries(categorySettings)) {
+        const originalValue = originalSettings[category]?.[key]
+        if (JSON.stringify(value) !== JSON.stringify(originalValue)) {
+          count++
+        }
+      }
+    }
+    return count
+  }
+
   // Get setting value, falling back to schema default
   const getSetting = (category: string, key: string) => {
     const value = settings[category]?.[key]
@@ -167,29 +240,33 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+    <div className="flex gap-8">
+      {/* Left Sidebar Navigation */}
+      <nav className="hidden lg:block w-56 shrink-0">
+        <div className="sticky top-20 space-y-1">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">Settings</h2>
+          {SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => scrollToSection(section.id)}
+              className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                activeSection === section.id
+                  ? 'bg-primary-50 text-primary-700 font-medium'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0 space-y-6 pb-20">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
           <p className="mt-1 text-gray-600">Configure system parameters and processing options</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={resetSettings}
-            className="btn-secondary"
-            disabled={saving || !hasChanges}
-          >
-            Reset Changes
-          </button>
-          <button
-            onClick={saveAllSettings}
-            className={`btn-primary ${hasChanges ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}
-            disabled={saving || !hasChanges}
-          >
-            {saving ? 'Saving...' : hasChanges ? 'Save Settings' : 'No Changes'}
-          </button>
-        </div>
-      </div>
 
       {message && (
         <div className={`p-4 rounded-md ${
@@ -201,10 +278,9 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="space-y-8">
-        {/* Core Settings */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Content Filtering */}
+      <div className="space-y-6">
+        {/* Content Filtering */}
+        <div id="content" className="scroll-mt-24">
           <div className="card">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Content Filtering</h3>
             <div className="space-y-4">
@@ -259,8 +335,10 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Pipeline Settings */}
+        {/* Pipeline Settings */}
+        <div id="pipeline" className="scroll-mt-24">
           <div className="card">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline</h3>
             <div className="space-y-4">
@@ -307,9 +385,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Audio & Transcript Processing */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Audio Processing */}
+        {/* Audio Processing */}
+        <div id="audio" className="scroll-mt-24">
           <div className="card">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Audio Processing</h3>
             <div className="space-y-4">
@@ -356,17 +433,12 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-
         </div>
 
-        {/* AI Configuration */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">AI Configuration</h2>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* AI Content Scoring */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Content Scoring</h3>
+        {/* AI Content Scoring */}
+        <div id="ai-scoring" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">AI Content Scoring</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -433,10 +505,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* AI Digest Generation */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Digest Generation</h3>
+        {/* AI Digest Generation */}
+        <div id="ai-digest" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">AI Digest Generation</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -507,10 +581,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* AI Metadata Generation */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Metadata Generation</h3>
+        {/* AI Metadata Generation */}
+        <div id="ai-metadata" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">AI Metadata Generation</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -577,10 +653,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* AI TTS Generation */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">TTS Generation</h3>
+        {/* AI TTS Generation */}
+        <div id="ai-tts" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">AI TTS Generation</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -617,10 +695,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* AI STT Transcription */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">STT Transcription</h3>
+        {/* AI STT Transcription */}
+        <div id="ai-stt" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">AI STT Transcription</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -652,10 +732,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Topic Tracking */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Tracking</h3>
+        {/* Topic Tracking */}
+        <div id="topic-tracking" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Tracking</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -735,10 +817,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Ad Filtering */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Ad Filtering</h3>
+        {/* Ad Filtering */}
+        <div id="ad-filtering" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Ad Filtering</h3>
               <div className="space-y-4">
                 <div className="flex items-center">
                   <input
@@ -778,10 +862,12 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Topic Evolution */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Evolution</h3>
+        {/* Topic Evolution */}
+        <div id="topic-evolution" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Topic Evolution</h3>
               <div className="space-y-4">
                 <div className="flex items-center">
                   <input
@@ -839,10 +925,70 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Retention Settings */}
-            <div className="card">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
+        {/* Transcript Processing */}
+        <div id="transcript" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Transcript Processing</h3>
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="ad-trim-enabled"
+                  className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                  checked={getSetting('transcript_processing', 'ad_trim_enabled')}
+                  onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_enabled', e.target.checked)}
+                  disabled={saving}
+                />
+                <label htmlFor="ad-trim-enabled" className="ml-2 text-sm text-gray-700">
+                  Enable ad trimming
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Trim Start (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="50"
+                  className="input"
+                  value={getSetting('transcript_processing', 'ad_trim_start_percent')}
+                  onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_start_percent', parseFloat(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Percentage of transcript to trim from start (for ads)
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Trim End (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="50"
+                  className="input"
+                  value={getSetting('transcript_processing', 'ad_trim_end_percent')}
+                  onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_end_percent', parseFloat(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Percentage of transcript to trim from end (for ads)
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Retention Settings */}
+        <div id="retention" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Retention</h3>
               <div className="space-y-6">
                 {/* Database Retention */}
                 <div>
@@ -954,28 +1100,47 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Bottom Save Buttons */}
-      <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-6 border-t border-gray-200">
-        <button
-          onClick={resetSettings}
-          className="btn-secondary"
-          disabled={saving || !hasChanges}
-        >
-          Reset Changes
-        </button>
-        <button
-          onClick={saveAllSettings}
-          className={`btn-primary ${hasChanges ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}
-          disabled={saving || !hasChanges}
-        >
-          {saving ? 'Saving...' : hasChanges ? 'Save Settings' : 'No Changes'}
-        </button>
       </div>
+      {/* End sections container and main content area */}
 
+      {/* Sticky Save Bar */}
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-sm font-medium">
+                  {getChangedSettingsCount()}
+                </span>
+                <span className="text-sm text-gray-600">
+                  unsaved {getChangedSettingsCount() === 1 ? 'change' : 'changes'}
+                </span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={resetSettings}
+                  className="btn-secondary text-sm px-4 py-2"
+                  disabled={saving}
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={saveAllSettings}
+                  className="btn-primary text-sm px-4 py-2"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saving overlay indicator */}
       {saving && (
-        <div className="fixed bottom-4 right-4 bg-primary-600 text-white px-4 py-2 rounded-md shadow-lg">
+        <div className="fixed bottom-4 right-4 bg-primary-600 text-white px-4 py-2 rounded-md shadow-lg z-50">
           Saving...
         </div>
       )}
