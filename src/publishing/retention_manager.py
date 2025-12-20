@@ -107,11 +107,13 @@ class RetentionManager:
             wc = WebConfigManager()
             local_mp3_days = int(wc.get_setting('retention', 'local_mp3_days', 14))
             audio_cache_days = int(wc.get_setting('retention', 'audio_cache_days', 3))
+            audio_chunks_days = int(wc.get_setting('retention', 'audio_chunks_days', 3))
             logs_days = int(wc.get_setting('retention', 'logs_days', 3))
         except Exception as e:
             logger.warning(f"Could not load retention settings from WebConfig, using defaults: {e}")
             local_mp3_days = 14
             audio_cache_days = 3
+            audio_chunks_days = 3
             logs_days = 3
 
         return [
@@ -125,8 +127,14 @@ class RetentionManager:
             ),
             RetentionPolicy(
                 name="Audio Cache",
-                path_pattern=str(project_root / "data" / "audio-cache"),
+                path_pattern=str(project_root / "audio_cache"),
                 retention_days=audio_cache_days,
+                file_pattern="*"
+            ),
+            RetentionPolicy(
+                name="Audio Chunks",
+                path_pattern=str(project_root / "audio_chunks"),
+                retention_days=audio_chunks_days,
                 file_pattern="*"
             ),
             RetentionPolicy(
