@@ -1,49 +1,124 @@
 import { NextResponse } from 'next/server'
-import { spawn } from 'child_process'
-import path from 'path'
 import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
+
+// Mirror of src/config/web_config.py DEFAULTS (lines 150-224)
+// Structured as: { category: { key: { type, default, min?, max? } } }
+const SETTINGS_SCHEMA: Record<string, Record<string, {
+  type: string
+  default: number | string | boolean
+  min?: number | null
+  max?: number | null
+}>> = {
+  content_filtering: {
+    score_threshold: { type: 'float', default: 0.65, min: 0.0, max: 1.0 },
+    max_episodes_per_digest: { type: 'int', default: 5, min: 1, max: 20 },
+    min_episodes_per_digest: { type: 'int', default: 1, min: 0, max: 10 }
+  },
+  audio_processing: {
+    chunk_duration_minutes: { type: 'int', default: 10, min: 1, max: 30 },
+    transcribe_all_chunks: { type: 'bool', default: true, min: null, max: null },
+    max_chunks_per_episode: { type: 'int', default: 3, min: 1, max: 50 }
+  },
+  pipeline: {
+    max_episodes_per_run: { type: 'int', default: 3, min: 1, max: 20 },
+    discovery_lookback_days: { type: 'int', default: 3, min: 1, max: 30 }
+  },
+  retention: {
+    local_mp3_days: { type: 'int', default: 14, min: 0, max: 365 },
+    audio_cache_days: { type: 'int', default: 3, min: 0, max: 30 },
+    audio_chunks_days: { type: 'int', default: 3, min: 0, max: 30 },
+    logs_days: { type: 'int', default: 3, min: 0, max: 365 },
+    episode_retention_days: { type: 'int', default: 14, min: 8, max: 365 },
+    digest_retention_days: { type: 'int', default: 14, min: 8, max: 365 },
+    github_releases_days: { type: 'int', default: 14, min: 0, max: 365 }
+  },
+  topic_tracking: {
+    min_score_for_extraction: { type: 'float', default: 0.70, min: 0.0, max: 1.0 },
+    max_topics_per_episode: { type: 'int', default: 15, min: 3, max: 20 },
+    retention_days: { type: 'int', default: 14, min: 7, max: 90 },
+    extraction_model: { type: 'string', default: 'gpt-5-mini', min: null, max: null }
+  },
+  ad_filtering: {
+    enabled: { type: 'bool', default: true, min: null, max: null },
+    confidence_threshold: { type: 'float', default: 0.7, min: 0.0, max: 1.0 }
+  },
+  topic_evolution: {
+    enable_novelty_detection: { type: 'bool', default: true, min: null, max: null },
+    novelty_threshold: { type: 'float', default: 0.30, min: 0.0, max: 1.0 },
+    embedding_model: { type: 'string', default: 'text-embedding-3-small', min: null, max: null },
+    similarity_threshold: { type: 'float', default: 0.85, min: 0.5, max: 1.0 }
+  },
+  ai_content_scoring: {
+    model: { type: 'string', default: 'gpt-5-mini', min: null, max: null },
+    max_tokens: { type: 'int', default: 1000, min: 100, max: 128000 },
+    max_episodes_per_batch: { type: 'int', default: 10, min: 1, max: 50 },
+    max_input_tokens: { type: 'int', default: 120000, min: 1000, max: 272000 },
+    prompt_max_chars: { type: 'int', default: 4000, min: 0, max: 200000 }
+  },
+  ai_digest_generation: {
+    model: { type: 'string', default: 'gpt-5', min: null, max: null },
+    max_output_tokens: { type: 'int', default: 25000, min: 1000, max: 128000 },
+    max_input_tokens: { type: 'int', default: 150000, min: 10000, max: 272000 },
+    transcript_buffer_percent: { type: 'float', default: 20.0, min: 0.0, max: 95.0 },
+    transcript_min_chars: { type: 'int', default: 2000, min: 0, max: 500000 },
+    transcript_max_chars: { type: 'int', default: 20000, min: 0, max: 1000000 }
+  },
+  ai_metadata_generation: {
+    model: { type: 'string', default: 'gpt-5-mini', min: null, max: null },
+    max_input_tokens: { type: 'int', default: 60000, min: 1000, max: 128000 },
+    max_title_tokens: { type: 'int', default: 50, min: 10, max: 200 },
+    max_summary_tokens: { type: 'int', default: 200, min: 50, max: 1000 },
+    max_description_tokens: { type: 'int', default: 500, min: 100, max: 2000 }
+  },
+  ai_tts_generation: {
+    model: { type: 'string', default: 'eleven_turbo_v2_5', min: null, max: null },
+    max_characters: { type: 'int', default: 35000, min: 1000, max: 40000 }
+  },
+  ai_stt_transcription: {
+    model: { type: 'string', default: 'whisper-1', min: null, max: null },
+    max_file_size_mb: { type: 'int', default: 20, min: 1, max: 25 }
+  },
+  transcript_processing: {
+    ad_trim_enabled: { type: 'bool', default: true, min: null, max: null },
+    ad_trim_start_percent: { type: 'float', default: 5.0, min: 0.0, max: 50.0 },
+    ad_trim_end_percent: { type: 'float', default: 5.0, min: 0.0, max: 50.0 }
+  }
+}
+
+// Mirror of src/config/web_config.py AI_MODELS (lines 109-132)
+const AI_MODELS = {
+  openai: {
+    'gpt-5.1': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.1' },
+    'gpt-5': { max_output: 128000, max_input: 272000, display_name: 'GPT-5' },
+    'gpt-5-mini': { max_output: 128000, max_input: 400000, display_name: 'GPT-5 Mini' },
+    'gpt-5-nano': { max_output: 64000, max_input: 128000, display_name: 'GPT-5 Nano' },
+    'gpt-4-turbo-preview': { max_output: 4096, max_input: 128000, display_name: 'GPT-4 Turbo' },
+    'gpt-4o': { max_output: 16384, max_input: 128000, display_name: 'GPT-4o' },
+    'gpt-4o-mini': { max_output: 16384, max_input: 128000, display_name: 'GPT-4o Mini' },
+    'gpt-3.5-turbo': { max_output: 4096, max_input: 16385, display_name: 'GPT-3.5 Turbo' }
+  },
+  elevenlabs: {
+    'eleven_v3': { max_characters: 5000, display_name: 'v3 (5k chars, highest quality)' },
+    'eleven_turbo_v2_5': { max_characters: 40000, display_name: 'Turbo v2.5 (40k chars)' },
+    'eleven_turbo_v2': { max_characters: 30000, display_name: 'Turbo v2 (30k chars)' },
+    'eleven_flash_v2_5': { max_characters: 40000, display_name: 'Flash v2.5 (40k chars, low latency)' },
+    'eleven_flash_v2': { max_characters: 30000, display_name: 'Flash v2 (30k chars, low latency)' },
+    'eleven_multilingual_v2': { max_characters: 10000, display_name: 'Multilingual v2 (10k chars)' },
+    'eleven_multilingual_v1': { max_characters: 10000, display_name: 'Multilingual v1 (10k chars)' }
+  },
+  whisper: {
+    'whisper-1': { max_file_size_mb: 25, display_name: 'Whisper-1 (25MB limit)' }
+  }
+}
 
 export async function GET() {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
-  try {
-    const projectRoot = path.resolve(process.cwd(), '..')
-    const scriptPath = path.join(projectRoot, 'scripts', 'export_settings_schema.py')
-    const pythonPath = path.join(projectRoot, '.venv', 'bin', 'python3')
-
-    return new Promise<NextResponse>((resolve) => {
-      const python = spawn(pythonPath, [scriptPath], { cwd: projectRoot })
-      let stdout = ''
-      let stderr = ''
-
-      python.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
-      python.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
-
-      python.on('close', (code: number) => {
-        if (code !== 0) {
-          console.error('Schema export failed:', stderr)
-          resolve(NextResponse.json({ error: 'Schema export failed' }, { status: 500 }))
-          return
-        }
-        try {
-          const schema = JSON.parse(stdout)
-          resolve(NextResponse.json(schema))
-        } catch (e) {
-          console.error('Invalid schema JSON:', e)
-          resolve(NextResponse.json({ error: 'Invalid schema JSON' }, { status: 500 }))
-        }
-      })
-
-      python.on('error', (error: Error) => {
-        console.error('Failed to spawn Python process:', error)
-        resolve(NextResponse.json({ error: 'Failed to spawn Python process' }, { status: 500 }))
-      })
-    })
-  } catch (error) {
-    console.error('Settings schema error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  return NextResponse.json({
+    settings: SETTINGS_SCHEMA,
+    ai_models: AI_MODELS
+  })
 }
