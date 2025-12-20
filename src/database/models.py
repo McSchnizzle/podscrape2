@@ -1,6 +1,23 @@
 """
 SQLAlchemy-based database models and repositories for RSS Podcast Transcript Digest System.
-Migration from SQLite to PostgreSQL with comprehensive repository pattern.
+
+DATABASE ARCHITECTURE (v2.30+):
+-------------------------------
+This module provides the Python data access layer for PostgreSQL (Supabase).
+
+The system uses a SINGLE database (Supabase PostgreSQL) with TWO access patterns:
+  - Python (this module): SQLAlchemy ORM for backend pipeline, scripts, migrations
+  - TypeScript (web_ui_hosted/utils/supabase.ts): Supabase JS SDK for Web UI API routes
+
+Both stacks connect to the SAME Supabase PostgreSQL database.
+
+CANONICAL SCHEMA: supabase_schema.sql
+SCHEMA MANAGEMENT: Alembic migrations (alembic/versions/)
+
+DEPRECATED: SQLite is no longer supported. The legacy SQLite schema has been
+archived to archive/legacy_schemas/schema_sqlite_legacy.sql.
+
+GitHub Issue #9: Consolidate data access on Supabase
 """
 
 import json

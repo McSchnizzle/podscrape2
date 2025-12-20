@@ -1,3 +1,20 @@
+-- ==============================================================================
+-- LEGACY SQLITE SCHEMA - NO LONGER IN USE
+-- ==============================================================================
+-- This file is archived for historical reference only.
+--
+-- The system has migrated to PostgreSQL (Supabase) as of v1.28+.
+-- The canonical schema is now defined in:
+--   - SQLAlchemy models: src/database/sqlalchemy_models.py
+--   - Supabase reference: supabase_schema.sql
+--   - Alembic migrations: alembic/versions/
+--
+-- DO NOT use this schema for new development.
+-- ==============================================================================
+-- Archived: 2025-12-20
+-- Reason: Consolidation to Supabase (GitHub Issue #9)
+-- ==============================================================================
+
 -- RSS Podcast Transcript Digest System Database Schema
 -- SQLite3 Database Schema for Episodes, Feeds, and Digests
 
@@ -97,20 +114,20 @@ CREATE INDEX IF NOT EXISTS idx_digests_date ON digests(digest_date);
 CREATE INDEX IF NOT EXISTS idx_digests_topic ON digests(topic);
 
 -- Triggers for automatic timestamp updates
-CREATE TRIGGER IF NOT EXISTS update_feeds_timestamp 
+CREATE TRIGGER IF NOT EXISTS update_feeds_timestamp
     AFTER UPDATE ON feeds
     BEGIN
         UPDATE feeds SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
-CREATE TRIGGER IF NOT EXISTS update_episodes_timestamp 
+CREATE TRIGGER IF NOT EXISTS update_episodes_timestamp
     AFTER UPDATE ON episodes
     BEGIN
         UPDATE episodes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
 -- Insert initial system metadata
-INSERT OR REPLACE INTO system_metadata (key, value) VALUES 
+INSERT OR REPLACE INTO system_metadata (key, value) VALUES
     ('schema_version', '1.0'),
     ('created_at', datetime('now')),
     ('last_migration', datetime('now'));
@@ -120,7 +137,7 @@ CREATE VIEW IF NOT EXISTS active_feeds AS
 SELECT * FROM feeds WHERE active = 1;
 
 CREATE VIEW IF NOT EXISTS recent_episodes AS
-SELECT 
+SELECT
     e.*,
     f.title as feed_title,
     julianday('now') - julianday(e.published_date) as days_old
@@ -130,7 +147,7 @@ WHERE e.published_date > date('now', '-30 days')
 ORDER BY e.published_date DESC;
 
 CREATE VIEW IF NOT EXISTS scored_episodes AS
-SELECT 
+SELECT
     e.*,
     f.title as feed_title,
     json_extract(e.scores, '$') as all_scores
@@ -139,7 +156,7 @@ JOIN feeds f ON e.feed_id = f.id
 WHERE e.status = 'scored' AND e.scores IS NOT NULL;
 
 CREATE VIEW IF NOT EXISTS digest_stats AS
-SELECT 
+SELECT
     topic,
     COUNT(*) as total_digests,
     AVG(episode_count) as avg_episodes_per_digest,

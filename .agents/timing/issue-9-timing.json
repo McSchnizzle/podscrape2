@@ -1,0 +1,21 @@
+{
+  "issue": "9",
+  "workflow": "3-agent",
+  "workflow_start": "2025-12-20T09:11:28.000Z",
+  "agents": {
+    "plan": {
+      "duration_minutes": 90,
+      "status": "complete"
+    },
+    "build": {
+      "duration_minutes": 40,
+      "status": "complete"
+    },
+    "test_and_cleanup": {
+      "duration_minutes": 15,
+      "status": "complete"
+    }
+  },
+  "workflow_end": "2025-12-20T11:36:00.000Z",
+  "total_duration_minutes": 145
+}

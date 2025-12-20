@@ -27,14 +27,35 @@ AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dy
 - **Retention**: Automatic cleanup of old MP3s, GitHub releases, logs, and database records based on configured retention periods
 
 ### Database Architecture (PostgreSQL via Supabase)
+
+**Single Database, Two Access Patterns**:
+The system uses a single PostgreSQL database hosted on Supabase, accessed through two complementary stacks:
+
+| Stack | Language | Use Case | Client |
+|-------|----------|----------|--------|
+| SQLAlchemy ORM | Python | Backend pipeline, scripts, migrations | `src/database/models.py` |
+| Supabase JS | TypeScript | Web UI API routes | `web_ui_hosted/utils/supabase.ts` |
+
+Both stacks connect to the SAME Supabase PostgreSQL database. This is intentional - each stack serves its ecosystem well (Python ORM for backend, JS SDK for Next.js).
+
+**Canonical Schema Contract**: `supabase_schema.sql` is the authoritative reference. Both SQLAlchemy models and TypeScript interfaces must align with this schema.
+
+**Core Tables**:
 - **episodes**: Core episode data, transcripts, AI scores, processing status
 - **feeds**: RSS feed URLs, titles, health status, last checked timestamps
 - **digests**: Generated scripts, MP3 metadata, publishing status
+- **topics**: Topic configuration with voice settings and GPT instructions
 - **web_settings**: UI configuration (score thresholds, audio processing settings)
 - **story_arcs**: Evolving news narratives tracked over time (v2.29+)
 - **story_arc_events**: Timeline events within each story arc
+- **pipeline_logs**: Pipeline execution logs for monitoring
+- **workflow_errors**: Persistent error tracking for pattern analysis
 
-The system uses PostgreSQL (Supabase) with SQLAlchemy models in `src/database/sqlalchemy_models.py`. Legacy SQLite support available in `src/database/models.py`.
+**Schema Management**:
+- Schema changes are made via Alembic migrations: `python3 -m alembic upgrade head`
+- SQLAlchemy models: `src/database/sqlalchemy_models.py`
+- TypeScript types: `web_ui_hosted/utils/supabase.ts`
+- Legacy SQLite schema has been archived (see `archive/legacy_schemas/`)
 
 ### Story Arc Tracking System (v2.29+)
 

@@ -1,3 +1,16 @@
+"""
+SQLAlchemy ORM Models for PostgreSQL (Supabase).
+
+These models define the database schema for the RSS Podcast Transcript Digest System.
+They are the authoritative source for the Python backend and must align with:
+  - Canonical schema: supabase_schema.sql
+  - TypeScript types: web_ui_hosted/utils/supabase.ts
+
+Schema changes should be made via Alembic migrations: python3 -m alembic upgrade head
+
+GitHub Issue #9: Consolidate data access on Supabase
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, date, timezone
@@ -436,4 +449,62 @@ class WorkflowError(Base):
         Index("ix_workflow_errors_category", "error_category"),
         Index("ix_workflow_errors_phase", "phase"),
         Index("ix_workflow_errors_feed_id", "feed_id"),
+    )
+
+
+class StoryArc(Base):
+    """Tracks evolving news narratives over time"""
+    __tablename__ = "story_arcs"
+
+    id = Column(Integer, primary_key=True)
+    arc_name = Column(String(512), nullable=False)
+    arc_slug = Column(String(255), nullable=False, unique=True)
+    functional_category = Column(String(50), nullable=False, default='other')
+    digest_topic = Column(String(256), nullable=False)
+    summary = Column(Text)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    last_updated_at = Column(DateTime(timezone=True), nullable=False)
+    event_count = Column(Integer, nullable=False, default=1)
+    source_count = Column(Integer, nullable=False, default=1)
+    included_in_digest_id = Column(Integer)
+    included_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    events = relationship('StoryArcEvent', back_populates='story_arc', cascade='all, delete-orphan')
+
+    __table_args__ = (
+        Index('ix_story_arcs_digest_topic', 'digest_topic'),
+        Index('ix_story_arcs_category', 'functional_category'),
+        Index('ix_story_arcs_last_updated', 'last_updated_at'),
+        Index('ix_story_arcs_slug', 'arc_slug'),
+    )
+
+
+class StoryArcEvent(Base):
+    """Individual events within a story arc timeline"""
+    __tablename__ = "story_arc_events"
+
+    id = Column(Integer, primary_key=True)
+    story_arc_id = Column(Integer, ForeignKey('story_arcs.id', ondelete='CASCADE'), nullable=False)
+    event_date = Column(DateTime(timezone=True), nullable=False)
+    event_summary = Column(Text, nullable=False)
+    key_points = Column(postgresql.ARRAY(Text), nullable=False, default=[])
+    source_feed_id = Column(Integer, ForeignKey('feeds.id', ondelete='SET NULL'))
+    source_episode_id = Column(Integer, ForeignKey('episodes.id', ondelete='SET NULL'))
+    source_episode_guid = Column(String(512))
+    source_name = Column(String(256))
+    perspective = Column(String(50))  # positive, negative, neutral, analytical
+    relevance_score = Column(Float)
+    extracted_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    story_arc = relationship('StoryArc', back_populates='events')
+
+    __table_args__ = (
+        Index('ix_story_arc_events_arc_id', 'story_arc_id'),
+        Index('ix_story_arc_events_date', 'event_date'),
+        Index('ix_story_arc_events_episode', 'source_episode_id'),
     )
