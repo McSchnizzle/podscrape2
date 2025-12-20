@@ -882,6 +882,23 @@ export class DatabaseClient {
     }
   }
 
+  async getDigestsInTimeWindow(startTime: string, endTime: string) {
+    try {
+      const { data, error } = await supabase
+        .from('digests')
+        .select('id, topic, status, generated_at, mp3_path')
+        .gte('generated_at', startTime)
+        .lte('generated_at', endTime)
+        .order('generated_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get digests in time window:', error)
+      return []
+    }
+  }
+
   async getDigestLinksForEpisodes(episodeIds: number[]) {
     try {
       const { data, error } = await supabase
@@ -1253,10 +1270,16 @@ export class DatabaseClient {
         }
       }
 
+      // Get actual digests created in the analysis period for cross-reference
+      const digestsInPeriod = await this.getDigestsInTimeWindow(
+        cutoffDate.toISOString(),
+        new Date().toISOString()
+      )
+
       // Analyze each workflow run
       const workflows = []
       for (const [runId, logs] of Object.entries(runGroups)) {
-        const analysis = this.analyzeWorkflowRun(runId, logs, topics || [], parseFloat(scoreThreshold), parseInt(minEpisodes), feedUrlToTitle)
+        const analysis = this.analyzeWorkflowRun(runId, logs, topics || [], parseFloat(scoreThreshold), parseInt(minEpisodes), feedUrlToTitle, digestsInPeriod)
         workflows.push(analysis)
       }
 
@@ -1311,7 +1334,8 @@ export class DatabaseClient {
     topics: Array<{name: string, slug: string}>,
     scoreThreshold: number,
     minEpisodes: number,
-    feedUrlToTitle: Map<string, string>
+    feedUrlToTitle: Map<string, string>,
+    digestsInPeriod: Array<{id: number, topic: string, status: string, generated_at: string, mp3_path: string | null}>
   ) {
     const sortedLogs = [...logs].sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -1358,8 +1382,14 @@ export class DatabaseClient {
         if (match) episodesScored = Math.max(episodesScored, parseInt(match[1]))
       }
 
-      // Digest generation outcomes
-      if (msg.includes('generated digest') || msg.includes('✅ generated digest')) {
+      // Digest generation outcomes - handle multiple log formats
+      // Format 1: "Digests generated: N" from orchestrator
+      // Format 2: "Generated digest: TopicName" from run_digest.py
+      if (msg.includes('digests generated:')) {
+        const match = log.message.match(/digests generated:\s*(\d+)/i)
+        if (match) digestsGenerated = Math.max(digestsGenerated, parseInt(match[1]))
+      }
+      if (msg.includes('generated digest:') || msg.includes('generated digest')) {
         digestsGenerated++
         // Extract topic name
         for (const topic of topics) {
@@ -1371,10 +1401,16 @@ export class DatabaseClient {
         }
       }
 
-      // TTS/Audio generation
+      // TTS/Audio generation - handle multiple log formats
+      // Format 1: "Audio files generated: N" from orchestrator
+      // Format 2: "Generated: N MP3 files" from run_tts.py
+      if (msg.includes('audio files generated:')) {
+        const match = log.message.match(/audio files generated:\s*(\d+)/i)
+        if (match) audioFilesCreated = Math.max(audioFilesCreated, parseInt(match[1]))
+      }
       if (msg.includes('generated:') && msg.includes('mp3')) {
-        const match = log.message.match(/(\d+)\s*mp3/i)
-        if (match) audioFilesCreated = parseInt(match[1])
+        const match = log.message.match(/generated:\s*(\d+)\s*mp3/i)
+        if (match) audioFilesCreated = Math.max(audioFilesCreated, parseInt(match[1]))
       }
 
       // Parse "no digest" reasons
@@ -1419,6 +1455,49 @@ export class DatabaseClient {
           }
         }
       }
+    }
+
+    // Cross-reference with actual database for accurate counts
+    // If log parsing found nothing but database has digests in this run's time window, use database
+    const runStart = new Date(startedAt)
+    const runEnd = new Date(finishedAt)
+    // Add 1 minute buffer for timing variations
+    runStart.setMinutes(runStart.getMinutes() - 1)
+    runEnd.setMinutes(runEnd.getMinutes() + 5)
+
+    const digestsForRun = digestsInPeriod.filter(d => {
+      const genTime = new Date(d.generated_at)
+      return genTime >= runStart && genTime <= runEnd
+    })
+
+    // Use database counts as authoritative if they show more than log parsing found
+    if (digestsForRun.length > digestsGenerated) {
+      digestsGenerated = digestsForRun.length
+      // Update topics covered from database
+      for (const digest of digestsForRun) {
+        if (digest.topic && !topicsCovered.includes(digest.topic)) {
+          topicsCovered.push(digest.topic)
+        }
+      }
+    }
+
+    // Count audio files from database (digests with mp3_path)
+    const audioFromDb = digestsForRun.filter(d => d.mp3_path).length
+    if (audioFromDb > audioFilesCreated) {
+      audioFilesCreated = audioFromDb
+    }
+
+    // If we found digests in the database for covered topics, clear those from noDigestReasons
+    // This prevents showing "Why no new digests?" when digests actually exist
+    if (digestsGenerated > 0) {
+      // Remove reasons for topics that we know got digests
+      const coveredTopicsLower = topicsCovered.map(t => t.toLowerCase())
+      const filteredReasons = noDigestReasons.filter(reason =>
+        !coveredTopicsLower.includes(reason.topic.toLowerCase())
+      )
+      // Replace the array
+      noDigestReasons.length = 0
+      noDigestReasons.push(...filteredReasons)
     }
 
     // Categorize errors - some are critical, some are minor
@@ -1480,19 +1559,30 @@ export class DatabaseClient {
     }
 
     // Determine overall status based on critical errors and output
+    // Priority: actual output trumps error counts
     let status: 'success' | 'failure' | 'partial' | 'no_output' = 'success'
 
-    if (criticalErrors.length > 0) {
-      // Critical errors - but if we still produced output, it's partial success
-      if (digestsGenerated > 0 || audioFilesCreated > 0) {
+    // First check: did we produce any output?
+    const hasOutput = digestsGenerated > 0 || audioFilesCreated > 0
+
+    if (hasOutput) {
+      // We have output - determine if it was clean success or partial
+      if (criticalErrors.length > 0 || warningLogs.length > 0 || minorErrors.length > 0) {
         status = 'partial'
       } else {
-        status = 'failure'
+        status = 'success'
       }
-    } else if (digestsGenerated === 0 && audioFilesCreated === 0) {
-      status = 'no_output'
-    } else if (warningLogs.length > 0 || minorErrors.length > 0 || noDigestReasons.length > 0) {
-      status = 'partial'
+    } else {
+      // No output - determine why
+      if (criticalErrors.length > 0) {
+        status = 'failure'
+      } else if (noDigestReasons.length > 0) {
+        // Intentionally no output (no qualifying episodes, etc.)
+        status = 'no_output'
+      } else {
+        // Unknown reason for no output
+        status = 'no_output'
+      }
     }
 
     // Generate summary message with actual error details
