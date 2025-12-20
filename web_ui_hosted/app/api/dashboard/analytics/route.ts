@@ -173,8 +173,8 @@ export async function GET() {
     })
 
     // Transcript analytics - get episodes with transcripts
-    const allEpisodes = await db.getEpisodes({ limit: 100 })
-    const episodesWithTranscripts = allEpisodes.filter((ep: any) => ep.transcript_content)
+    const allEpisodesResult = await db.getEpisodes({ pageSize: 100 })
+    const episodesWithTranscripts = allEpisodesResult.episodes.filter((ep: any) => ep.transcript_content)
 
     if (episodesWithTranscripts.length > 0) {
       const lengths = episodesWithTranscripts.map((ep: any) => (ep.transcript_content || '').length).filter((l: number) => l > 0)

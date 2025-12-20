@@ -41,14 +41,14 @@ export async function GET() {
     }
 
     // Test episode retrieval using database client methods
-    const episodes = await db.getEpisodes({ limit: 3, sortBy: 'published_date', sortDir: 'desc' })
+    const episodesResult = await db.getEpisodes({ pageSize: 3, sortBy: 'published_date', sortDir: 'desc' })
 
-    console.log(`DatabaseClient returned ${episodes?.length || 0} episodes`)
+    console.log(`DatabaseClient returned ${episodesResult.episodes?.length || 0} episodes`)
 
     return NextResponse.json({
       success: true,
       totalCount: health.feeds_count || 0,
-      sampleEpisodes: episodes.slice(0, 3).map((ep: any) => ({
+      sampleEpisodes: episodesResult.episodes.slice(0, 3).map((ep: any) => ({
         id: ep.id,
         title: ep.title,
         status: ep.status,

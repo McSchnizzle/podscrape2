@@ -41,6 +41,12 @@ export default function EpisodesPage() {
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(25);  // Could be made configurable later
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+
   // Track if this is the first render to avoid double-loading
   const isFirstRender = useRef(true);
 
@@ -51,6 +57,10 @@ export default function EpisodesPage() {
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, value);
       });
+
+      // Add pagination parameters
+      params.append('page', String(currentPage));
+      params.append('pageSize', String(pageSize));
 
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
@@ -65,6 +75,8 @@ export default function EpisodesPage() {
       if (response.ok) {
         const data = await response.json();
         setEpisodes(data.episodes || []);
+        setTotalCount(data.total || 0);
+        setTotalPages(data.totalPages || 1);
         setMessage(null); // Clear any previous error messages
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -99,7 +111,8 @@ export default function EpisodesPage() {
 
     console.log('[Episodes] Auto-applying filters due to change:', pendingFilters);
     setFilters(pendingFilters);
-    loadEpisodesWithFilters(pendingFilters);
+    setCurrentPage(0);  // Reset to first page on filter change
+    loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
   }, [pendingFilters.status, pendingFilters.sortBy, pendingFilters.sortDir]);
 
   const handleFilterChange = (key: string, value: string) => {
@@ -107,16 +120,21 @@ export default function EpisodesPage() {
     setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const loadEpisodesWithFilters = async (filterOverride?: typeof filters) => {
+  const loadEpisodesWithFilters = async (filterOverride?: typeof filters & { page?: number }) => {
     console.log('[Episodes] loadEpisodesWithFilters called, filterOverride:', filterOverride);
     const activeFilters = filterOverride || filters;
-    console.log('[Episodes] activeFilters:', activeFilters);
+    const page = filterOverride?.page ?? currentPage;
+    console.log('[Episodes] activeFilters:', activeFilters, 'page:', page);
     setLoading(true);
     try {
       const params = new URLSearchParams();
       Object.entries(activeFilters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (key !== 'page' && value) params.append(key, String(value));
       });
+
+      // Add pagination parameters
+      params.append('page', String(page));
+      params.append('pageSize', String(pageSize));
 
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
@@ -134,6 +152,8 @@ export default function EpisodesPage() {
         const data = await response.json();
         console.log('[Episodes] loadEpisodesWithFilters: Got', data.episodes?.length, 'episodes');
         setEpisodes(data.episodes || []);
+        setTotalCount(data.total || 0);
+        setTotalPages(data.totalPages || 1);
         setMessage(null);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -212,11 +232,12 @@ export default function EpisodesPage() {
               onChange={(e) => handleFilterChange('q', e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
+                  setCurrentPage(0);  // Reset to first page on search
                   setFilters(prev => ({ ...prev, q: pendingFilters.q }));
-                  loadEpisodesWithFilters({ ...pendingFilters });
+                  loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
                 }
               }}
-              placeholder="Search title or feed"
+              placeholder="Search episode title"
               className="border px-3 py-2 rounded w-full"
             />
           </div>
@@ -347,6 +368,42 @@ export default function EpisodesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {!loading && episodes.length > 0 && (
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {currentPage * pageSize + 1} - {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} episodes
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const newPage = Math.max(0, currentPage - 1);
+                  setCurrentPage(newPage);
+                  loadEpisodesWithFilters({ ...filters, page: newPage });
+                }}
+                disabled={currentPage === 0}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1 text-sm">
+                Page {currentPage + 1} of {totalPages}
+              </span>
+              <button
+                onClick={() => {
+                  const newPage = Math.min(totalPages - 1, currentPage + 1);
+                  setCurrentPage(newPage);
+                  loadEpisodesWithFilters({ ...filters, page: newPage });
+                }}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

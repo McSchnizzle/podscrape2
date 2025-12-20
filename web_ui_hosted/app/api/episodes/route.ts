@@ -10,24 +10,26 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || '';
     const sortBy = searchParams.get('sortBy') || 'scored_at';
     const sortDir = searchParams.get('sortDir') || 'desc';
-    const limit = parseInt(searchParams.get('limit') || '100');
+    const page = parseInt(searchParams.get('page') || '0');
+    const pageSize = parseInt(searchParams.get('pageSize') || '25');
 
-    console.log(`[Episodes API] Request filters:`, { q, status, sortBy, sortDir, limit });
+    console.log(`[Episodes API] Request filters:`, { q, status, sortBy, sortDir, page, pageSize });
 
     const db = DatabaseClient.getInstance();
 
-    // Get episodes with filters
-    const episodes = await db.getEpisodes({
+    // Get episodes with filters and pagination
+    const result = await db.getEpisodes({
       q,
       status,
       sortBy,
       sortDir,
-      limit
+      page,
+      pageSize
     });
 
     // Log what we got back to debug filtering issues
     if (status) {
-      const statusMismatch = episodes.filter((ep: Episode) => ep.status !== status);
+      const statusMismatch = result.episodes.filter((ep: Episode) => ep.status !== status);
       if (statusMismatch.length > 0) {
         console.error(`[Episodes API] BUG: Filter requested status='${status}' but got ${statusMismatch.length} episodes with different status:`,
           statusMismatch.map((ep: Episode) => ({ id: ep.id, status: ep.status, title: ep.title?.substring(0, 40) }))
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Process episodes for display
-    const processedEpisodes = episodes.map((ep: Episode & { feeds?: { title: string } }) => {
+    const processedEpisodes = result.episodes.map((ep: Episode & { feeds?: { title: string } }) => {
       // Create score labels
       const scores = ep.scores || {};
       const scoreLabels = Object.entries(scores)
@@ -61,14 +63,17 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const result = {
+    const response = {
       episodes: processedEpisodes,
-      total: processedEpisodes.length
+      total: result.totalCount,
+      page,
+      pageSize,
+      totalPages: Math.ceil(result.totalCount / pageSize)
     };
 
-    console.log(`Returning ${result.episodes.length} episodes`);
+    console.log(`Returning ${response.episodes.length} episodes (page ${page + 1} of ${response.totalPages})`);
 
-    return NextResponse.json(result);
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Episodes API error:', error);
     return NextResponse.json({ error: 'Failed to fetch episodes' }, { status: 500 });

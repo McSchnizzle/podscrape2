@@ -666,32 +666,44 @@ export class DatabaseClient {
     status?: string
     sortBy?: string
     sortDir?: string
-    limit?: number
-  } = {}) {
+    page?: number
+    pageSize?: number
+  } = {}): Promise<{ episodes: Episode[], totalCount: number }> {
     try {
       const {
         q = '',
         status = '',
         sortBy = 'scored_at',
         sortDir = 'desc',
-        limit = 100
+        page = 0,
+        pageSize = 25
       } = filters
 
-      // Build query with filter FIRST, then order and limit
-      // This ensures the filter is properly applied before pagination
+      // Build query with count for pagination
       let query = supabase
         .from('episodes')
-        .select('*')
+        .select('*', { count: 'exact' })
 
-      // Apply status filter BEFORE order/limit
+      // Apply status filter BEFORE order/pagination
       if (status) {
         query = query.eq('status', status)
       }
 
-      // Now apply order and limit
-      query = query.order(sortBy, { ascending: sortDir === 'asc' }).limit(limit)
+      // Apply text search on episode title (database-level)
+      // Note: Feed title search not available at database level - search by episode title only
+      if (q) {
+        query = query.ilike('title', `%${q}%`)
+      }
 
-      const { data, error } = await query
+      // Apply ordering
+      query = query.order(sortBy, { ascending: sortDir === 'asc' })
+
+      // Apply pagination with range() instead of limit()
+      const start = page * pageSize
+      const end = start + pageSize - 1
+      query = query.range(start, end)
+
+      const { data, error, count } = await query
 
       // Debug logging
       console.log(`[Supabase] Query for status='${status}' returned ${data?.length || 0} episodes`)
@@ -747,15 +759,6 @@ export class DatabaseClient {
         }
       }
 
-      // Apply text search on the frontend for simplicity
-      if (q) {
-        const searchTerm = q.toLowerCase()
-        episodes = episodes.filter((ep: Episode & { feeds?: { title: string } }) =>
-          ep.title?.toLowerCase().includes(searchTerm) ||
-          ep.feeds?.title?.toLowerCase().includes(searchTerm)
-        )
-      }
-
       const inclusionMap: Record<number, Array<{ topic: string; date: string }>> = {}
       digestLinks.forEach((link: DigestEpisodeLinkRecord) => {
         const digest = digestsMap[link.digest_id]
@@ -769,13 +772,18 @@ export class DatabaseClient {
         })
       })
 
-      return episodes.map((ep: Episode) => ({
+      const processedEpisodes = episodes.map((ep: Episode) => ({
         ...ep,
         inclusion: inclusionMap[ep.id] || []
       }))
+
+      return {
+        episodes: processedEpisodes,
+        totalCount: count ?? 0
+      }
     } catch (error) {
       console.error('Failed to get episodes:', error)
-      return []
+      return { episodes: [], totalCount: 0 }
     }
   }
 
