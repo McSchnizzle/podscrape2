@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from '@/components/Toast'
 
 interface Task {
   id: number
@@ -115,7 +116,10 @@ export default function MaintenancePage() {
       }
     } catch (error) {
       console.error('Failed to update task:', error)
-      alert('Failed to update task')
+      toast.error('Failed to update task', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     }
   }
 
@@ -131,7 +135,10 @@ export default function MaintenancePage() {
       }
     } catch (error) {
       console.error('Failed to delete task:', error)
-      alert('Failed to delete task')
+      toast.error('Failed to delete task', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     }
   }
 
@@ -149,7 +156,10 @@ export default function MaintenancePage() {
       }
     } catch (error) {
       console.error('Failed to create task:', error)
-      alert('Failed to create task')
+      toast.error('Failed to create task', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     }
   }
 

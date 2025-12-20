@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/components/Toast'
 
 interface Settings {
   [category: string]: {
@@ -1094,7 +1095,10 @@ export default function SettingsPage() {
                           const newValue = parseInt(e.target.value)
                           const lookbackDays = getSetting('pipeline', 'discovery_lookback_days')
                           if (newValue <= lookbackDays) {
-                            alert(`Episode retention days must be greater than discovery lookback days (${lookbackDays})`)
+                            toast.error('Validation Error', {
+                              description: `Episode retention days must be greater than discovery lookback days (${lookbackDays})`,
+                              duration: 6000
+                            })
                             return
                           }
                           updateLocalSetting('retention', 'episode_retention_days', newValue)

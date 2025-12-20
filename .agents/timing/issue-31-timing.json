@@ -1,0 +1,14 @@
+{
+  "issue": "31",
+  "workflow": "3-agent",
+  "workflow_start": "2025-12-20T18:50:33.000Z",
+  "test_cleanup_start": "2025-12-20T18:58:00.000Z",
+  "test_cleanup_end": "2025-12-20T19:00:00.000Z",
+  "workflow_end": "2025-12-20T19:00:00.000Z",
+  "durations": {
+    "scout_plan": "~8m",
+    "build": "~20m",
+    "test_cleanup": "~2m",
+    "total": "~10m"
+  }
+}

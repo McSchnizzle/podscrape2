@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from '@/components/Toast'
 
 interface EpisodeTopic {
   id: number
@@ -204,11 +205,17 @@ export default function RecurringTopicsPage() {
         loadData()
       } else {
         const error = await res.json()
-        alert(`Error: ${error.error || 'Failed to save topic'}`)
+        toast.error('Failed to save topic', {
+          description: error.error || 'Unknown error occurred',
+          duration: 8000
+        })
       }
     } catch (error) {
       console.error('Failed to save topic:', error)
-      alert('Failed to save topic')
+      toast.error('Failed to save topic', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     } finally {
       setSaving(false)
     }
@@ -222,11 +229,17 @@ export default function RecurringTopicsPage() {
         loadData()
       } else {
         const error = await res.json()
-        alert(`Error: ${error.error || 'Failed to delete topic'}`)
+        toast.error('Failed to delete topic', {
+          description: error.error || 'Unknown error occurred',
+          duration: 8000
+        })
       }
     } catch (error) {
       console.error('Failed to delete topic:', error)
-      alert('Failed to delete topic')
+      toast.error('Failed to delete topic', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     }
   }
 
@@ -251,7 +264,10 @@ export default function RecurringTopicsPage() {
       }
 
       if (payload.pattern_keywords.length === 0) {
-        alert('At least one keyword is required')
+        toast.error('Validation Error', {
+          description: 'At least one keyword is required',
+          duration: 5000
+        })
         setSaving(false)
         return
       }
@@ -279,11 +295,17 @@ export default function RecurringTopicsPage() {
         loadData()
       } else {
         const error = await res.json()
-        alert(`Error: ${error.error || 'Failed to save ad'}`)
+        toast.error('Failed to save ad', {
+          description: error.error || 'Unknown error occurred',
+          duration: 8000
+        })
       }
     } catch (error) {
       console.error('Failed to save ad:', error)
-      alert('Failed to save ad')
+      toast.error('Failed to save ad', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     } finally {
       setSaving(false)
     }
@@ -297,11 +319,17 @@ export default function RecurringTopicsPage() {
         loadData()
       } else {
         const error = await res.json()
-        alert(`Error: ${error.error || 'Failed to delete ad'}`)
+        toast.error('Failed to delete ad', {
+          description: error.error || 'Unknown error occurred',
+          duration: 8000
+        })
       }
     } catch (error) {
       console.error('Failed to delete ad:', error)
-      alert('Failed to delete ad')
+      toast.error('Failed to delete ad', {
+        description: 'Network error or server unavailable',
+        duration: 8000
+      })
     }
   }
 
@@ -341,7 +369,10 @@ export default function RecurringTopicsPage() {
 
   const handleMergeTopics = async () => {
     if (selectedTopicIds.size < 2) {
-      alert('Please select at least 2 topics to merge')
+      toast.error('Selection Required', {
+        description: 'Please select at least 2 topics to merge',
+        duration: 5000
+      })
       return
     }
 
