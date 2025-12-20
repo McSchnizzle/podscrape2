@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { EPISODE_STATUSES } from '@/utils/supabase';
 
@@ -39,6 +39,14 @@ function EpisodesContent() {
     sortBy: searchParams.get('sortBy') || 'scored_at',
     sortDir: searchParams.get('sortDir') || 'desc'
   });
+
+  // Use ref to track current filter values for synchronous access in applyFilters
+  // This fixes the React state closure issue where async state updates may not be visible
+  const filtersRef = useRef(filters);
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Pagination state - initialize from URL
@@ -117,11 +125,12 @@ function EpisodesContent() {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  // Apply current filters
+  // Apply current filters - uses ref to ensure we read latest state values
   const applyFilters = () => {
+    const currentFilters = filtersRef.current;
     setCurrentPage(0);
-    updateUrl(filters, 0);
-    loadEpisodesWithFilters({ ...filters, page: 0 });
+    updateUrl(currentFilters, 0);
+    loadEpisodesWithFilters({ ...currentFilters, page: 0 });
   };
 
   // Reset all filters to defaults
