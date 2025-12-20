@@ -851,7 +851,7 @@ digests_query = session.query(DigestModel).filter(
 
 **Web Settings Integration**:
 - Added web_settings integration for GitHub release retention (lines 83-94)
-- Reads `retention.github_release_days` from database
+- Reads `retention.github_releases_days` from database
 - Falls back to 14 days if setting unavailable
 - Comprehensive retention system now fully database-driven
 
@@ -1095,7 +1095,7 @@ const digestIds = links?.map((link: { digest_id: number }) => link.digest_id) ||
   - `local_mp3_days`: Local MP3 files (default: 14 days)
   - `audio_cache_days`: Audio cache files (default: 3 days)
   - `logs_days`: Log files (default: 3 days)
-  - `github_release_days`: GitHub releases (default: 14 days)
+  - `github_releases_days`: GitHub releases (default: 14 days)
   - `episode_retention_days`: Episode database records (default: 14 days)
   - `digest_retention_days`: Digest database records (default: 14 days)
 

@@ -49,7 +49,7 @@ Next.js Web UI hosted at podcast.paulrbrown.org provides configuration, monitori
 - **Settings** (Database-backed via `web_settings` table):
   - Content filtering (score_threshold, max_episodes_per_digest)
   - Audio processing (chunk_duration_minutes, transcribe settings)
-  - Retention periods (local_mp3_days, github_release_days, logs_days, etc.)
+  - Retention periods (local_mp3_days, github_releases_days, logs_days, etc.)
   - Settings are read by the pipeline via `WebConfigManager`
 - **Feeds**:
   - List feeds (feed_url, title, active, last_checked, consecutive_failures)

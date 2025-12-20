@@ -12,7 +12,7 @@ Retention policies are configured via web UI (web_settings table):
 - local_mp3_days: How long to keep local MP3 files (default: 14 days)
 - audio_cache_days: How long to keep audio cache files (default: 3 days)
 - logs_days: How long to keep log files (default: 3 days)
-- github_release_days: How long to keep GitHub releases (default: 14 days)
+- github_releases_days: How long to keep GitHub releases (default: 14 days)
 - episode_retention_days: How long to keep episode database records (default: 14 days)
 - digest_retention_days: How long to keep digest database records (default: 14 days)
 """

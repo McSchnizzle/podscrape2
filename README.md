@@ -256,7 +256,7 @@ The Next.js Web UI is hosted at https://podcast.paulrbrown.org and provides:
 - **Settings**: Database-backed controls for:
   - Content filtering (score_threshold, max_episodes_per_digest)
   - Audio processing (chunk_duration_minutes, transcribe settings)
-  - Retention periods (local_mp3_days, github_release_days, logs_days, etc.)
+  - Retention periods (local_mp3_days, github_releases_days, logs_days, etc.)
 - **Feeds**:
   - List/group active RSS feeds, latest episode + published date
   - Add feeds (URL validation, duplicate guard, title autofill), toggle active, soft delete
@@ -352,7 +352,7 @@ python tests/test_performance.py
 
 ### Retention Management (Dedicated Phase 6, v1.51+)
 - **Local MP3s**: Deleted immediately after successful GitHub upload (no retention period)
-- **GitHub Releases**: Configurable retention (default: 14 days) via `github_release_days` setting
+- **GitHub Releases**: Configurable retention (default: 14 days) via `github_releases_days` setting
 - **Database Records**: Configurable retention (default: 14 days) via `episode_retention_days` and `digest_retention_days`
 - **Logs**: Configurable retention (default: 3 days) via `logs_days` setting
 - **Audio Cache**: Configurable retention (default: 3 days) via `audio_cache_days` setting

@@ -31,33 +31,46 @@ AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dy
 - **feeds**: RSS feed URLs, titles, health status, last checked timestamps
 - **digests**: Generated scripts, MP3 metadata, publishing status
 - **web_settings**: UI configuration (score thresholds, audio processing settings)
-- **episode_topics**: Extracted topics from episodes with story arc tracking (v2.01+)
+- **story_arcs**: Evolving news narratives tracked over time (v2.29+)
+- **story_arc_events**: Timeline events within each story arc
 
 The system uses PostgreSQL (Supabase) with SQLAlchemy models in `src/database/sqlalchemy_models.py`. Legacy SQLite support available in `src/database/models.py`.
 
-### Topic Tracking and Story Arc System (v2.05+)
+### Story Arc Tracking System (v2.29+)
 
-The system tracks topics extracted from episodes and consolidates them into evolving story arcs. This enables:
-- **Deduplication**: Prevents creating duplicate topics with slightly different names
-- **Story Arc Tracking**: Groups related topics into evolving narratives (e.g., "GPT-5.2 Rumors" → "GPT-5.2 Release" → "GPT-5.2 Benchmarks")
-- **Digest Context**: Provides story history to digest generation for more informed scripts
+The system tracks evolving news narratives (story arcs) from episode transcripts. Each arc contains multiple events from different sources, creating a timeline of how stories develop.
+
+**Key Features**:
+- **LLM-Driven Recognition**: No hardcoded keywords - GPT identifies story arcs and events
+- **Timeline Tracking**: Events are timestamped and ordered to show story evolution
+- **Multi-Source Perspectives**: Different podcasts may have different perspectives on the same story
+- **Functional Categories**: Arcs are classified (model_release, regulation, company_strategy, etc.)
 
 **Key Components**:
-- `src/topic_tracking/topic_extractor.py`: Extracts topics from transcripts using GPT with story arc awareness
-- `src/topic_tracking/semantic_matcher.py`: Finds semantically similar topics using embeddings
-- `src/topic_tracking/novelty_detector.py`: Calculates novelty scores for extracted topics
-- `src/database/topic_tracking_repo.py`: Database operations for episode_topics table
+- `src/topic_tracking/topic_extractor.py`: `StoryArcExtractor` class extracts arcs and events using GPT
+- `src/topic_tracking/semantic_matcher.py`: Finds semantically similar arcs for deduplication
+- `src/database/story_arc_repo.py`: Database operations for story_arcs and story_arc_events tables
 
-**Story Arc Patterns** (defined in `topic_extractor.py`):
-Topics are automatically grouped into story arcs based on keyword patterns. New patterns can be added to `STORY_ARC_PATTERNS` dictionary.
+**Story Arc Categories**:
+- `model_release`: New model announcements, updates, versions
+- `company_strategy`: Business moves, pivots, leadership changes
+- `research`: Papers, studies, breakthroughs
+- `regulation`: Policy, legal, governance
+- `product_launch`: New products, features, services
+- `partnership`: Collaborations, acquisitions, investments
+- `controversy`: Disputes, criticisms, debates
+- `industry_trend`: Broader patterns, market shifts
+- `technique`: New methods, approaches, architectures
+- `use_case`: Applications, implementations
+
+**Web UI**: Navigate to `/story-arcs` to view and manage story arcs with expandable timelines.
 
 **Configuration** (via web_settings):
-- `topic_tracking.extraction_model`: GPT model for extraction (default: gpt-5-mini)
+- `topic_tracking.extraction_model`: GPT model for extraction (default: gpt-4o-mini)
 - `topic_evolution.similarity_threshold`: Threshold for semantic matching (default: 0.85)
-- `topic_evolution.novelty_threshold`: Minimum novelty to consider topic new (default: 0.30)
 - `topic_evolution.embedding_model`: Model for embeddings (default: text-embedding-3-small)
 
-**Note**: The daily deduplication script runs on the shared database via the AInewsletter project, which also adds episodes and topics to the same database.
+**Note**: The daily deduplication script runs on the shared database via the AInewsletter project.
 
 ## Development Commands
 
@@ -475,4 +488,4 @@ curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
 - **Topic Instructions**: Edit `instructions_md` field in `topics` table (no filesystem files since v1.52)
 - **Settings**: Use Web UI Settings page or direct database manipulation of `web_settings` table
 - **Feeds**: Add via Web UI Feeds page or database insertion into `feeds` table
-- **Retention Periods**: Configure via Web UI or `web_settings` table (local_mp3_days, github_release_days, etc.)
+- **Retention Periods**: Configure via Web UI or `web_settings` table (local_mp3_days, github_releases_days, etc.)

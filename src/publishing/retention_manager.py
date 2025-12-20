@@ -85,7 +85,7 @@ class RetentionManager:
             try:
                 from ..config.web_config import WebConfigManager
                 wc = WebConfigManager()
-                self.github_release_retention_days = int(wc.get_setting('retention', 'github_release_days', 14))
+                self.github_release_retention_days = int(wc.get_setting('retention', 'github_releases_days', 14))
                 logger.info(f"GitHub release retention: {self.github_release_retention_days} days (from web_settings)")
             except Exception as e:
                 logger.warning(f"Could not load GitHub release retention from web_settings, using default: {e}")

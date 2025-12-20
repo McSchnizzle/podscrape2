@@ -266,7 +266,7 @@ jobs:
       #   - local_mp3_days: Local MP3 files (default: 14 days)
       #   - audio_cache_days: Audio cache files (default: 3 days)
       #   - logs_days: Log files (default: 3 days)
-      #   - github_release_days: GitHub releases (default: 14 days)
+      #   - github_releases_days: GitHub releases (default: 14 days)
       #   - episode_retention_days: Episode database records (default: 14 days)
       #   - digest_retention_days: Digest database records (default: 14 days)
       - name: Phase 6 - Retention Management
