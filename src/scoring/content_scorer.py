@@ -23,10 +23,8 @@ from dataclasses import dataclass
 from openai import OpenAI
 from config.config_manager import ConfigManager
 from config.web_config import WebConfigManager
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Environment variables expected to be loaded by calling script via src.config.env
 
 # Configure logging
 logger = logging.getLogger(__name__)

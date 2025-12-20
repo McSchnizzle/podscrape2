@@ -15,6 +15,14 @@ from typing import Generator
 
 import pytest
 
+# Load environment variables FIRST before any validation
+from pathlib import Path
+import sys
+_project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(_project_root))
+from src.config.env import load_env
+load_env()
+
 # FAIL FAST: Test Environment Validation
 def pytest_configure(config):
     """

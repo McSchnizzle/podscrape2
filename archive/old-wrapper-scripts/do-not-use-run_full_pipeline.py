@@ -24,13 +24,13 @@ from pathlib import Path
 from typing import Optional
 import argparse
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+# Add project root and src to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
+# Set up environment via centralized entry point
+from src.config.env import load_env, require_database_url
+load_env()
 require_database_url()  # Enforce Supabase Postgres configuration present
 
 from src.podcast.feed_parser import FeedParser

@@ -24,17 +24,9 @@ if str(src_dir) not in sys.path:
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-
-# Try different import approaches
-try:
-    from src.config.env import require_database_url
-except ImportError:
-    from config.env import require_database_url
-
-require_database_url()
+# Set up environment via centralized entry point
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 # Import database models with fallback
 try:

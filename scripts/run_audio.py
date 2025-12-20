@@ -29,11 +29,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
-require_database_url()
+# Set up environment via centralized entry point
+from src.utils.phase_bootstrap import bootstrap_phase
+bootstrap_phase()
 
 from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor

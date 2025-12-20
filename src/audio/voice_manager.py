@@ -9,7 +9,8 @@ import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import requests
-from dotenv import load_dotenv
+
+# Environment variables expected to be loaded by calling script via src.config.env
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,7 @@ class VoiceManager:
     """
     
     def __init__(self):
-        # Load environment variables to ensure API key is available
-        load_dotenv()
+        # Environment variables expected to be loaded by calling script via src.config.env
         self.api_key = os.getenv('ELEVENLABS_API_KEY')
         if not self.api_key:
             raise ValueError("ELEVENLABS_API_KEY environment variable is required")

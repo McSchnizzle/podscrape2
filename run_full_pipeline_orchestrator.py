@@ -20,10 +20,9 @@ from uuid import uuid4
 # Add src to path for environment setup
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
-from src.config.env import require_database_url
+# Set up environment via centralized entry point
+from src.config.env import load_env, require_database_url
+load_env()
 require_database_url()
 
 # Import centralized logging

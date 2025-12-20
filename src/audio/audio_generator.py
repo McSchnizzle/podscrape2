@@ -12,7 +12,8 @@ from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import requests
 from dataclasses import dataclass
-from dotenv import load_dotenv
+
+# Environment variables expected to be loaded by calling script via src.config.env
 
 from .voice_manager import VoiceManager, VoiceSettings
 from .dialogue_chunker import chunk_dialogue_script, DialogueChunk
@@ -75,10 +76,9 @@ class AudioGenerator:
         self.last_request_time = 0
     
     def _ensure_api_key(self):
-        """Ensure API key is loaded (lazy initialization for dotenv timing)"""
+        """Ensure API key is available (environment expected to be loaded by entry point)"""
         if not self._api_key_checked:
-            # Explicitly load .env file to ensure variables are available
-            load_dotenv()
+            # Environment variables expected to be loaded by calling script via src.config.env
             self.api_key = os.getenv('ELEVENLABS_API_KEY')
             if not self.api_key:
                 raise ValueError("ELEVENLABS_API_KEY environment variable is required")

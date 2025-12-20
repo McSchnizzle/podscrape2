@@ -12,10 +12,8 @@ import sys
 from datetime import datetime
 from typing import List, Dict, Optional
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv('.env')
+# Environment variables expected to be loaded by calling script via src.config.env
 
 
 class Task:

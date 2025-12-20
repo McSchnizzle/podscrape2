@@ -16,10 +16,9 @@ def bootstrap_phase():
 
     Note: sys.path setup should be done before calling this function
     """
-    # Set up environment variables
-    from dotenv import load_dotenv
-    load_dotenv()
+    # Set up environment variables via centralized entry point
+    from src.config.env import load_env, require_database_url
+    load_env()
 
     # Verify database URL is configured
-    from src.config.env import require_database_url
     require_database_url()

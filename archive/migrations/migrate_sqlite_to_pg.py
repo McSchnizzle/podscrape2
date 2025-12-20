@@ -11,10 +11,11 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# Add project root and src to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
-from dotenv import load_dotenv
+# Environment variables expected to be loaded by calling script via src.config.env
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session

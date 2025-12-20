@@ -14,8 +14,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
-from dotenv import load_dotenv
-load_dotenv()
+# Set up environment via centralized entry point
+from src.config.env import load_env
+load_env()
 
 
 class TestTopicExtractor(unittest.TestCase):

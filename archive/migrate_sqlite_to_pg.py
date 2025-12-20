@@ -10,12 +10,11 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-# Local imports
+# Environment variables expected to be loaded by calling script via src.config.env
 from src.config.env import require_database_url
 from src.database.sqlalchemy_models import Base, Feed, Episode, Digest
 

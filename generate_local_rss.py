@@ -9,12 +9,13 @@ import sys
 from datetime import datetime, date
 from pathlib import Path
 
-# Add src to path
+# Add project root and src to path
+sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
+# Set up environment via centralized entry point
+from src.config.env import load_env
+load_env()
 
 from src.database.models import get_digest_repo
 from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, PodcastMetadata

@@ -22,8 +22,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from dotenv import load_dotenv
-load_dotenv()
+from src.config.env import load_env
+load_env()
 
 from src.database.models import (
     get_database_manager,

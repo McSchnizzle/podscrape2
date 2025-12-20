@@ -22,8 +22,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from dotenv import load_dotenv
-from src.config.env import require_database_url
+from src.config.env import load_env, require_database_url
 
 
 def find_pg_dump_executable():
@@ -212,7 +211,7 @@ Examples:
 
     try:
         # Load environment and get database URL
-        load_dotenv()
+        load_env()
         db_url = require_database_url()
 
         # Ensure we're using Supabase

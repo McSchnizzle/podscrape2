@@ -12,12 +12,13 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 import argparse
 
-# Add src to path
+# Add project root and src to path
+sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
-# Set up environment
-from dotenv import load_dotenv
-load_dotenv()
+# Set up environment via centralized entry point
+from src.config.env import load_env
+load_env()
 
 from src.podcast.feed_parser import FeedParser
 from src.scoring.content_scorer import ContentScorer

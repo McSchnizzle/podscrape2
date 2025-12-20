@@ -13,9 +13,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from config.env import require_database_url
+from config.env import load_env, require_database_url
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
 
 
 def enable_rls():
@@ -49,7 +48,7 @@ def enable_rls():
     """
 
     try:
-        load_dotenv()
+        load_env()
         db_url = require_database_url()
         engine = create_engine(db_url)
 

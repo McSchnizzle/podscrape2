@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-# Add src to path for imports
+# Add project root to path for imports (src.config.env etc.)
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / 'src'))
-os.environ['PYTHONPATH'] = str(project_root / 'src')
+sys.path.insert(0, str(project_root))
+os.environ['PYTHONPATH'] = str(project_root)
 
 
 def check_environment_variables() -> List[Tuple[str, bool, str]]:
@@ -21,8 +21,8 @@ def check_environment_variables() -> List[Tuple[str, bool, str]]:
     FAIL FAST PRINCIPLE: No fallbacks, no silent failures.
     Missing environment variables are critical errors that must be fixed immediately.
     """
-    from dotenv import load_dotenv
-    load_dotenv()  # Load .env file
+    from src.config.env import load_env
+    load_env()  # Load .env file
 
     checks = []
 
@@ -47,9 +47,9 @@ def check_environment_variables() -> List[Tuple[str, bool, str]]:
 
 def check_ci_workflow_secrets() -> List[Tuple[str, bool, str]]:
     """Report presence of secrets required by CI bootstrap and Phase 4 workflows."""
-    from dotenv import load_dotenv
+    from src.config.env import load_env
 
-    load_dotenv()
+    load_env()
 
     checks: List[Tuple[str, bool, str]] = []
 
@@ -112,12 +112,9 @@ def check_ci_workflow_secrets() -> List[Tuple[str, bool, str]]:
 def check_database_connectivity() -> Tuple[str, bool, str]:
     """Test DATABASE_URL connectivity to Supabase."""
     try:
-        from dotenv import load_dotenv
-        load_dotenv()
+        from src.config.env import load_env, require_database_url
+        load_env()
 
-        # Add src to path again for this function
-        sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-        from config.env import require_database_url
         database_url = require_database_url()
 
         # Test SQLAlchemy connection
