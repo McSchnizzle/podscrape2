@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,9 @@ function getSupabaseClient() {
 
 // Create a new episode topic
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const supabase = getSupabaseClient()
     const body = await request.json()
@@ -71,6 +75,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const supabase = getSupabaseClient()
     const searchParams = request.nextUrl.searchParams

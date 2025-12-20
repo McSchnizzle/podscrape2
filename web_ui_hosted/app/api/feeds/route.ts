@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 const db = DatabaseClient.getInstance()
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     console.log('Feeds API: GET request')
 
@@ -27,6 +31,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const { feed_url, title } = await request.json()
 

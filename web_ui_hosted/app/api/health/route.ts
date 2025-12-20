@@ -1,3 +1,8 @@
+/**
+ * PUBLIC ROUTE - No authentication required
+ * This endpoint is intentionally public for health monitoring and uptime checks.
+ */
+
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 

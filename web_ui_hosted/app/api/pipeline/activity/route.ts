@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,9 @@ const timeAgo = (value: string) => {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const db = DatabaseClient.getInstance()
     const { searchParams } = new URL(request.url)

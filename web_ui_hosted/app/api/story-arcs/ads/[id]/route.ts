@@ -14,14 +14,14 @@ function getSupabaseClient() {
 // Get a single ad by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabase
       .from('common_ads')
@@ -47,14 +47,14 @@ export async function GET(
 // Update an ad
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const {
@@ -99,14 +99,14 @@ export async function PUT(
 // Delete an ad
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
 
     // First check if ad exists
     const { data: existing, error: fetchError } = await supabase

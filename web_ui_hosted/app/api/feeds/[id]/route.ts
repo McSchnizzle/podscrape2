@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { revalidateTag } from 'next/cache'
+import { requireAuth } from '@/lib/auth-guard'
 
 const db = DatabaseClient.getInstance()
 
@@ -8,6 +9,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const id = parseInt(params.id)
     if (isNaN(id)) {
@@ -61,6 +65,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const id = parseInt(params.id)
     if (isNaN(id)) {

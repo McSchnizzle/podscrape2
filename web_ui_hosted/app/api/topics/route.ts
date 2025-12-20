@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 function slugify(input: string): string {
   return input.toLowerCase().trim()
@@ -7,6 +8,9 @@ function slugify(input: string): string {
 }
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     console.log('Topics API request');
 
@@ -55,6 +59,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const body = await request.json()
     const rawTopics = Array.isArray(body.topics) ? body.topics : null

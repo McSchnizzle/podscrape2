@@ -1,4 +1,7 @@
 /**
+ * PUBLIC ROUTE - No authentication required
+ * This endpoint is intentionally public as an RSS feed consumed by podcast apps.
+ *
  * Dynamic RSS Feed API Route (v1.49)
  *
  * ARCHITECTURE: This API route generates the RSS feed dynamically from the Supabase database.

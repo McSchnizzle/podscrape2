@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { revalidateTag } from 'next/cache'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const id = parseInt(params.id)
     if (isNaN(id)) {

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient, supabase } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const db = DatabaseClient.getInstance()
 
@@ -44,6 +48,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const body = await request.json()
     const { category, key, value } = body

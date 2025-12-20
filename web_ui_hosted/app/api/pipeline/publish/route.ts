@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const githubToken = process.env.GITHUB_TOKEN
     const githubRepo = process.env.GITHUB_REPOSITORY

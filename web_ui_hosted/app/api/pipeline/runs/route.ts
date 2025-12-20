@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,9 @@ const summarizeRun = (runId: string, logs: any[]) => {
 }
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const db = DatabaseClient.getInstance()
     const runIds = await db.getDistinctRunIds(10)

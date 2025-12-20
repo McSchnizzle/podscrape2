@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 const editorKey = (topic: string, key: string) => `${topic}:${key}`
 
@@ -15,6 +16,9 @@ function mapVoiceLabel(label: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const { searchParams } = new URL(request.url)
     const topicName = searchParams.get('topic')
@@ -57,6 +61,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const body = await request.json()
     const { action, topic: topicName, content, type_of_show, voice_label, tone, pace } = body

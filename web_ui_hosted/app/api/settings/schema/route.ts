@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import path from 'path'
+import { requireAuth } from '@/lib/auth-guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const projectRoot = path.resolve(process.cwd(), '..')
     const scriptPath = path.join(projectRoot, 'scripts', 'export_settings_schema.py')

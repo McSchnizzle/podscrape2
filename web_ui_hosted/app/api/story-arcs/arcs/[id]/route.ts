@@ -11,24 +11,35 @@ function getSupabaseClient() {
   )
 }
 
-// Get a single topic by ID
+// Get a single story arc with all events
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabase
-      .from('episode_topics')
+      .from('story_arcs')
       .select(`
         *,
-        episodes (
-          title
+        story_arc_events (
+          id,
+          event_date,
+          event_summary,
+          key_points,
+          source_feed_id,
+          source_episode_id,
+          source_episode_guid,
+          source_name,
+          perspective,
+          relevance_score,
+          extracted_at,
+          created_at
         )
       `)
       .eq('id', id)
@@ -36,48 +47,45 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
+        return NextResponse.json({ error: 'Story arc not found' }, { status: 404 })
       }
-      console.error('Error fetching topic:', error)
+      console.error('Error fetching story arc:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({
-      topic: {
-        ...data,
-        episode_title: data.episodes?.title || 'Unknown Episode'
-      }
-    })
+    // Sort events by date descending
+    const arc = {
+      ...data,
+      events: data.story_arc_events?.sort((a: { event_date: string }, b: { event_date: string }) =>
+        new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
+      ) || []
+    }
+
+    return NextResponse.json({ arc })
   } catch (error) {
-    console.error('Error in GET topic:', error)
+    console.error('Error in GET story arc:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// Update a topic
+// Update a story arc
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const {
-      topic_name,
-      topic_slug,
-      key_points,
+      arc_name,
+      functional_category,
       digest_topic,
-      relevance_score,
-      topic_type,
-      novelty_score,
-      is_update,
-      parent_topic_id,
-      evolution_summary
+      summary
     } = body
 
     // Build update object with only provided fields
@@ -85,19 +93,19 @@ export async function PUT(
       updated_at: new Date().toISOString()
     }
 
-    if (topic_name !== undefined) updateData.topic_name = topic_name
-    if (topic_slug !== undefined) updateData.topic_slug = topic_slug
-    if (key_points !== undefined) updateData.key_points = key_points
+    if (arc_name !== undefined) {
+      updateData.arc_name = arc_name
+      // Update slug when name changes
+      updateData.arc_slug = arc_name.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    }
+    if (functional_category !== undefined) updateData.functional_category = functional_category
     if (digest_topic !== undefined) updateData.digest_topic = digest_topic
-    if (relevance_score !== undefined) updateData.relevance_score = relevance_score
-    if (topic_type !== undefined) updateData.topic_type = topic_type
-    if (novelty_score !== undefined) updateData.novelty_score = novelty_score
-    if (is_update !== undefined) updateData.is_update = is_update
-    if (parent_topic_id !== undefined) updateData.parent_topic_id = parent_topic_id
-    if (evolution_summary !== undefined) updateData.evolution_summary = evolution_summary
+    if (summary !== undefined) updateData.summary = summary
 
     const { data, error } = await supabase
-      .from('episode_topics')
+      .from('story_arcs')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -105,62 +113,56 @@ export async function PUT(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
+        return NextResponse.json({ error: 'Story arc not found' }, { status: 404 })
       }
-      console.error('Error updating topic:', error)
+      console.error('Error updating story arc:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ topic: data })
+    return NextResponse.json({ arc: data })
   } catch (error) {
-    console.error('Error in PUT topic:', error)
+    console.error('Error in PUT story arc:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// Delete a topic
+// Delete a story arc and its events
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
 
   try {
     const supabase = getSupabaseClient()
-    const { id } = params
+    const { id } = await params
 
-    // First check if topic exists
+    // First check if arc exists
     const { data: existing, error: fetchError } = await supabase
-      .from('episode_topics')
+      .from('story_arcs')
       .select('id')
       .eq('id', id)
       .single()
 
     if (fetchError || !existing) {
-      return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Story arc not found' }, { status: 404 })
     }
 
-    // Clear parent_topic_id references (orphan child topics instead of cascade delete)
-    await supabase
-      .from('episode_topics')
-      .update({ parent_topic_id: null })
-      .eq('parent_topic_id', id)
-
-    // Delete the topic
+    // Delete the arc (events are cascade deleted)
     const { error } = await supabase
-      .from('episode_topics')
+      .from('story_arcs')
       .delete()
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting topic:', error)
+      console.error('Error deleting story arc:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in DELETE topic:', error)
+    console.error('Error in DELETE story arc:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

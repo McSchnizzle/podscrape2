@@ -1,4 +1,7 @@
 /**
+ * PUBLIC ROUTE - No authentication required
+ * This endpoint is intentionally public as an RSS feed consumed by podcast apps.
+ *
  * AI & Technology Topic RSS Feed API Route (v2.08)
  *
  * ARCHITECTURE: This API route generates a topic-specific RSS feed from Supabase database.

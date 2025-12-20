@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   console.log('OAuth callback received:', { code: !!code, next })
 
   if (code) {
-    const supabase = createClient()
+    const supabase = await createClient()
 
     try {
       const { error } = await supabase.auth.exchangeCodeForSession(code)

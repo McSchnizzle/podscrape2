@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const db = DatabaseClient.getInstance()
     const digests = await db.getDigests(25)

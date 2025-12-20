@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-guard'
 
 export interface ElevenLabsVoice {
   voice_id: string
@@ -9,6 +10,9 @@ export interface ElevenLabsVoice {
 }
 
 export async function GET() {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.error!
+
   try {
     const apiKey = process.env.ELEVENLABS_API_KEY
 
