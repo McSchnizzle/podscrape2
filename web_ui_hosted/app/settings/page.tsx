@@ -503,6 +503,23 @@ export default function SettingsPage() {
                     disabled={saving}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Prompt Max Characters
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="200000"
+                    className="input"
+                    value={getSetting('ai_content_scoring', 'prompt_max_chars')}
+                    onChange={(e) => updateLocalSetting('ai_content_scoring', 'prompt_max_chars', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum characters to include from topic prompt in scoring context
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -579,6 +596,40 @@ export default function SettingsPage() {
                     Buffer percentage for transcript token calculations
                   </p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transcript Min Characters
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="500000"
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'transcript_min_chars')}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_min_chars', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum transcript characters required per episode
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transcript Max Characters
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    className="input"
+                    value={getSetting('ai_digest_generation', 'transcript_max_chars')}
+                    onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_max_chars', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum transcript characters to include per episode in digest
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -608,6 +659,23 @@ export default function SettingsPage() {
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                     <option value="gpt-4o">GPT-4o</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Input Tokens
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="128000"
+                    className="input"
+                    value={getSetting('ai_metadata_generation', 'max_input_tokens')}
+                    onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_input_tokens', parseInt(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum input tokens for metadata generation context
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -917,6 +985,24 @@ export default function SettingsPage() {
                     OpenAI embedding model for semantic similarity comparisons
                   </p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Similarity Threshold
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0.5"
+                    max="1"
+                    className="input"
+                    value={getSetting('topic_evolution', 'similarity_threshold')}
+                    onChange={(e) => updateLocalSetting('topic_evolution', 'similarity_threshold', parseFloat(e.target.value))}
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Minimum similarity score to consider topics as duplicates (0.5-1.0, higher = stricter matching)
+                  </p>
+                </div>
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                   <p className="text-sm text-blue-700">
                     <strong>Info:</strong> Novelty detection uses embeddings to compare topics and allow fresh content even if topic slugs match.
@@ -1079,6 +1165,23 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Audio Chunks (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        className="input"
+                        value={getSetting('retention', 'audio_chunks_days')}
+                        onChange={(e) => updateLocalSetting('retention', 'audio_chunks_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete chunked audio files older than this many days
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         Logs (days)
                       </label>
                       <input
@@ -1092,6 +1195,30 @@ export default function SettingsPage() {
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Delete log files older than this many days
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Publishing Retention */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-800 mb-3">Publishing Cleanup</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        GitHub Releases (days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="365"
+                        className="input"
+                        value={getSetting('retention', 'github_releases_days')}
+                        onChange={(e) => updateLocalSetting('retention', 'github_releases_days', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Delete GitHub releases older than this many days (0 = keep forever)
                       </p>
                     </div>
                   </div>
