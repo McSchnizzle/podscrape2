@@ -189,10 +189,15 @@ export async function GET() {
         // Calculate truncation risk (episodes over 100K tokens)
         transcriptAnalytics.truncationRisk = lengths.filter((l: number) => l > 400000).length
 
-        // Get episodes per digest setting
-        const maxDigestEpisodes = await db.getSetting('max_digest_episodes')
-        if (maxDigestEpisodes) {
-          transcriptAnalytics.episodesPerDigest = parseInt(maxDigestEpisodes, 10)
+        // Get episodes per digest setting from web_settings
+        // Uses correct category+key pattern: content_filtering.max_episodes_per_digest
+        const allSettings = await db.getSettings()
+        const maxDigestSetting = allSettings.find(
+          (s: { category: string; setting_key: string }) =>
+            s.category === 'content_filtering' && s.setting_key === 'max_episodes_per_digest'
+        )
+        if (maxDigestSetting) {
+          transcriptAnalytics.episodesPerDigest = parseInt(maxDigestSetting.setting_value, 10)
         }
 
         const estimatedDigestChars = transcriptAnalytics.avgChars * transcriptAnalytics.episodesPerDigest

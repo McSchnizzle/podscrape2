@@ -461,11 +461,32 @@ export class DatabaseClient {
     return updateData?.[0] as WebSetting
   }
 
+  /**
+   * @deprecated Use getSettingByCategory instead for proper category+key lookup.
+   * This method only searches by setting_key and may not find settings
+   * that have unique category+key combinations.
+   */
   async getSetting(settingKey: string): Promise<string | null> {
     const { data, error } = await supabase
       .from('web_settings')
       .select('setting_value')
       .eq('setting_key', settingKey)
+      .single()
+
+    if (error || !data) return null
+    return data.setting_value
+  }
+
+  /**
+   * Get a setting value using proper category+key lookup.
+   * This is the recommended method for retrieving settings.
+   */
+  async getSettingByCategory(category: string, key: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('web_settings')
+      .select('setting_value')
+      .eq('category', category)
+      .eq('setting_key', key)
       .single()
 
     if (error || !data) return null
