@@ -248,13 +248,13 @@ class RetentionManager:
                     else:
                         # Delete episodes
                         if episodes_count > 0:
-                            episodes_deleted = episodes_query.delete(synchronize_session=False)
+                            episodes_deleted = episodes_query.delete()
                             stats.episodes_deleted = episodes_deleted
                             logger.info(f"Deleted {episodes_deleted} old episodes")
 
                         # Delete digests
                         if digests_count > 0:
-                            digests_deleted = digests_query.delete(synchronize_session=False)
+                            digests_deleted = digests_query.delete()
                             stats.digests_deleted = digests_deleted
                             logger.info(f"Deleted {digests_deleted} old digests")
 

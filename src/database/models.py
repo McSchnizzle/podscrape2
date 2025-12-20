@@ -539,7 +539,7 @@ class EpisodeRepository:
                     .update({
                         EpisodeModel.status: 'digested',
                         EpisodeModel.updated_at: datetime.now(timezone.utc)
-                    }, synchronize_session=False)
+                    })
                 session.commit()
             except SQLAlchemyError as e:
                 session.rollback()
@@ -576,7 +576,7 @@ class EpisodeRepository:
                     .update({
                         EpisodeModel.status: 'pending',
                         EpisodeModel.updated_at: datetime.now(timezone.utc)
-                    }, synchronize_session=False)
+                    })
 
                 session.commit()
                 return reset_count

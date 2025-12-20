@@ -186,7 +186,7 @@ class CommonAdsRepository:
             result = (
                 session.query(CommonAd)
                 .filter(CommonAd.id == ad_id)
-                .delete(synchronize_session=False)
+                .delete()
             )
             session.commit()
             return result > 0

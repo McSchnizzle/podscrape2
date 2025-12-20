@@ -213,7 +213,6 @@ class TopicTrackingRepository:
                         "included_at": now,
                         "updated_at": now,
                     },
-                    synchronize_session=False,
                 )
             )
             session.commit()
@@ -236,7 +235,7 @@ class TopicTrackingRepository:
             result = (
                 session.query(EpisodeTopic)
                 .filter(EpisodeTopic.last_mentioned_at < cutoff_date)
-                .delete(synchronize_session=False)
+                .delete()
             )
             session.commit()
             return result
