@@ -44,6 +44,7 @@ from .sqlalchemy_models import (
 )
 from src.config.env import require_database_url
 
+# Note: Valid statuses defined in src.database.episode_status.EpisodeStatus
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class Episode:
     chunk_count: int = 0
     scores: Optional[Dict[str, float]] = None
     scored_at: Optional[datetime] = None
-    status: str = 'pending'
+    status: str = 'pending'  # See episode_status.py: pending, processing, transcribed, scored, not_relevant, digested, failed
     failure_count: int = 0
     failure_reason: Optional[str] = None
     last_failure_at: Optional[datetime] = None

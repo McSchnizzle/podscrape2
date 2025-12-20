@@ -60,7 +60,11 @@ export interface Episode {
   id: number
   guid: string
   title: string
-  status: 'pending' | 'transcribed' | 'scored' | 'digested' | 'published' | 'not_relevant' | 'failed'
+  /**
+   * Episode processing status.
+   * @see src/database/episode_status.py for canonical definition
+   */
+  status: 'pending' | 'processing' | 'transcribed' | 'scored' | 'not_relevant' | 'digested' | 'failed'
   feed_id: number
   published_date?: string
   scored_at?: string
@@ -69,6 +73,13 @@ export interface Episode {
   updated_at: string
   inclusion?: Array<{ topic: string; date: string }>
 }
+
+/**
+ * Valid episode status values - keep in sync with EpisodeStatus Python enum
+ * @see src/database/episode_status.py
+ */
+export const EPISODE_STATUSES = ['pending', 'processing', 'transcribed', 'scored', 'not_relevant', 'digested', 'failed'] as const;
+export type EpisodeStatusType = typeof EPISODE_STATUSES[number];
 
 export interface Digest {
   id: number

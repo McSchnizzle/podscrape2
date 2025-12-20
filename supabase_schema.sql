@@ -74,7 +74,7 @@ CREATE TABLE episodes (
     chunk_count INTEGER NOT NULL DEFAULT 0,
     scores JSONB,  -- { topic_slug: float } mapping
     scored_at TIMESTAMP WITHOUT TIME ZONE,
-    status VARCHAR(64) NOT NULL DEFAULT 'pending',  -- pending, processing, transcribed, scored, digested, failed
+    status VARCHAR(64) NOT NULL DEFAULT 'pending',  -- See src/database/episode_status.py: pending, processing, transcribed, scored, not_relevant, digested, failed
     failure_count INTEGER NOT NULL DEFAULT 0,
     failure_reason TEXT,
     last_failure_at TIMESTAMP WITHOUT TIME ZONE,

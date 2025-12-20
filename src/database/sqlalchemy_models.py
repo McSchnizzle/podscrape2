@@ -35,6 +35,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import JSON
 from sqlalchemy.orm import DeclarativeBase, relationship
 
+from src.database.episode_status import EpisodeStatus, VALID_EPISODE_STATUSES
+
 
 class Base(DeclarativeBase):
     pass
@@ -103,10 +105,9 @@ class Episode(Base):
         """
         errors = []
 
-        # Valid states
-        valid_states = ["pending", "processing", "transcribed", "scored", "digested", "failed"]
-        if self.status not in valid_states:
-            errors.append(f"Invalid status: {self.status}")
+        # Valid states - use canonical enum
+        if self.status not in VALID_EPISODE_STATUSES:
+            errors.append(f"Invalid status: {self.status}. Valid: {VALID_EPISODE_STATUSES}")
 
         # Required fields per state
         if self.status == "pending":
@@ -140,6 +141,13 @@ class Episode(Base):
         elif self.status == "failed":
             if self.failure_count == 0:
                 errors.append("failed state requires failure_count > 0")
+
+        elif self.status == "not_relevant":
+            # Not relevant episodes should have been scored
+            if not self.scores:
+                errors.append("not_relevant state requires scores")
+            if not self.scored_at:
+                errors.append("not_relevant state requires scored_at")
 
         # Check state transition validity
         if self.status == "scored" and not self.transcript_content:

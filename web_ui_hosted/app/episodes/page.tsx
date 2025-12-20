@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { EPISODE_STATUSES } from '@/utils/supabase';
 
 interface Episode {
   id: number;
@@ -15,7 +16,8 @@ interface Episode {
   scores: Record<string, number>;
 }
 
-const statusOptions = ['', 'pending', 'transcribed', 'scored', 'digested', 'published', 'not_relevant', 'failed'];
+// Empty string for "All" filter, then valid statuses
+const statusOptions = ['', ...EPISODE_STATUSES];
 const sortByOptions = [
   { value: 'scored_at', label: 'Scored' },
   { value: 'published_date', label: 'Published' },

@@ -51,6 +51,18 @@ Both stacks connect to the SAME Supabase PostgreSQL database. This is intentiona
 - **pipeline_logs**: Pipeline execution logs for monitoring
 - **workflow_errors**: Persistent error tracking for pattern analysis
 
+### Episode Status Values (Canonical: src/database/episode_status.py)
+The episode processing state machine follows this flow:
+- **pending**: Initial state after RSS discovery
+- **processing**: Transient state during audio download/transcription (auto-reset if stuck >10min)
+- **transcribed**: Successfully transcribed, awaiting scoring
+- **scored**: Scored and qualifies for at least one topic
+- **not_relevant**: Scored but doesn't qualify for any topic (terminal)
+- **digested**: Included in a generated digest script (terminal)
+- **failed**: Processing failed after max retries (terminal)
+
+Terminal states (digested, not_relevant, failed) represent end of processing.
+
 **Schema Management**:
 - Schema changes are made via Alembic migrations: `python3 -m alembic upgrade head`
 - SQLAlchemy models: `src/database/sqlalchemy_models.py`
