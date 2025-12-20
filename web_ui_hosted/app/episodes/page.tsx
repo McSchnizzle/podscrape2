@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 interface Episode {
   id: number;
@@ -22,33 +23,50 @@ const sortByOptions = [
   { value: 'status', label: 'Status' }
 ];
 
-export default function EpisodesPage() {
+function EpisodesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Initialize filters from URL params on mount
   const [filters, setFilters] = useState({
-    q: '',
-    status: '',
-    sortBy: 'scored_at',
-    sortDir: 'desc'
+    q: searchParams.get('q') || '',
+    status: searchParams.get('status') || '',
+    sortBy: searchParams.get('sortBy') || 'scored_at',
+    sortDir: searchParams.get('sortDir') || 'desc'
   });
   // Track pending filter changes that haven't been applied yet
   // IMPORTANT: This must be declared with other useState hooks (React rules of hooks)
   const [pendingFilters, setPendingFilters] = useState({
-    q: '',
-    status: '',
-    sortBy: 'scored_at',
-    sortDir: 'desc'
+    q: searchParams.get('q') || '',
+    status: searchParams.get('status') || '',
+    sortBy: searchParams.get('sortBy') || 'scored_at',
+    sortDir: searchParams.get('sortDir') || 'desc'
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(0);
+  // Pagination state - initialize from URL
+  const [currentPage, setCurrentPage] = useState(
+    parseInt(searchParams.get('page') || '0')
+  );
   const [pageSize] = useState(25);  // Could be made configurable later
   const [totalPages, setTotalPages] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Track if this is the first render to avoid double-loading
-  const isFirstRender = useRef(true);
+  // Function to update URL with current filters
+  const updateUrl = (newFilters: typeof filters, page: number) => {
+    const params = new URLSearchParams();
+    if (newFilters.q) params.set('q', newFilters.q);
+    if (newFilters.status) params.set('status', newFilters.status);
+    if (newFilters.sortBy !== 'scored_at') params.set('sortBy', newFilters.sortBy);
+    if (newFilters.sortDir !== 'desc') params.set('sortDir', newFilters.sortDir);
+    if (page > 0) params.set('page', String(page));
+
+    const queryString = params.toString();
+    router.push(queryString ? `/episodes?${queryString}` : '/episodes', { scroll: false });
+  };
 
   const loadEpisodes = async () => {
     setLoading(true);
@@ -101,30 +119,56 @@ export default function EpisodesPage() {
     loadEpisodes();
   }, []);
 
-  // Auto-apply filters when dropdown values change (skip search field for debouncing)
-  useEffect(() => {
-    // Skip the first render (initial load handles it)
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    console.log('[Episodes] Auto-applying filters due to change:', pendingFilters);
-    setFilters(pendingFilters);
-    setCurrentPage(0);  // Reset to first page on filter change
-    loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
-  }, [pendingFilters.status, pendingFilters.sortBy, pendingFilters.sortDir]);
-
   const handleFilterChange = (key: string, value: string) => {
-    console.log('[Episodes] handleFilterChange:', key, '=', value);
     setPendingFilters(prev => ({ ...prev, [key]: value }));
   };
 
+  // Apply current pending filters
+  const applyFilters = () => {
+    setFilters(pendingFilters);
+    setCurrentPage(0);
+    updateUrl(pendingFilters, 0);
+    loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
+  };
+
+  // Reset all filters to defaults
+  const resetFilters = () => {
+    const defaultFilters = {
+      q: '',
+      status: '',
+      sortBy: 'scored_at',
+      sortDir: 'desc'
+    };
+    setPendingFilters(defaultFilters);
+    setFilters(defaultFilters);
+    setCurrentPage(0);
+    updateUrl(defaultFilters, 0);
+    loadEpisodesWithFilters({ ...defaultFilters, page: 0 });
+  };
+
+  // Check if any filters are active (non-default)
+  const hasActiveFilters = filters.q || filters.status ||
+    filters.sortBy !== 'scored_at' || filters.sortDir !== 'desc';
+
+  // Remove a specific filter and reset to default
+  const removeFilter = (key: keyof typeof filters) => {
+    const defaultValues: typeof filters = {
+      q: '',
+      status: '',
+      sortBy: 'scored_at',
+      sortDir: 'desc'
+    };
+    const newFilters = { ...filters, [key]: defaultValues[key] };
+    setPendingFilters(newFilters);
+    setFilters(newFilters);
+    setCurrentPage(0);
+    updateUrl(newFilters, 0);
+    loadEpisodesWithFilters({ ...newFilters, page: 0 });
+  };
+
   const loadEpisodesWithFilters = async (filterOverride?: typeof filters & { page?: number }) => {
-    console.log('[Episodes] loadEpisodesWithFilters called, filterOverride:', filterOverride);
     const activeFilters = filterOverride || filters;
     const page = filterOverride?.page ?? currentPage;
-    console.log('[Episodes] activeFilters:', activeFilters, 'page:', page);
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -139,7 +183,6 @@ export default function EpisodesPage() {
       // Add cache-busting timestamp to prevent stale data
       params.append('_t', Date.now().toString());
 
-      console.log('[Episodes] loadEpisodesWithFilters: Making API request to:', `/api/episodes?${params}`);
       const response = await fetch(`/api/episodes?${params}`, {
         cache: 'no-store',
         headers: {
@@ -147,10 +190,8 @@ export default function EpisodesPage() {
           'Pragma': 'no-cache'
         }
       });
-      console.log('[Episodes] loadEpisodesWithFilters: Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('[Episodes] loadEpisodesWithFilters: Got', data.episodes?.length, 'episodes');
         setEpisodes(data.episodes || []);
         setTotalCount(data.total || 0);
         setTotalPages(data.totalPages || 1);
@@ -223,18 +264,16 @@ export default function EpisodesPage() {
         )}
 
         {/* Filters */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-10 gap-2 items-end">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
           <div className="md:col-span-5">
-            <label className="block text-xs text-gray-600 mb-1">Search (press Enter)</label>
+            <label className="block text-xs text-gray-600 mb-1">Search</label>
             <input
               type="text"
               value={pendingFilters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  setCurrentPage(0);  // Reset to first page on search
-                  setFilters(prev => ({ ...prev, q: pendingFilters.q }));
-                  loadEpisodesWithFilters({ ...pendingFilters, page: 0 });
+                  applyFilters();
                 }
               }}
               placeholder="Search episode title"
@@ -284,7 +323,85 @@ export default function EpisodesPage() {
               <option value="asc">Asc</option>
             </select>
           </div>
+
+          <div className="md:col-span-2 flex gap-2">
+            <button
+              onClick={applyFilters}
+              className="flex-1 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 text-sm font-medium"
+            >
+              Apply
+            </button>
+            <button
+              onClick={resetFilters}
+              className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm font-medium"
+            >
+              Reset
+            </button>
+          </div>
         </div>
+
+        {/* Active Filter Chips */}
+        {hasActiveFilters && (
+          <div className="mb-4 flex flex-wrap gap-2 items-center">
+            <span className="text-sm text-gray-500">Active filters:</span>
+            {filters.q && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                Search: {filters.q}
+                <button
+                  onClick={() => removeFilter('q')}
+                  className="ml-1 hover:text-primary-600"
+                  aria-label="Remove search filter"
+                >
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </span>
+            )}
+            {filters.status && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                Status: {filters.status}
+                <button
+                  onClick={() => removeFilter('status')}
+                  className="ml-1 hover:text-green-600"
+                  aria-label="Remove status filter"
+                >
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </span>
+            )}
+            {filters.sortBy !== 'scored_at' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                Sort: {sortByOptions.find(o => o.value === filters.sortBy)?.label}
+                <button
+                  onClick={() => removeFilter('sortBy')}
+                  className="ml-1 hover:text-gray-600"
+                  aria-label="Remove sort filter"
+                >
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </span>
+            )}
+            {filters.sortDir !== 'desc' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                Direction: Asc
+                <button
+                  onClick={() => removeFilter('sortDir')}
+                  className="ml-1 hover:text-gray-600"
+                  aria-label="Remove direction filter"
+                >
+                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Episodes Table */}
         <div className="overflow-x-auto">
@@ -380,6 +497,7 @@ export default function EpisodesPage() {
                 onClick={() => {
                   const newPage = Math.max(0, currentPage - 1);
                   setCurrentPage(newPage);
+                  updateUrl(filters, newPage);
                   loadEpisodesWithFilters({ ...filters, page: newPage });
                 }}
                 disabled={currentPage === 0}
@@ -394,6 +512,7 @@ export default function EpisodesPage() {
                 onClick={() => {
                   const newPage = Math.min(totalPages - 1, currentPage + 1);
                   setCurrentPage(newPage);
+                  updateUrl(filters, newPage);
                   loadEpisodesWithFilters({ ...filters, page: newPage });
                 }}
                 disabled={currentPage >= totalPages - 1}
@@ -406,5 +525,23 @@ export default function EpisodesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function EpisodesPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-white shadow rounded p-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <EpisodesContent />
+    </Suspense>
   );
 }
