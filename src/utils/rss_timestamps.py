@@ -4,14 +4,19 @@ RSS Timestamp Utilities
 Provides functions to generate unique publication timestamps for same-day episodes
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import hashlib
 import re
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-# Pacific timezone offset
-PACIFIC_TZ = timezone(timedelta(hours=-8))  # PST/PDT - simplified for now
+# Import PACIFIC_TZ - handle both module import and direct execution
+try:
+    from .timezone import PACIFIC_TZ
+except ImportError:
+    # When running as main script, use inline definition
+    PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 def extract_timestamp_from_mp3_path(mp3_path: str) -> Optional[datetime]:
     """
@@ -95,28 +100,6 @@ def generate_unique_pubdate(digest_date: str, topic: str, creation_time: datetim
 
     return pub_datetime
 
-def get_topic_publication_times() -> Dict[str, int]:
-    """
-    Get the publication hour for each topic
-
-    Returns:
-        Dictionary mapping topic names to publication hours (0-23)
-    """
-    return TOPIC_TIME_OFFSETS.copy()
-
-def add_topic_time_offset(topic: str, hour: int) -> None:
-    """
-    Add or update time offset for a topic
-
-    Args:
-        topic: Topic name
-        hour: Publication hour (0-23)
-    """
-    if not 0 <= hour <= 23:
-        raise ValueError("Hour must be between 0-23")
-
-    TOPIC_TIME_OFFSETS[topic] = hour
-
 def validate_unique_timestamps(episodes: List[Dict]) -> List[str]:
     """
     Validate that episode timestamps are unique
@@ -171,5 +154,10 @@ if __name__ == "__main__":
             print(f"{topic:40} -> {pub_date.strftime('%a, %d %b %Y %H:%M:%S %z')}")
 
         print("\nTopic time offsets:")
-        for topic, hour in get_topic_publication_times().items():
-            print(f"  {topic}: {hour:02d}:00 UTC")
+        topic_offsets = {
+            "AI and Technology": 9,
+            "Social Movements and Community Organizing": 12,
+            "Psychedelics and Spirituality": 15,
+        }
+        for topic, hour in topic_offsets.items():
+            print(f"  {topic}: {hour:02d}:00 Pacific")
