@@ -230,34 +230,15 @@ export class DatabaseClient {
 
   async getFeeds() {
     try {
-      // First get all feeds
-      const { data: feeds, error: feedsError } = await supabase
-        .from('feeds')
+      // Single query using view with pre-joined latest episode data
+      // This eliminates N+1 queries (was: 1 feeds query + N episode queries)
+      const { data: feeds, error } = await supabase
+        .from('feeds_with_latest_episode')
         .select('*')
-        .order('created_at', { ascending: false })
 
-      if (feedsError) throw feedsError
+      if (error) throw error
 
-      // Get latest episode for each feed
-      const feedsWithEpisodes = []
-
-      for (const feed of feeds || []) {
-        // Get the latest episode for this feed
-        const { data: latestEpisode } = await supabase
-          .from('episodes')
-          .select('title, published_date')
-          .eq('feed_id', feed.id)
-          .order('published_date', { ascending: false })
-          .limit(1)
-
-        feedsWithEpisodes.push({
-          ...feed,
-          latest_episode_title: latestEpisode?.[0]?.title || null,
-          last_episode_date: latestEpisode?.[0]?.published_date || null
-        })
-      }
-
-      return feedsWithEpisodes as Feed[]
+      return (feeds || []) as Feed[]
     } catch (error) {
       console.error('Database error in getFeeds:', error)
       throw error
