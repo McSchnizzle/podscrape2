@@ -76,6 +76,7 @@ export interface Digest {
   status: 'generated' | 'audio_generated' | 'published' | 'failed'
   script_content?: string
   mp3_path?: string
+  /** @deprecated Use digest_episode_links join table instead. Issue #10. */
   episode_ids?: number[]
   digest_date?: string
   created_at: string
@@ -808,30 +809,54 @@ export class DatabaseClient {
 
       if (error) throw error
 
-      // Enrich digests with episode information
-      const enrichedDigests = await Promise.all((data || []).map(async (digest: Digest) => {
-        if (digest.episode_ids && digest.episode_ids.length > 0) {
-          const { data: episodes, error: episodeError } = await supabase
-            .from('episodes')
-            .select('id, title')
-            .in('id', digest.episode_ids)
+      const digestIds = (data || []).map((d: Digest) => d.id)
+      let episodeLinks: DigestEpisodeLinkRecord[] = []
+      let episodesMap: Record<number, string> = {}
 
-          if (!episodeError && episodes) {
-            return {
-              ...digest,
-              episodes: episodes.map((ep: Episode) => ep.title.length > 60 ? ep.title.substring(0, 60) + '...' : ep.title),
-              episode_count: episodes.length
+      if (digestIds.length > 0) {
+        // Get all links for these digests (using join table as source of truth)
+        const { data: linkData, error: linkError } = await supabase
+          .from('digest_episode_links')
+          .select('digest_id, episode_id')
+          .in('digest_id', digestIds)
+          .order('position', { ascending: true })
+
+        if (!linkError && linkData) {
+          episodeLinks = linkData as DigestEpisodeLinkRecord[]
+          const episodeIds = Array.from(new Set(episodeLinks.map(l => l.episode_id)))
+
+          if (episodeIds.length > 0) {
+            const { data: episodes, error: episodeError } = await supabase
+              .from('episodes')
+              .select('id, title')
+              .in('id', episodeIds)
+
+            if (!episodeError && episodes) {
+              episodesMap = Object.fromEntries(
+                episodes.map((ep: Episode) => [ep.id, ep.title])
+              )
             }
           }
         }
-        return {
-          ...digest,
-          episodes: [],
-          episode_count: 0
-        }
-      }))
+      }
 
-      return enrichedDigests
+      // Build episode lists per digest from links
+      const digestEpisodesMap: Record<number, string[]> = {}
+      episodeLinks.forEach((link: DigestEpisodeLinkRecord) => {
+        const title = episodesMap[link.episode_id]
+        if (!title) return
+        if (!digestEpisodesMap[link.digest_id]) {
+          digestEpisodesMap[link.digest_id] = []
+        }
+        const truncatedTitle = title.length > 60 ? title.substring(0, 60) + '...' : title
+        digestEpisodesMap[link.digest_id].push(truncatedTitle)
+      })
+
+      return (data || []).map((digest: Digest) => ({
+        ...digest,
+        episodes: digestEpisodesMap[digest.id] || [],
+        episode_count: (digestEpisodesMap[digest.id] || []).length
+      }))
     } catch (error) {
       console.error('Failed to load digests:', error)
       return []

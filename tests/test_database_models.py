@@ -373,11 +373,10 @@ class TestDatabaseIntegration:
         scores = {"AI and Technology": 0.85}
         episode_repo.update_scores(episode.episode_guid, scores)
 
-        # 4. Create digest with episode
+        # 4. Create digest with episode (Issue #10: episode_ids deprecated)
         digest = Digest(
             topic="AI and Technology",
             digest_date=date.today(),
-            episode_ids=[episode_id],
             episode_count=1
         )
         digest_id = digest_repo.create(digest)

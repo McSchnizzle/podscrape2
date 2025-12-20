@@ -162,7 +162,8 @@ class Digest(Base):
     mp3_duration_seconds = Column(Integer)
     mp3_title = Column(String(1024))
     mp3_summary = Column(Text)
-    episode_ids = Column(JSON)  # [int] - database-agnostic JSON
+    # DEPRECATED: Use digest_episode_links table instead. Issue #10.
+    episode_ids = Column(JSON)  # [int] - database-agnostic JSON - DEPRECATED
     episode_count = Column(Integer, nullable=False, default=0)
     average_score = Column(Integer)
     github_url = Column(String(4096))
@@ -210,11 +211,8 @@ class Digest(Base):
         if self.published_at and not self.github_url:
             errors.append("digest with published_at should have github_url")
 
-        # Episode linkage
-        if self.episode_count > 0 and not self.episode_ids:
-            errors.append("digest with episode_count > 0 should have episode_ids")
-        if self.episode_ids and self.episode_count != len(self.episode_ids):
-            errors.append(f"episode_count ({self.episode_count}) doesn't match episode_ids length ({len(self.episode_ids)})")
+        # Note: episode_ids is deprecated (Issue #10). Use digest_episode_links table.
+        # Removed validation that required episode_ids matching episode_count.
 
         return (len(errors) == 0, errors)
 

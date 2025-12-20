@@ -887,11 +887,11 @@ Thank you for your understanding, and we'll see you tomorrow!
         script_path = self.save_script(topic, digest_date, script_content, word_count, digest_timestamp)
 
         # Create new digest (each run creates a unique digest with timestamp)
+        # Note: episode_ids is deprecated (Issue #10), use digest_episode_links instead
         digest = Digest(
             topic=topic,
             digest_date=digest_date,
             digest_timestamp=digest_timestamp,
-            episode_ids=[ep.id for ep in episodes],
             episode_count=len(episodes),
             script_path=script_path,
             script_content=script_content,
@@ -1053,19 +1053,23 @@ Thank you for your understanding, and we'll see you tomorrow!
             return existing_general
         else:
             # Create new digest
+            # Note: episode_ids is deprecated (Issue #10), use digest_episode_links instead
             digest = Digest(
                 topic="General Summary",
                 digest_date=digest_date,
-                episode_ids=[ep.id for ep in episodes],
                 episode_count=len(episodes),
                 script_path=script_path,
                 script_word_count=word_count,
                 average_score=0.0  # No topic-specific score for general summary
             )
-            
+
             digest_id = self.digest_repo.create(digest)
             digest.id = digest_id
-            
+
+            # Persist episode links for general summary (Issue #10)
+            if digest.id:
+                self._persist_digest_links(digest, "General Summary", episodes)
+
             logger.info(f"Created general summary digest {digest_id}: {word_count} words, {len(episodes)} episodes")
             return digest
     
@@ -1201,11 +1205,19 @@ Thank you for your understanding, and we'll see you tomorrow with fresh insights
                 logger.error(f"Failed to move transcript for episode {episode.id}: {e}")
     
     def mark_digest_episodes_as_digested(self, digest: Digest) -> None:
-        """Mark all episodes in a digest as digested"""
-        if not digest.episode_ids:
+        """Mark all episodes in a digest as digested using join table.
+
+        Issue #10: Uses digest_episode_links as single source of truth.
+        """
+        if not digest.id:
             return
-        
-        for episode_id in digest.episode_ids:
+
+        # Use join table as source of truth for episode IDs
+        episode_ids = []
+        if self.digest_episode_link_repo:
+            episode_ids = self.digest_episode_link_repo.get_episode_ids_for_digest(digest.id)
+
+        for episode_id in episode_ids:
             episode = self.episode_repo.get_by_id(episode_id)
             if episode:
                 self.mark_episode_as_digested(episode)

@@ -220,13 +220,12 @@ def sample_episode_with_scores(sample_episode):
 
 @pytest.fixture
 def sample_digest():
-    """Create a sample digest for testing"""
+    """Create a sample digest for testing (Issue #10: episode_ids deprecated)"""
     if not SQLALCHEMY_AVAILABLE:
         pytest.skip("SQLAlchemy not available in test environment")
     return Digest(
         topic="AI and Technology",
         digest_date=date.today(),
-        episode_ids=[1, 2, 3],
         episode_count=3,
         average_score=0.75
     )
@@ -265,11 +264,10 @@ def populated_database(test_db_manager, feed_repo, episode_repo, digest_repo):
         episode.id = episode_id
         episodes.append(episode)
 
-    # Create test digest
+    # Create test digest (Issue #10: episode_ids deprecated)
     digest = Digest(
         topic="AI and Technology",
         digest_date=date.today() - timedelta(days=1),
-        episode_ids=[episodes[2].id, episodes[3].id],
         episode_count=2,
         average_score=0.75,
         script_path="/tmp/test_script.md",

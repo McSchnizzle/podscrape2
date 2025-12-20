@@ -28,7 +28,7 @@ sys.path.insert(0, str(project_root / 'src'))
 from src.utils.phase_bootstrap import bootstrap_phase
 bootstrap_phase()
 
-from src.database.models import get_episode_repo, get_digest_repo
+from src.database.models import get_episode_repo, get_digest_repo, get_digest_episode_link_repo
 from src.generation.script_generator import ScriptGenerator
 from src.utils.timezone import get_pacific_now
 
@@ -53,6 +53,7 @@ class DigestRunner:
         # Initialize repositories and components
         self.episode_repo = get_episode_repo()
         self.digest_repo = get_digest_repo()
+        self.digest_episode_link_repo = get_digest_episode_link_repo()
 
         # Initialize database configuration reader
         from src.config.web_config import WebConfigReader, WebConfigManager
@@ -139,15 +140,13 @@ class DigestRunner:
                         preview = content[:200] + "..." if len(content) > 200 else content
                         self.logger.info(f"      Preview: {preview}")
 
-                # Collect episode IDs for marking as digested
-                if hasattr(digest, 'episode_ids') and digest.episode_ids:
-                    # Get episode GUIDs from episode IDs
-                    episode_guids = []
-                    for episode_id in digest.episode_ids:
+                # Collect episode GUIDs for marking as digested (Issue #10: use join table)
+                if digest.id and self.digest_episode_link_repo:
+                    episode_ids = self.digest_episode_link_repo.get_episode_ids_for_digest(digest.id)
+                    for episode_id in episode_ids:
                         episode = self.episode_repo.get_by_id(episode_id)
                         if episode:
-                            episode_guids.append(episode.episode_guid)
-                    all_episode_ids.extend(episode_guids)
+                            all_episode_ids.append(episode.episode_guid)
 
                 generated_digests.append(self._digest_to_dict(digest))
 

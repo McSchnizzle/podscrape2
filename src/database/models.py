@@ -103,6 +103,7 @@ class Digest:
     mp3_duration_seconds: Optional[int] = None
     mp3_title: Optional[str] = None
     mp3_summary: Optional[str] = None
+    # DEPRECATED: Use digest_episode_links table instead. Issue #10.
     episode_ids: Optional[List[int]] = None
     episode_count: int = 0
     average_score: Optional[float] = None
@@ -856,20 +857,23 @@ class DigestRepository:
         self.db = db_manager
 
     def create(self, digest: Digest) -> int:
-        """Create new digest and return ID"""
+        """Create new digest and return ID.
+
+        Note: episode_ids is deprecated (Issue #10). Use digest_episode_links table.
+        """
         with self.db.get_session() as session:
             try:
                 # Use provided timestamp or generate new one
                 digest_timestamp = digest.digest_timestamp or datetime.now(timezone.utc)
 
+                # Note: episode_ids is deprecated, using digest_episode_links instead
                 digest_model = DigestModel(
                     topic=digest.topic,
                     digest_date=digest.digest_date,
                     digest_timestamp=digest_timestamp,
-                    episode_ids=digest.episode_ids,
                     episode_count=digest.episode_count,
                     script_path=digest.script_path,
-                    script_content=digest.script_content,  # FIX: Save script_content to database
+                    script_content=digest.script_content,
                     script_word_count=digest.script_word_count,
                     mp3_path=digest.mp3_path,
                     mp3_duration_seconds=digest.mp3_duration_seconds,
@@ -1250,6 +1254,19 @@ class DigestEpisodeLinkRepository:
                 session.rollback()
                 logger.error(f"Failed to replace digest links for digest {digest_id}: {exc}")
                 raise
+
+    def get_episode_ids_for_digest(self, digest_id: int) -> List[int]:
+        """Get all episode IDs linked to a digest, ordered by position.
+
+        This is the single source of truth for digest-episode relationships.
+        Issue #10: Replaces usage of Digest.episode_ids JSON column.
+        """
+        with self.db.get_session() as session:
+            links = session.query(DigestEpisodeLinkModel)\
+                .filter(DigestEpisodeLinkModel.digest_id == digest_id)\
+                .order_by(DigestEpisodeLinkModel.position.asc())\
+                .all()
+            return [link.episode_id for link in links]
 
 
 class PipelineRunRepository:
