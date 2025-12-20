@@ -22,7 +22,7 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
 from src.database.models import get_digest_repo
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 from src.audio.audio_manager import AudioManager
 
 logging.basicConfig(
@@ -44,7 +44,7 @@ def cleanup_released_mp3s(dry_run: bool = True) -> Tuple[int, int, int]:
     # Load retention settings
     try:
         wc = WebConfigManager()
-        retention_days = int(wc.get_setting('retention', 'local_mp3_days', 14))
+        retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.LOCAL_MP3_DAYS, 14))
         logger.info(f"Local MP3 retention period: {retention_days} days")
     except Exception as e:
         logger.warning(f"Could not load retention settings, using default 14 days: {e}")

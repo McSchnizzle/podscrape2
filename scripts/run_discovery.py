@@ -75,14 +75,14 @@ class DiscoveryRunner:
 
         # Load web settings for defaults if not explicitly provided
         try:
-            from src.config.web_config import WebConfigManager
+            from src.config.web_config import WebConfigManager, SettingsKeys
             web_config = WebConfigManager()
 
             # Use settings from database
             if limit is None:
-                limit = int(web_config.get_setting('pipeline', 'max_episodes_per_run', 10))
+                limit = int(web_config.get_setting(SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.MAX_EPISODES_PER_RUN, 10))
             if days_back == 7:
-                days_back = int(web_config.get_setting('pipeline', 'discovery_lookback_days', 5))
+                days_back = int(web_config.get_setting(SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.DISCOVERY_LOOKBACK_DAYS, 5))
 
             self.logger.info(f"Using settings: max_episodes={limit}, days_back={days_back}")
         except Exception as e:

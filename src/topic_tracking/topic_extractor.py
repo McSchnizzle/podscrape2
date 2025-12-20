@@ -19,7 +19,7 @@ from typing import List, Dict, Optional
 
 from openai import OpenAI
 
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 from src.database.story_arc_repo import get_story_arc_repo
 
 # Environment variables expected to be loaded by calling script via src.config.env
@@ -72,7 +72,7 @@ class StoryArcExtractor:
         try:
             self.web_config = WebConfigManager()
             self.model = self.web_config.get_setting(
-                'topic_tracking', 'extraction_model', 'gpt-4o-mini'
+                SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL, 'gpt-4o-mini'
             )
             logger.info(f"Using extraction model: {self.model}")
         except Exception as e:

@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 from src.database.models import get_topic_repo, TopicRepository, Topic
+from src.config.web_config import SettingsKeys
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class ConfigManager:
         """Get minimum score threshold for episode inclusion"""
         if getattr(self, 'web_config', None):
             try:
-                return float(self.web_config.get_setting('content_filtering', 'score_threshold', 0.65))
+                return float(self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.SCORE_THRESHOLD, 0.65))
             except Exception:
                 pass
         config = self._load_topics_config()

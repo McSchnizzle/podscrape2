@@ -23,6 +23,7 @@ from ..utils.error_handling import PodcastError
 from .github_publisher import GitHubPublisher, create_github_publisher
 from ..database.models import DatabaseManager
 from ..database.sqlalchemy_models import Episode as EpisodeModel, Digest as DigestModel
+from ..config.web_config import SettingsKeys
 
 logger = get_logger(__name__)
 
@@ -85,7 +86,7 @@ class RetentionManager:
             try:
                 from ..config.web_config import WebConfigManager
                 wc = WebConfigManager()
-                self.github_release_retention_days = int(wc.get_setting('retention', 'github_releases_days', 14))
+                self.github_release_retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.GITHUB_RELEASES_DAYS, 14))
                 logger.info(f"GitHub release retention: {self.github_release_retention_days} days (from web_settings)")
             except Exception as e:
                 logger.warning(f"Could not load GitHub release retention from web_settings, using default: {e}")
@@ -105,10 +106,10 @@ class RetentionManager:
         try:
             from ..config.web_config import WebConfigManager
             wc = WebConfigManager()
-            local_mp3_days = int(wc.get_setting('retention', 'local_mp3_days', 14))
-            audio_cache_days = int(wc.get_setting('retention', 'audio_cache_days', 3))
-            audio_chunks_days = int(wc.get_setting('retention', 'audio_chunks_days', 3))
-            logs_days = int(wc.get_setting('retention', 'logs_days', 3))
+            local_mp3_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.LOCAL_MP3_DAYS, 14))
+            audio_cache_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.AUDIO_CACHE_DAYS, 3))
+            audio_chunks_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.AUDIO_CHUNKS_DAYS, 3))
+            logs_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.LOGS_DAYS, 3))
         except Exception as e:
             logger.warning(f"Could not load retention settings from WebConfig, using defaults: {e}")
             local_mp3_days = 14
@@ -213,8 +214,8 @@ class RetentionManager:
             # Get retention settings from WebConfig
             from ..config.web_config import WebConfigManager
             wc = WebConfigManager()
-            episode_retention_days = int(wc.get_setting('retention', 'episode_retention_days', 14))
-            digest_retention_days = int(wc.get_setting('retention', 'digest_retention_days', 14))
+            episode_retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.EPISODE_RETENTION_DAYS, 14))
+            digest_retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.DIGEST_RETENTION_DAYS, 14))
         except Exception as e:
             logger.warning(f"Could not load retention settings, using defaults: {e}")
             episode_retention_days = 14
@@ -551,26 +552,23 @@ def create_retention_manager(retention_policies: List[RetentionPolicy] = None,
     try:
         from ..config.web_config import WebConfigManager
         wc = WebConfigManager()
-        github_days = int(wc.get_setting('retention', 'github_releases_days', 14))
+        github_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.GITHUB_RELEASES_DAYS, 14))
         # Override local policies if none provided
         if retention_policies is None:
             rm = RetentionManager(None, github_publisher, github_days, database_manager)
             # Update default policies' days from web settings
+            # Map policy names to SettingsKeys constants
+            policy_key_map = {
+                'Local MP3 Files': SettingsKeys.Retention.LOCAL_MP3_DAYS,
+                'Audio Cache': SettingsKeys.Retention.AUDIO_CACHE_DAYS,
+                'Audio Chunks': SettingsKeys.Retention.AUDIO_CHUNKS_DAYS,
+                'Old Logs': SettingsKeys.Retention.LOGS_DAYS,
+            }
             for p in rm.retention_policies:
-                key = None
-                if p.name == 'Local MP3 Files':
-                    key = 'local_mp3_days'
-                elif p.name == 'Audio Cache':
-                    key = 'audio_cache_days'
-                elif p.name == 'Audio Chunks':
-                    key = 'audio_chunks_days'
-                elif p.name == 'Old Logs':
-                    key = 'logs_days'
-                elif p.name == 'Old Scripts':
-                    key = 'scripts_days'
+                key = policy_key_map.get(p.name)
                 if key:
                     try:
-                        p.retention_days = int(wc.get_setting('retention', key, p.retention_days))
+                        p.retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, key, p.retention_days))
                     except Exception:
                         pass
             return rm

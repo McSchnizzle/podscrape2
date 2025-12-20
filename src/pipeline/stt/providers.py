@@ -15,10 +15,11 @@ from datetime import datetime
 from dataclasses import dataclass
 
 try:
-    from ...config.web_config import WebConfigManager
+    from ...config.web_config import WebConfigManager, SettingsKeys
 except ImportError:
     # Fallback in case WebConfigManager is not available
     WebConfigManager = None
+    SettingsKeys = None
 
 # Self-contained error handling and logging to avoid import issues
 class PodcastError(Exception):
@@ -243,9 +244,9 @@ class OpenAIWhisperProvider(STTProvider):
         self.web_config = web_config or self._safe_create_web_config()
 
         # Load AI configuration for STT transcription
-        if self.web_config:
-            self.model = self.web_config.get_setting("ai_stt_transcription", "model", model)
-            self.max_file_size_mb = self.web_config.get_setting("ai_stt_transcription", "max_file_size_mb", 20)
+        if self.web_config and SettingsKeys:
+            self.model = self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL, model)
+            self.max_file_size_mb = self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MAX_FILE_SIZE_MB, 20)
 
             # Validate file size limits against model capabilities
             self.max_file_size_mb = self._validate_and_adjust_file_size_limit(self.model, self.max_file_size_mb)

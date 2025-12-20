@@ -17,7 +17,7 @@ from typing import List
 
 from src.database.models import get_episode_repo, get_topic_repo
 from src.topic_tracking.topic_extractor import TopicExtractor
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 
 # Setup logging
 logging.basicConfig(
@@ -64,7 +64,7 @@ def seed_topics_for_digest(digest_topic_name: str, days_back: int):
         return
 
     # Get score threshold
-    min_score = web_config.get_setting("topic_tracking", "min_score_for_extraction", 0.70)
+    min_score = web_config.get_setting(SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MIN_SCORE_FOR_EXTRACTION, 0.70)
 
     # Calculate cutoff date
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)

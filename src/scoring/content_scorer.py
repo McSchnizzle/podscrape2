@@ -21,8 +21,8 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from openai import OpenAI
-from config.config_manager import ConfigManager
-from config.web_config import WebConfigManager
+from src.config.config_manager import ConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 
 # Environment variables expected to be loaded by calling script via src.config.env
 
@@ -74,9 +74,9 @@ class ContentScorer:
 
         # Load AI configuration for content scoring
         if self.web_config:
-            self.ai_model = self.web_config.get_setting("ai_content_scoring", "model", "gpt-5-mini")
-            self.max_tokens = self.web_config.get_setting("ai_content_scoring", "max_tokens", 1000)
-            self.max_episodes_per_batch = self.web_config.get_setting("ai_content_scoring", "max_episodes_per_batch", 10)
+            self.ai_model = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL, "gpt-5-mini")
+            self.max_tokens = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS, 1000)
+            self.max_episodes_per_batch = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH, 10)
 
             # Validate token limit against model capabilities
             self.max_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_tokens)

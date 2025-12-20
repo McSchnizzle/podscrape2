@@ -25,7 +25,7 @@ from ..database.models import (
 from ..database.topic_tracking_repo import get_topic_tracking_repo
 from ..topic_tracking.ad_filter import AdFilter
 from ..config.config_manager import ConfigManager
-from ..config.web_config import WebConfigManager
+from ..config.web_config import WebConfigManager, SettingsKeys
 
 logger = logging.getLogger(__name__)
 
@@ -98,15 +98,15 @@ class ScriptGenerator:
         self.max_episodes_per_digest = 5
         if self.web_config:
             try:
-                self.max_episodes_per_digest = int(self.web_config.get_setting('content_filtering', 'max_episodes_per_digest', 5))
+                self.max_episodes_per_digest = int(self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MAX_EPISODES_PER_DIGEST, 5))
             except Exception:
                 pass
-        
+
         # Minimum episodes required to generate digest (from web config if available)
         self.min_episodes_per_digest = 1
         if self.web_config:
             try:
-                self.min_episodes_per_digest = int(self.web_config.get_setting('content_filtering', 'min_episodes_per_digest', 1))
+                self.min_episodes_per_digest = int(self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MIN_EPISODES_PER_DIGEST, 1))
             except Exception:
                 pass
         
@@ -117,9 +117,9 @@ class ScriptGenerator:
 
         # Load AI configuration for digest generation
         if self.web_config:
-            self.ai_model = self.web_config.get_setting('ai_digest_generation', 'model', 'gpt-5')
-            self.max_output_tokens = self.web_config.get_setting('ai_digest_generation', 'max_output_tokens', 25000)
-            self.max_input_tokens = self.web_config.get_setting('ai_digest_generation', 'max_input_tokens', 150000)
+            self.ai_model = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL, 'gpt-5')
+            self.max_output_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS, 25000)
+            self.max_input_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 150000)
 
             # Validate token limits against model capabilities
             self.max_output_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_output_tokens, 'max_output')
@@ -245,7 +245,7 @@ class ScriptGenerator:
         # Get lookback window from config
         if days_back is None:
             if self.web_config:
-                days_back = self.web_config.get_setting("topic_tracking", "retention_days", 14)
+                days_back = self.web_config.get_setting(SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RETENTION_DAYS, 14)
             else:
                 days_back = 14
 

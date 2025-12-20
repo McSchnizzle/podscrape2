@@ -19,7 +19,7 @@ from .voice_manager import VoiceManager, VoiceSettings
 from .dialogue_chunker import chunk_dialogue_script, DialogueChunk
 from ..database.models import Digest, get_digest_repo, get_topic_repo
 from ..config.config_manager import ConfigManager
-from ..config.web_config import WebConfigManager
+from ..config.web_config import WebConfigManager, SettingsKeys
 from ..utils.timezone import get_pacific_now
 
 logger = logging.getLogger(__name__)
@@ -52,8 +52,8 @@ class AudioGenerator:
 
         # Load AI configuration for TTS generation
         if self.web_config:
-            self.ai_model = self.web_config.get_setting("ai_tts_generation", "model", "eleven_turbo_v2_5")
-            self.max_characters = self.web_config.get_setting("ai_tts_generation", "max_characters", 35000)
+            self.ai_model = self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL, "eleven_turbo_v2_5")
+            self.max_characters = self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MAX_CHARACTERS, 35000)
 
             # Validate character limits against model capabilities
             self.max_characters = self._validate_and_adjust_char_limit(self.ai_model, self.max_characters)

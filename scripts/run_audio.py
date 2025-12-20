@@ -750,12 +750,12 @@ class AudioProcessor_Runner:
             transcribe_all = True
             max_chunks = None
             try:
-                from src.config.web_config import WebConfigManager
+                from src.config.web_config import WebConfigManager, SettingsKeys
                 # Use a single config lookup and close immediately
                 web_config = WebConfigManager()
                 try:
-                    transcribe_all = bool(web_config.get_setting('audio_processing', 'transcribe_all_chunks', True))
-                    max_chunks = int(web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3))
+                    transcribe_all = bool(web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.TRANSCRIBE_ALL_CHUNKS, True))
+                    max_chunks = int(web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.MAX_CHUNKS_PER_EPISODE, 3))
                 except Exception:
                     pass
                 # Explicitly cleanup web config connection

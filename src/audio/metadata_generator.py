@@ -12,7 +12,7 @@ from typing import Dict, Tuple, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
-from ..config.web_config import WebConfigManager
+from ..config.web_config import WebConfigManager, SettingsKeys
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,10 @@ class MetadataGenerator:
 
         # Load AI configuration for metadata generation
         if self.web_config:
-            self.ai_model = self.web_config.get_setting("ai_metadata_generation", "model", "gpt-5-mini")
-            self.max_title_tokens = self.web_config.get_setting("ai_metadata_generation", "max_title_tokens", 50)
-            self.max_summary_tokens = self.web_config.get_setting("ai_metadata_generation", "max_summary_tokens", 200)
-            self.max_description_tokens = self.web_config.get_setting("ai_metadata_generation", "max_description_tokens", 500)
+            self.ai_model = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL, "gpt-5-mini")
+            self.max_title_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_TITLE_TOKENS, 50)
+            self.max_summary_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_SUMMARY_TOKENS, 200)
+            self.max_description_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_DESCRIPTION_TOKENS, 500)
 
             # Validate token limits against model capabilities
             self.max_title_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_title_tokens)

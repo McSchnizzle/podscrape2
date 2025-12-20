@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from openai import OpenAI
 import numpy as np
 
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class SemanticTopicMatcher:
         self.client = OpenAI()
         self.web_config = WebConfigManager()
         self.embedding_model = self.web_config.get_setting(
-            "topic_evolution", "embedding_model", "text-embedding-3-small"
+            SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL, "text-embedding-3-small"
         )
         self.similarity_threshold = similarity_threshold
         self._embedding_cache: Dict[str, np.ndarray] = {}

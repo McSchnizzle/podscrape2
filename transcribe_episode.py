@@ -47,8 +47,9 @@ class RSSTranscriptionPipeline:
 
         # Initialize web config for database settings
         try:
-            from src.config.web_config import WebConfigManager
+            from src.config.web_config import WebConfigManager, SettingsKeys
             self.web_config = WebConfigManager()
+            self.SettingsKeys = SettingsKeys
         except Exception:
             self.web_config = None
 
@@ -178,7 +179,7 @@ class RSSTranscriptionPipeline:
             max_chunks = 3  # Default value
             if self.web_config:
                 try:
-                    max_chunks = self.web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3)
+                    max_chunks = self.web_config.get_setting(self.SettingsKeys.AudioProcessing.CATEGORY, self.SettingsKeys.AudioProcessing.MAX_CHUNKS_PER_EPISODE, 3)
                     logger.info(f"Using database setting: max_chunks_per_episode = {max_chunks}")
                 except Exception:
                     pass

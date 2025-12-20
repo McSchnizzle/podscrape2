@@ -20,7 +20,7 @@ require_database_url()
 
 from src.database.models import get_episode_repo
 from src.scoring.content_scorer import ContentScorer
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 
 def main():
     print("🔍 Scoring remaining transcribed episodes...")
@@ -32,7 +32,7 @@ def main():
     # Get threshold from web config
     try:
         web_config = WebConfigManager()
-        threshold = float(web_config.get_setting('content_filtering', 'score_threshold', 0.65))
+        threshold = float(web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.SCORE_THRESHOLD, 0.65))
     except Exception:
         threshold = 0.65
 

@@ -13,6 +13,98 @@ from sqlalchemy.dialects.postgresql import insert
 # Lazy import to avoid circular dependency when database logging is enabled
 # from src.database.models import get_database_manager
 
+
+class SettingsKeys:
+    """Centralized constants for web_settings keys to prevent typos."""
+
+    class ContentFiltering:
+        CATEGORY = "content_filtering"
+        SCORE_THRESHOLD = "score_threshold"
+        MAX_EPISODES_PER_DIGEST = "max_episodes_per_digest"
+        MIN_EPISODES_PER_DIGEST = "min_episodes_per_digest"
+
+    class AudioProcessing:
+        CATEGORY = "audio_processing"
+        CHUNK_DURATION_MINUTES = "chunk_duration_minutes"
+        TRANSCRIBE_ALL_CHUNKS = "transcribe_all_chunks"
+        MAX_CHUNKS_PER_EPISODE = "max_chunks_per_episode"
+
+    class Pipeline:
+        CATEGORY = "pipeline"
+        MAX_EPISODES_PER_RUN = "max_episodes_per_run"
+        DISCOVERY_LOOKBACK_DAYS = "discovery_lookback_days"
+
+    class Retention:
+        CATEGORY = "retention"
+        LOCAL_MP3_DAYS = "local_mp3_days"
+        AUDIO_CACHE_DAYS = "audio_cache_days"
+        AUDIO_CHUNKS_DAYS = "audio_chunks_days"
+        LOGS_DAYS = "logs_days"
+        EPISODE_RETENTION_DAYS = "episode_retention_days"
+        DIGEST_RETENTION_DAYS = "digest_retention_days"
+        GITHUB_RELEASES_DAYS = "github_releases_days"
+
+    class TopicTracking:
+        CATEGORY = "topic_tracking"
+        MIN_SCORE_FOR_EXTRACTION = "min_score_for_extraction"
+        MAX_TOPICS_PER_EPISODE = "max_topics_per_episode"
+        RETENTION_DAYS = "retention_days"
+        EXTRACTION_MODEL = "extraction_model"
+
+    class AdFiltering:
+        CATEGORY = "ad_filtering"
+        ENABLED = "enabled"
+        CONFIDENCE_THRESHOLD = "confidence_threshold"
+
+    class TopicEvolution:
+        CATEGORY = "topic_evolution"
+        ENABLE_NOVELTY_DETECTION = "enable_novelty_detection"
+        NOVELTY_THRESHOLD = "novelty_threshold"
+        EMBEDDING_MODEL = "embedding_model"
+        SIMILARITY_THRESHOLD = "similarity_threshold"
+
+    class AIContentScoring:
+        CATEGORY = "ai_content_scoring"
+        MODEL = "model"
+        MAX_TOKENS = "max_tokens"
+        MAX_EPISODES_PER_BATCH = "max_episodes_per_batch"
+        MAX_INPUT_TOKENS = "max_input_tokens"
+        PROMPT_MAX_CHARS = "prompt_max_chars"
+
+    class AIDigestGeneration:
+        CATEGORY = "ai_digest_generation"
+        MODEL = "model"
+        MAX_OUTPUT_TOKENS = "max_output_tokens"
+        MAX_INPUT_TOKENS = "max_input_tokens"
+        TRANSCRIPT_BUFFER_PERCENT = "transcript_buffer_percent"
+        TRANSCRIPT_MIN_CHARS = "transcript_min_chars"
+        TRANSCRIPT_MAX_CHARS = "transcript_max_chars"
+
+    class AIMetadataGeneration:
+        CATEGORY = "ai_metadata_generation"
+        MODEL = "model"
+        MAX_INPUT_TOKENS = "max_input_tokens"
+        MAX_TITLE_TOKENS = "max_title_tokens"
+        MAX_SUMMARY_TOKENS = "max_summary_tokens"
+        MAX_DESCRIPTION_TOKENS = "max_description_tokens"
+
+    class AITTSGeneration:
+        CATEGORY = "ai_tts_generation"
+        MODEL = "model"
+        MAX_CHARACTERS = "max_characters"
+
+    class AISTTTranscription:
+        CATEGORY = "ai_stt_transcription"
+        MODEL = "model"
+        MAX_FILE_SIZE_MB = "max_file_size_mb"
+
+    class TranscriptProcessing:
+        CATEGORY = "transcript_processing"
+        AD_TRIM_ENABLED = "ad_trim_enabled"
+        AD_TRIM_START_PERCENT = "ad_trim_start_percent"
+        AD_TRIM_END_PERCENT = "ad_trim_end_percent"
+
+
 # AI Model Definitions and Limits
 AI_MODELS = {
     'openai': {
@@ -56,73 +148,79 @@ class WebSettingModel(Base):
 
 
 DEFAULTS = {
-    ("content_filtering", "score_threshold"): {"type": "float", "default": 0.65, "min": 0.0, "max": 1.0},
-    ("content_filtering", "max_episodes_per_digest"): {"type": "int", "default": 5, "min": 1, "max": 20},
-    ("content_filtering", "min_episodes_per_digest"): {"type": "int", "default": 1, "min": 0, "max": 10},
-    ("audio_processing", "chunk_duration_minutes"): {"type": "int", "default": 10, "min": 1, "max": 30},
-    ("audio_processing", "transcribe_all_chunks"): {"type": "bool", "default": True},
-    ("audio_processing", "max_chunks_per_episode"): {"type": "int", "default": 3, "min": 1, "max": 50},
-    ("pipeline", "max_episodes_per_run"): {"type": "int", "default": 3, "min": 1, "max": 20},
-    ("pipeline", "discovery_lookback_days"): {"type": "int", "default": 3, "min": 1, "max": 30},
+    # Content Filtering
+    (SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.SCORE_THRESHOLD): {"type": "float", "default": 0.65, "min": 0.0, "max": 1.0},
+    (SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MAX_EPISODES_PER_DIGEST): {"type": "int", "default": 5, "min": 1, "max": 20},
+    (SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MIN_EPISODES_PER_DIGEST): {"type": "int", "default": 1, "min": 0, "max": 10},
+
+    # Audio Processing
+    (SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.CHUNK_DURATION_MINUTES): {"type": "int", "default": 10, "min": 1, "max": 30},
+    (SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.TRANSCRIBE_ALL_CHUNKS): {"type": "bool", "default": True},
+    (SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.MAX_CHUNKS_PER_EPISODE): {"type": "int", "default": 3, "min": 1, "max": 50},
+
+    # Pipeline
+    (SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.MAX_EPISODES_PER_RUN): {"type": "int", "default": 3, "min": 1, "max": 20},
+    (SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.DISCOVERY_LOOKBACK_DAYS): {"type": "int", "default": 3, "min": 1, "max": 30},
+
     # Retention policies (days)
-    ("retention", "local_mp3_days"): {"type": "int", "default": 14, "min": 0, "max": 365},
-    ("retention", "audio_cache_days"): {"type": "int", "default": 3, "min": 0, "max": 30},
-    ("retention", "audio_chunks_days"): {"type": "int", "default": 3, "min": 0, "max": 30},
-    ("retention", "logs_days"): {"type": "int", "default": 3, "min": 0, "max": 365},
-    ("retention", "episode_retention_days"): {"type": "int", "default": 14, "min": 8, "max": 365},
-    ("retention", "digest_retention_days"): {"type": "int", "default": 14, "min": 8, "max": 365},
-    ("retention", "github_releases_days"): {"type": "int", "default": 14, "min": 0, "max": 365},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.LOCAL_MP3_DAYS): {"type": "int", "default": 14, "min": 0, "max": 365},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.AUDIO_CACHE_DAYS): {"type": "int", "default": 3, "min": 0, "max": 30},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.AUDIO_CHUNKS_DAYS): {"type": "int", "default": 3, "min": 0, "max": 30},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.LOGS_DAYS): {"type": "int", "default": 3, "min": 0, "max": 365},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.EPISODE_RETENTION_DAYS): {"type": "int", "default": 14, "min": 8, "max": 365},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.DIGEST_RETENTION_DAYS): {"type": "int", "default": 14, "min": 8, "max": 365},
+    (SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.GITHUB_RELEASES_DAYS): {"type": "int", "default": 14, "min": 0, "max": 365},
 
     # Topic Tracking Configuration
-    ("topic_tracking", "min_score_for_extraction"): {"type": "float", "default": 0.70, "min": 0.0, "max": 1.0},
-    ("topic_tracking", "max_topics_per_episode"): {"type": "int", "default": 15, "min": 3, "max": 20},
-    ("topic_tracking", "retention_days"): {"type": "int", "default": 14, "min": 7, "max": 90},
-    ("topic_tracking", "extraction_model"): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MIN_SCORE_FOR_EXTRACTION): {"type": "float", "default": 0.70, "min": 0.0, "max": 1.0},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MAX_TOPICS_PER_EPISODE): {"type": "int", "default": 15, "min": 3, "max": 20},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RETENTION_DAYS): {"type": "int", "default": 14, "min": 7, "max": 90},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL): {"type": "string", "default": "gpt-5-mini"},
 
     # Ad Filtering Configuration
-    ("ad_filtering", "enabled"): {"type": "bool", "default": True},
-    ("ad_filtering", "confidence_threshold"): {"type": "float", "default": 0.7, "min": 0.0, "max": 1.0},
+    (SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.ENABLED): {"type": "bool", "default": True},
+    (SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.CONFIDENCE_THRESHOLD): {"type": "float", "default": 0.7, "min": 0.0, "max": 1.0},
 
     # Topic Evolution Configuration (v2.01+)
-    ("topic_evolution", "enable_novelty_detection"): {"type": "bool", "default": True},
-    ("topic_evolution", "novelty_threshold"): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
-    ("topic_evolution", "embedding_model"): {"type": "string", "default": "text-embedding-3-small"},
-    ("topic_evolution", "similarity_threshold"): {"type": "float", "default": 0.85, "min": 0.5, "max": 1.0},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.ENABLE_NOVELTY_DETECTION): {"type": "bool", "default": True},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.NOVELTY_THRESHOLD): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL): {"type": "string", "default": "text-embedding-3-small"},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD): {"type": "float", "default": 0.85, "min": 0.5, "max": 1.0},
 
     # AI Configuration - Content Scoring Phase
-    ("ai_content_scoring", "model"): {"type": "string", "default": "gpt-5-mini"},
-    ("ai_content_scoring", "max_tokens"): {"type": "int", "default": 1000, "min": 100, "max": 128000},
-    ("ai_content_scoring", "max_episodes_per_batch"): {"type": "int", "default": 10, "min": 1, "max": 50},
-    ("ai_content_scoring", "max_input_tokens"): {"type": "int", "default": 120000, "min": 1000, "max": 272000},
-    ("ai_content_scoring", "prompt_max_chars"): {"type": "int", "default": 4000, "min": 0, "max": 200000},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS): {"type": "int", "default": 1000, "min": 100, "max": 128000},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH): {"type": "int", "default": 10, "min": 1, "max": 50},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_INPUT_TOKENS): {"type": "int", "default": 120000, "min": 1000, "max": 272000},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.PROMPT_MAX_CHARS): {"type": "int", "default": 4000, "min": 0, "max": 200000},
 
     # AI Configuration - Digest Generation Phase
-    ("ai_digest_generation", "model"): {"type": "string", "default": "gpt-5"},
-    ("ai_digest_generation", "max_output_tokens"): {"type": "int", "default": 25000, "min": 1000, "max": 128000},
-    ("ai_digest_generation", "max_input_tokens"): {"type": "int", "default": 150000, "min": 10000, "max": 272000},
-    ("ai_digest_generation", "transcript_buffer_percent"): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
-    ("ai_digest_generation", "transcript_min_chars"): {"type": "int", "default": 2000, "min": 0, "max": 500000},
-    ("ai_digest_generation", "transcript_max_chars"): {"type": "int", "default": 20000, "min": 0, "max": 1000000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL): {"type": "string", "default": "gpt-5"},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS): {"type": "int", "default": 25000, "min": 1000, "max": 128000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 150000, "min": 10000, "max": 272000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MIN_CHARS): {"type": "int", "default": 2000, "min": 0, "max": 500000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS): {"type": "int", "default": 20000, "min": 0, "max": 1000000},
 
     # AI Configuration - Metadata Generation Phase
-    ("ai_metadata_generation", "model"): {"type": "string", "default": "gpt-5-mini"},
-    ("ai_metadata_generation", "max_input_tokens"): {"type": "int", "default": 60000, "min": 1000, "max": 128000},
-    ("ai_metadata_generation", "max_title_tokens"): {"type": "int", "default": 50, "min": 10, "max": 200},
-    ("ai_metadata_generation", "max_summary_tokens"): {"type": "int", "default": 200, "min": 50, "max": 1000},
-    ("ai_metadata_generation", "max_description_tokens"): {"type": "int", "default": 500, "min": 100, "max": 2000},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 60000, "min": 1000, "max": 128000},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_TITLE_TOKENS): {"type": "int", "default": 50, "min": 10, "max": 200},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_SUMMARY_TOKENS): {"type": "int", "default": 200, "min": 50, "max": 1000},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_DESCRIPTION_TOKENS): {"type": "int", "default": 500, "min": 100, "max": 2000},
 
     # AI Configuration - TTS Generation Phase
-    ("ai_tts_generation", "model"): {"type": "string", "default": "eleven_turbo_v2_5"},
-    ("ai_tts_generation", "max_characters"): {"type": "int", "default": 35000, "min": 1000, "max": 40000},
+    (SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL): {"type": "string", "default": "eleven_turbo_v2_5"},
+    (SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MAX_CHARACTERS): {"type": "int", "default": 35000, "min": 1000, "max": 40000},
 
     # AI Configuration - Speech-to-Text Phase
-    ("ai_stt_transcription", "model"): {"type": "string", "default": "whisper-1"},
-    ("ai_stt_transcription", "max_file_size_mb"): {"type": "int", "default": 20, "min": 1, "max": 25},
+    (SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL): {"type": "string", "default": "whisper-1"},
+    (SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MAX_FILE_SIZE_MB): {"type": "int", "default": 20, "min": 1, "max": 25},
 
     # Transcript Processing Controls (scoring + digest ingestion)
-    ("transcript_processing", "ad_trim_enabled"): {"type": "bool", "default": True},
-    ("transcript_processing", "ad_trim_start_percent"): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
-    ("transcript_processing", "ad_trim_end_percent"): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
+    (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_ENABLED): {"type": "bool", "default": True},
+    (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_START_PERCENT): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
+    (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_END_PERCENT): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
 }
 
 
@@ -334,61 +432,61 @@ class WebConfigReader:
     def get_ai_scoring_config(self) -> Dict[str, Any]:
         """Get AI content scoring configuration for run_scoring.py"""
         return {
-            'model': self.web_config.get_setting('ai_content_scoring', 'model', 'gpt-5-mini'),
-            'max_tokens': self.web_config.get_setting('ai_content_scoring', 'max_tokens', 1000),
-            'max_episodes_per_batch': self.web_config.get_setting('ai_content_scoring', 'max_episodes_per_batch', 10),
-            'max_input_tokens': self.web_config.get_setting('ai_content_scoring', 'max_input_tokens', 120000),
-            'prompt_max_chars': self.web_config.get_setting('ai_content_scoring', 'prompt_max_chars', 4000)
+            'model': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL, 'gpt-5-mini'),
+            'max_tokens': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS, 1000),
+            'max_episodes_per_batch': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH, 10),
+            'max_input_tokens': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_INPUT_TOKENS, 120000),
+            'prompt_max_chars': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.PROMPT_MAX_CHARS, 4000)
         }
 
     def get_score_threshold(self) -> float:
         """Get content filtering score threshold"""
-        return self.web_config.get_setting('content_filtering', 'score_threshold', 0.65)
+        return self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.SCORE_THRESHOLD, 0.65)
 
     def get_min_episodes_per_digest(self) -> int:
         """Get minimum episodes required to generate a digest"""
-        return self.web_config.get_setting('content_filtering', 'min_episodes_per_digest', 1)
+        return self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MIN_EPISODES_PER_DIGEST, 1)
 
     def get_ai_digest_config(self) -> Dict[str, Any]:
         """Get AI digest generation configuration for run_digest.py"""
         return {
-            'model': self.web_config.get_setting('ai_digest_generation', 'model', 'gpt-5'),
-            'max_output_tokens': self.web_config.get_setting('ai_digest_generation', 'max_output_tokens', 25000),
-            'max_input_tokens': self.web_config.get_setting('ai_digest_generation', 'max_input_tokens', 150000),
-            'transcript_buffer_percent': self.web_config.get_setting('ai_digest_generation', 'transcript_buffer_percent', 20.0),
-            'transcript_min_chars': self.web_config.get_setting('ai_digest_generation', 'transcript_min_chars', 2000),
-            'transcript_max_chars': self.web_config.get_setting('ai_digest_generation', 'transcript_max_chars', 20000)
+            'model': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL, 'gpt-5'),
+            'max_output_tokens': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS, 25000),
+            'max_input_tokens': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 150000),
+            'transcript_buffer_percent': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT, 20.0),
+            'transcript_min_chars': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MIN_CHARS, 2000),
+            'transcript_max_chars': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS, 20000)
         }
 
     def get_ai_tts_config(self) -> Dict[str, Any]:
         """Get AI TTS generation configuration for run_tts.py"""
         return {
-            'model': self.web_config.get_setting('ai_tts_generation', 'model', 'eleven_turbo_v2_5'),
-            'max_characters': self.web_config.get_setting('ai_tts_generation', 'max_characters', 35000)
+            'model': self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL, 'eleven_turbo_v2_5'),
+            'max_characters': self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MAX_CHARACTERS, 35000)
         }
 
     def get_audio_processing_config(self) -> Dict[str, Any]:
         """Get audio processing configuration for run_audio.py"""
         return {
-            'chunk_duration_minutes': self.web_config.get_setting('audio_processing', 'chunk_duration_minutes', 10),
-            'transcribe_all_chunks': self.web_config.get_setting('audio_processing', 'transcribe_all_chunks', True),
-            'max_chunks_per_episode': self.web_config.get_setting('audio_processing', 'max_chunks_per_episode', 3),
-            'stt_model': self.web_config.get_setting('ai_stt_transcription', 'model', 'whisper-1'),
-            'max_file_size_mb': self.web_config.get_setting('ai_stt_transcription', 'max_file_size_mb', 20)
+            'chunk_duration_minutes': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.CHUNK_DURATION_MINUTES, 10),
+            'transcribe_all_chunks': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.TRANSCRIBE_ALL_CHUNKS, True),
+            'max_chunks_per_episode': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.MAX_CHUNKS_PER_EPISODE, 3),
+            'stt_model': self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL, 'whisper-1'),
+            'max_file_size_mb': self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MAX_FILE_SIZE_MB, 20)
         }
 
     def get_pipeline_config(self) -> Dict[str, Any]:
         """Get general pipeline configuration"""
         return {
-            'max_episodes_per_run': self.web_config.get_setting('pipeline', 'max_episodes_per_run', 3),
-            'discovery_lookback_days': self.web_config.get_setting('pipeline', 'discovery_lookback_days', 3),
-            'max_episodes_per_digest': self.web_config.get_setting('content_filtering', 'max_episodes_per_digest', 5)
+            'max_episodes_per_run': self.web_config.get_setting(SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.MAX_EPISODES_PER_RUN, 3),
+            'discovery_lookback_days': self.web_config.get_setting(SettingsKeys.Pipeline.CATEGORY, SettingsKeys.Pipeline.DISCOVERY_LOOKBACK_DAYS, 3),
+            'max_episodes_per_digest': self.web_config.get_setting(SettingsKeys.ContentFiltering.CATEGORY, SettingsKeys.ContentFiltering.MAX_EPISODES_PER_DIGEST, 5)
         }
 
     def get_transcript_processing_config(self) -> Dict[str, Any]:
         """Get transcript processing configuration"""
         return {
-            'ad_trim_enabled': self.web_config.get_setting('transcript_processing', 'ad_trim_enabled', True),
-            'ad_trim_start_percent': self.web_config.get_setting('transcript_processing', 'ad_trim_start_percent', 5.0),
-            'ad_trim_end_percent': self.web_config.get_setting('transcript_processing', 'ad_trim_end_percent', 5.0)
+            'ad_trim_enabled': self.web_config.get_setting(SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_ENABLED, True),
+            'ad_trim_start_percent': self.web_config.get_setting(SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_START_PERCENT, 5.0),
+            'ad_trim_end_percent': self.web_config.get_setting(SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_END_PERCENT, 5.0)
         }

@@ -6,7 +6,7 @@ Uses pattern matching against known advertiser signatures.
 import logging
 from typing import Tuple, List, Optional
 
-from src.config.web_config import WebConfigManager
+from src.config.web_config import WebConfigManager, SettingsKeys
 from src.database.common_ads_repo import get_common_ads_repo
 
 
@@ -23,9 +23,9 @@ class AdFilter:
         self.web_config = WebConfigManager()
         self.ad_repo = get_common_ads_repo()
 
-        self.enabled = self.web_config.get_setting("ad_filtering", "enabled", True)
+        self.enabled = self.web_config.get_setting(SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.ENABLED, True)
         self.confidence_threshold = self.web_config.get_setting(
-            "ad_filtering", "confidence_threshold", 0.7
+            SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.CONFIDENCE_THRESHOLD, 0.7
         )
 
         # Cache active ad patterns
