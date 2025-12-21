@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { DatabaseClient } from "@/utils/supabase";
 import { revalidateTag } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/episodes/[id]')
 
 export async function POST(
   request: NextRequest,
@@ -27,7 +30,7 @@ export async function POST(
 
       // Invalidate episodes cache
       revalidateTag('episodes-data');
-      console.log(`Episodes cache invalidated after undigest action on episode ${episodeId}`);
+      log.info('Episodes cache invalidated after undigest action', { episodeId });
 
       return NextResponse.json({
         success: true,
@@ -39,7 +42,7 @@ export async function POST(
 
       // Invalidate episodes cache
       revalidateTag('episodes-data');
-      console.log(`Episodes cache invalidated after reset_to_pending action on episode ${episodeId}`);
+      log.info('Episodes cache invalidated after reset_to_pending action', { episodeId });
 
       return NextResponse.json({
         success: true,
@@ -50,7 +53,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
-    console.error('Episode action error:', error);
+    log.error('Episode action error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ error: 'Failed to process episode action' }, { status: 500 });
   }
 }

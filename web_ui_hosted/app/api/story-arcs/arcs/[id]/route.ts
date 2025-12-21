@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/story-arcs/arcs/[id]')
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +52,7 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Story arc not found' }, { status: 404 })
       }
-      console.error('Error fetching story arc:', error)
+      log.error('Error fetching story arc', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -63,7 +66,7 @@ export async function GET(
 
     return NextResponse.json({ arc })
   } catch (error) {
-    console.error('Error in GET story arc:', error)
+    log.error('Error in GET story arc', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -115,13 +118,13 @@ export async function PUT(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Story arc not found' }, { status: 404 })
       }
-      console.error('Error updating story arc:', error)
+      log.error('Error updating story arc', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ arc: data })
   } catch (error) {
-    console.error('Error in PUT story arc:', error)
+    log.error('Error in PUT story arc', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -156,13 +159,13 @@ export async function DELETE(
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting story arc:', error)
+      log.error('Error deleting story arc', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in DELETE story arc:', error)
+    log.error('Error in DELETE story arc', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

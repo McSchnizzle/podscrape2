@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
 
+const log = createLogger('api/feeds')
 const db = DatabaseClient.getInstance()
 
 export async function GET() {
@@ -9,17 +11,16 @@ export async function GET() {
   if (!auth.authorized) return auth.error!
 
   try {
-    console.log('Feeds API: GET request')
+    log.info('GET request')
 
     const db = DatabaseClient.getInstance()
     const feeds = await db.getFeeds()
 
-    console.log(`Feeds API: Returning ${feeds.length} feeds`)
+    log.info('Returning feeds', { count: feeds.length })
 
     return NextResponse.json({ feeds })
   } catch (error) {
-    console.error('Failed to fetch feeds:', error)
-    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error')
+    log.error('Failed to fetch feeds', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       {
         error: 'Failed to fetch feeds',
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ feed })
   } catch (error) {
-    console.error('Failed to create feed:', error)
+    log.error('Failed to create feed', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to create feed' },
       { status: 500 }

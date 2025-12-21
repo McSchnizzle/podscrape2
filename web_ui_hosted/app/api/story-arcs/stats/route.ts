@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/story-arcs/stats')
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +27,7 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
 
     if (arcCountError) {
-      console.error('Error counting story arcs:', arcCountError)
+      log.warn('Error counting story arcs', { error: arcCountError.message })
     }
 
     // Get total events
@@ -33,7 +36,7 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
 
     if (eventCountError) {
-      console.error('Error counting events:', eventCountError)
+      log.warn('Error counting events', { error: eventCountError.message })
     }
 
     // Get arcs by category
@@ -79,7 +82,7 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
 
     if (adsCountError) {
-      console.error('Error counting ads:', adsCountError)
+      log.warn('Error counting ads', { error: adsCountError.message })
     }
 
     const { count: activeAds, error: activeAdsError } = await supabase
@@ -88,7 +91,7 @@ export async function GET() {
       .eq('is_active', true)
 
     if (activeAdsError) {
-      console.error('Error counting active ads:', activeAdsError)
+      log.warn('Error counting active ads', { error: activeAdsError.message })
     }
 
     return NextResponse.json({
@@ -101,7 +104,7 @@ export async function GET() {
       active_ads: activeAds || 0
     })
   } catch (error) {
-    console.error('Error in stats API:', error)
+    log.error('Error in stats API', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

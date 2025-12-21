@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient, supabase } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/settings')
 
 export async function GET() {
   const auth = await requireAuth()
@@ -44,7 +47,7 @@ export async function GET() {
 
     return NextResponse.json({ settings, settingsMeta })
   } catch (error) {
-    console.error('Settings API error:', error)
+    log.error('Failed to fetch settings', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -76,7 +79,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Settings API error:', error)
+    log.error('Failed to update settings', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

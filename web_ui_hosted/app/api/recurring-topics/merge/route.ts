@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/merge')
 
 export const dynamic = 'force-dynamic'
 
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
       .in('id', topic_ids)
 
     if (fetchError) {
-      console.error('Error fetching topics:', fetchError)
+      log.error('Error fetching topics', { error: fetchError.message })
       return NextResponse.json({ error: fetchError.message }, { status: 500 })
     }
 
@@ -153,7 +156,7 @@ Respond with a JSON object only, no markdown formatting:
         .trim()
       mergeResult = JSON.parse(cleanedResponse)
     } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText)
+      log.error('Failed to parse AI response', { response: responseText })
       return NextResponse.json(
         { error: 'Failed to parse AI merge result' },
         { status: 500 }
@@ -193,7 +196,7 @@ Respond with a JSON object only, no markdown formatting:
       .single()
 
     if (insertError) {
-      console.error('Error creating merged topic:', insertError)
+      log.error('Error creating merged topic', { error: insertError.message })
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
@@ -207,7 +210,7 @@ Respond with a JSON object only, no markdown formatting:
       .in('id', topic_ids)
 
     if (updateError) {
-      console.error('Error updating original topics:', updateError)
+      log.warn('Error updating original topics', { error: updateError.message })
       // Don't fail - the merge succeeded, we just couldn't update the parent references
     }
 
@@ -222,7 +225,7 @@ Respond with a JSON object only, no markdown formatting:
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Error in merge topics:', error)
+    log.error('Error in merge topics', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/pipeline/publish')
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth()
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('GitHub API error:', response.status, errorText)
+      log.error('GitHub API error', { status: response.status, error: errorText })
       return NextResponse.json(
         { error: `GitHub API error: ${response.status}` },
         { status: response.status }
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to trigger publishing:', error)
+    log.error('Failed to trigger publishing', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to trigger publishing' },
       { status: 500 }

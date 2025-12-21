@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/ads')
 
 export const dynamic = 'force-dynamic'
 
@@ -52,13 +55,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error creating ad:', error)
+      log.error('Error creating ad', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ ad: data }, { status: 201 })
   } catch (error) {
-    console.error('Error in POST ads:', error)
+    log.error('Error in POST ads', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -75,13 +78,13 @@ export async function GET() {
       .order('detection_count', { ascending: false })
 
     if (error) {
-      console.error('Error fetching ads:', error)
+      log.error('Error fetching ads', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ ads: data || [] })
   } catch (error) {
-    console.error('Error in ads API:', error)
+    log.error('Error in ads API', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/tasks')
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Failed to get tasks:', error)
+    log.error('Failed to get tasks', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to get tasks' },
       { status: 500 }
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(task, { status: 201 })
   } catch (error) {
-    console.error('Failed to create task:', error)
+    log.error('Failed to create task', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to create task' },
       { status: 500 }

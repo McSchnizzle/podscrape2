@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/story-arcs/arcs')
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error('Error fetching story arcs:', error)
+      log.error('Error fetching story arcs', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ arcs })
   } catch (error) {
-    console.error('Error in story arcs API:', error)
+    log.error('Error in story arcs API', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -132,13 +135,13 @@ export async function POST(request: NextRequest) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'A story arc with this name already exists' }, { status: 409 })
       }
-      console.error('Error creating story arc:', error)
+      log.error('Error creating story arc', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ arc: data }, { status: 201 })
   } catch (error) {
-    console.error('Error in POST story arcs:', error)
+    log.error('Error in POST story arcs', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

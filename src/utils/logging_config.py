@@ -403,7 +403,7 @@ def cleanup_old_logs(log_dir: str = None, days_to_keep: int = 3):
             try:
                 log_file.unlink()
                 cleaned_count += 1
-                print(f"🗑️  Cleaned up old log: {log_file.name}")
+                logger.info(f"Cleaned up old log: {log_file.name}")
             except Exception as e:
                 logger.warning(f"Failed to delete old log file {log_file}: {e}")
 
@@ -562,6 +562,8 @@ def move_legacy_logs_to_logs_dir():
     logs_dir = project_root / "logs"
     logs_dir.mkdir(exist_ok=True)
 
+    logger = get_logger(__name__)
+
     # Find all .log files in the current directory
     current_dir = project_root
     moved_count = 0
@@ -579,15 +581,15 @@ def move_legacy_logs_to_logs_dir():
 
             log_file.rename(target_path)
             moved_count += 1
-            print(f"📁 Moved log: {log_file.name} → logs/{target_path.name}")
+            logger.info(f"Moved log: {log_file.name} -> logs/{target_path.name}")
 
         except Exception as e:
-            print(f"⚠️  Failed to move {log_file}: {e}")
+            logger.warning(f"Failed to move {log_file}: {e}")
 
     if moved_count > 0:
-        print(f"✅ Moved {moved_count} log files to logs/ directory")
+        logger.info(f"Moved {moved_count} log files to logs/ directory")
     else:
-        print("ℹ️  No legacy log files found to move")
+        logger.info("No legacy log files found to move")
 
 # Application-specific loggers
 def get_database_logger() -> logging.Logger:

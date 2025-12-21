@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { revalidateTag } from 'next/cache'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/feeds/[id]/check')
 
 export async function POST(
   request: NextRequest,
@@ -23,7 +26,7 @@ export async function POST(
 
     // Invalidate feeds cache after checking feed
     revalidateTag('feeds-data')
-    console.log(`Feeds cache invalidated after checking feed ${id}`)
+    log.info('Feeds cache invalidated after checking feed', { id })
 
     return NextResponse.json({
       success: true,
@@ -31,7 +34,7 @@ export async function POST(
       message: 'Feed check initiated successfully'
     })
   } catch (error) {
-    console.error('Error checking feed:', error)
+    log.error('Error checking feed', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to check feed' },
       { status: 500 }

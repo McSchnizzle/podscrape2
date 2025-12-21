@@ -30,6 +30,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/utils/supabase';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('api/rss/daily-digest');
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 300; // Cache for 5 minutes
@@ -165,7 +168,7 @@ function escapeXML(str: string): string {
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log('[RSS API] Generating RSS feed from database...');
+    log.info('Generating RSS feed from database');
 
     // Query Supabase for recent digests with MP3s and GitHub URLs
     const { data: digests, error } = await supabase
@@ -178,21 +181,21 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (error) {
-      console.error('[RSS API] Database error:', error);
+      log.error('Database error', { error: error.message });
       return new NextResponse('Error fetching digests from database', { status: 500 });
     }
 
     if (!digests || digests.length === 0) {
-      console.warn('[RSS API] No published digests found');
+      log.warn('No published digests found');
       return new NextResponse('No published digests available', { status: 404 });
     }
 
-    console.log(`[RSS API] Found ${digests.length} published digests, generating XML...`);
+    log.info('Generating XML', { digestCount: digests.length });
 
     // Generate RSS XML
     const rssXML = generateRSSXML(digests as Digest[]);
 
-    console.log(`[RSS API] RSS feed generated successfully (${rssXML.length} bytes)`);
+    log.info('RSS feed generated successfully', { bytes: rssXML.length });
 
     // Return with proper caching headers
     return new NextResponse(rssXML, {
@@ -206,7 +209,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[RSS API] Unexpected error:', error);
+    log.error('Unexpected error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return new NextResponse('Internal server error', { status: 500 });
   }
 }

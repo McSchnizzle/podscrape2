@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/debug/episodes')
 
 export const dynamic = 'force-dynamic'
 
@@ -8,14 +11,13 @@ export async function GET() {
   if (!auth.authorized) return auth.error!
 
   try {
-    console.log('Testing Supabase environment variables...')
+    log.debug('Testing Supabase environment variables')
 
     // Test environment variables first
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE
 
-    console.log('SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing')
-    console.log('SUPABASE_SERVICE_ROLE:', supabaseServiceRole ? 'Set' : 'Missing')
+    log.debug('Environment check', { SUPABASE_URL: supabaseUrl ? 'Set' : 'Missing', SUPABASE_SERVICE_ROLE: supabaseServiceRole ? 'Set' : 'Missing' })
 
     if (!supabaseUrl || !supabaseServiceRole) {
       return NextResponse.json({
@@ -31,7 +33,7 @@ export async function GET() {
     const { DatabaseClient } = await import('@/utils/supabase')
     const db = DatabaseClient.getInstance()
 
-    console.log('Using singleton database client for tests...')
+    log.debug('Using singleton database client for tests')
 
     // Test system health (uses database connectivity)
     const health = await db.getSystemHealth()
@@ -47,7 +49,7 @@ export async function GET() {
     // Test episode retrieval using database client methods
     const episodesResult = await db.getEpisodes({ pageSize: 3, sortBy: 'published_date', sortDir: 'desc' })
 
-    console.log(`DatabaseClient returned ${episodesResult.episodes?.length || 0} episodes`)
+    log.debug('DatabaseClient returned episodes', { count: episodesResult.episodes?.length || 0 })
 
     return NextResponse.json({
       success: true,
@@ -66,7 +68,7 @@ export async function GET() {
     })
 
   } catch (error) {
-    console.error('Debug API error:', error)
+    log.error('Debug API error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({
       error: 'Debug failed',
       details: error instanceof Error ? error.message : String(error)

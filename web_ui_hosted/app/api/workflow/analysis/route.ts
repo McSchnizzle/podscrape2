@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/workflow/analysis')
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +20,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(analysis)
   } catch (error) {
-    console.error('Failed to get workflow analysis:', error)
+    log.error('Failed to get workflow analysis', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to get workflow analysis' },
       { status: 500 }

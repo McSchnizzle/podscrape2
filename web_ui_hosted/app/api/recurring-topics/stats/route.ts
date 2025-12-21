@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/stats')
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +27,7 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
 
     if (countError) {
-      console.error('Error counting topics:', countError)
+      log.warn('Error counting topics', { error: countError.message })
     }
 
     // Get average novelty score
@@ -83,7 +86,7 @@ export async function GET() {
       active_ads: activeAds || 0
     })
   } catch (error) {
-    console.error('Error in stats API:', error)
+    log.error('Error in stats API', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

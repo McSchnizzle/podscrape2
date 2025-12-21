@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/dashboard/analytics')
 
 export const dynamic = 'force-dynamic'
 
@@ -235,7 +238,7 @@ export async function GET() {
       performanceInsights
     })
   } catch (error) {
-    console.error('Failed to load dashboard analytics', error)
+    log.error('Failed to load dashboard analytics', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({
       error: 'Failed to load dashboard analytics',
       details: error instanceof Error ? error.message : 'Unknown error'

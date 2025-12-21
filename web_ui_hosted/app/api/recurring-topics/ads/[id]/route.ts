@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/ads/[id]')
 
 export const dynamic = 'force-dynamic'
 
@@ -33,13 +36,13 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Ad not found' }, { status: 404 })
       }
-      console.error('Error fetching ad:', error)
+      log.error('Error fetching ad', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ ad: data })
   } catch (error) {
-    console.error('Error in GET ad:', error)
+    log.error('Error in GET ad', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -85,13 +88,13 @@ export async function PUT(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Ad not found' }, { status: 404 })
       }
-      console.error('Error updating ad:', error)
+      log.error('Error updating ad', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ ad: data })
   } catch (error) {
-    console.error('Error in PUT ad:', error)
+    log.error('Error in PUT ad', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -126,13 +129,13 @@ export async function DELETE(
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting ad:', error)
+      log.error('Error deleting ad', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in DELETE ad:', error)
+    log.error('Error in DELETE ad', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

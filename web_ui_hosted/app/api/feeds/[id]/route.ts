@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { revalidateTag } from 'next/cache'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
 
+const log = createLogger('api/feeds/[id]')
 const db = DatabaseClient.getInstance()
 
 export async function PUT(
@@ -49,11 +51,11 @@ export async function PUT(
 
     // Invalidate feeds cache after updating feed
     revalidateTag('feeds-data')
-    console.log(`Feeds cache invalidated after updating feed ${id}`)
+    log.info('Feeds cache invalidated after updating feed', { id })
 
     return NextResponse.json({ feed })
   } catch (error) {
-    console.error('Failed to update feed:', error)
+    log.error('Failed to update feed', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to update feed' },
       { status: 500 }
@@ -81,11 +83,11 @@ export async function DELETE(
 
     // Invalidate feeds cache after deleting feed
     revalidateTag('feeds-data')
-    console.log(`Feeds cache invalidated after deleting feed ${id}`)
+    log.info('Feeds cache invalidated after deleting feed', { id })
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Failed to delete feed:', error)
+    log.error('Failed to delete feed', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to delete feed' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/script-lab')
 
 const editorKey = (topic: string, key: string) => `${topic}:${key}`
 
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
       pace
     })
   } catch (error) {
-    console.error('Script lab GET error:', error)
+    log.error('Script lab GET error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to load script lab data' }, { status: 500 })
   }
 }
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
 
         python.on('close', (code: number) => {
           if (code !== 0) {
-            console.error('Python script failed:', stderr);
+            log.error('Python script failed', { stderr });
             resolve(NextResponse.json({
               success: false,
               error: `Script generation failed: ${stderr || 'Unknown error'}`
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
               }, { status: 500 }));
             }
           } catch (error) {
-            console.error('Failed to parse Python output:', stdout, stderr);
+            log.error('Failed to parse Python output', { stdout, stderr });
             resolve(NextResponse.json({
               success: false,
               error: 'Failed to parse script generation output'
@@ -193,7 +196,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
-    console.error('Script lab POST error:', error)
+    log.error('Script lab POST error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to process script lab request' }, { status: 500 })
   }
 }

@@ -15,6 +15,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/utils/supabase';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('api/rss/ai-tech-digest');
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 300; // Cache for 5 minutes
@@ -129,7 +132,7 @@ function escapeXML(str: string): string {
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log(`[RSS API] Generating AI & Technology RSS feed from database...`);
+    log.info('Generating AI & Technology RSS feed from database');
 
     // Query Supabase for AI & Technology digests with MP3s and GitHub URLs
     const { data: digests, error } = await supabase
@@ -143,21 +146,21 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (error) {
-      console.error('[RSS API] Database error:', error);
+      log.error('Database error', { error: error.message });
       return new NextResponse('Error fetching digests from database', { status: 500 });
     }
 
     if (!digests || digests.length === 0) {
-      console.warn(`[RSS API] No published ${TOPIC_FILTER} digests found`);
+      log.warn('No published digests found', { topic: TOPIC_FILTER });
       return new NextResponse(`No published ${TOPIC_FILTER} digests available`, { status: 404 });
     }
 
-    console.log(`[RSS API] Found ${digests.length} ${TOPIC_FILTER} digests, generating XML...`);
+    log.info('Generating XML', { digestCount: digests.length, topic: TOPIC_FILTER });
 
     // Generate RSS XML
     const rssXML = generateRSSXML(digests as Digest[]);
 
-    console.log(`[RSS API] AI & Tech RSS feed generated successfully (${rssXML.length} bytes)`);
+    log.info('AI & Tech RSS feed generated successfully', { bytes: rssXML.length });
 
     // Return with proper caching headers
     return new NextResponse(rssXML, {
@@ -172,7 +175,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[RSS API] Unexpected error:', error);
+    log.error('Unexpected error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return new NextResponse('Internal server error', { status: 500 });
   }
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/topics/[id]')
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +41,7 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
       }
-      console.error('Error fetching topic:', error)
+      log.error('Error fetching topic', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -49,7 +52,7 @@ export async function GET(
       }
     })
   } catch (error) {
-    console.error('Error in GET topic:', error)
+    log.error('Error in GET topic', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -107,13 +110,13 @@ export async function PUT(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
       }
-      console.error('Error updating topic:', error)
+      log.error('Error updating topic', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ topic: data })
   } catch (error) {
-    console.error('Error in PUT topic:', error)
+    log.error('Error in PUT topic', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -154,13 +157,13 @@ export async function DELETE(
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting topic:', error)
+      log.error('Error deleting topic', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in DELETE topic:', error)
+    log.error('Error in DELETE topic', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

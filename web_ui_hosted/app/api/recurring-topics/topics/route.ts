@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/recurring-topics/topics')
 
 export const dynamic = 'force-dynamic'
 
@@ -63,13 +66,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error creating topic:', error)
+      log.error('Error creating topic', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ topic: data }, { status: 201 })
   } catch (error) {
-    console.error('Error in POST topics:', error)
+    log.error('Error in POST topics', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -116,7 +119,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error('Error fetching topics:', error)
+      log.error('Error fetching topics', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -128,7 +131,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ topics })
   } catch (error) {
-    console.error('Error in topics API:', error)
+    log.error('Error in topics API', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/tasks/[id]')
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +37,7 @@ export async function GET(
 
     return NextResponse.json(task)
   } catch (error) {
-    console.error('Failed to get task:', error)
+    log.error('Failed to get task', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to get task' },
       { status: 500 }
@@ -67,7 +70,7 @@ export async function PATCH(
 
     return NextResponse.json(task)
   } catch (error) {
-    console.error('Failed to update task:', error)
+    log.error('Failed to update task', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to update task' },
       { status: 500 }
@@ -98,7 +101,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Failed to delete task:', error)
+    log.error('Failed to delete task', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json(
       { error: 'Failed to delete task' },
       { status: 500 }

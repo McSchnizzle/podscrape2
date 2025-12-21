@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/topics')
 
 function slugify(input: string): string {
   return input.toLowerCase().trim()
@@ -12,7 +15,7 @@ export async function GET() {
   if (!auth.authorized) return auth.error!
 
   try {
-    console.log('Topics API request');
+    log.info('GET request');
 
     const db = DatabaseClient.getInstance()
     const topics = await db.getTopics()
@@ -49,11 +52,11 @@ export async function GET() {
       }
     }
 
-    console.log(`Returning ${result.topics.length} topics`);
+    log.info('Returning topics', { count: result.topics.length });
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Topics API error:', error);
+    log.error('Failed to load topics', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ error: 'Failed to load topics' }, { status: 500 });
   }
 }
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Topics API error:', error)
+    log.error('Failed to save topics', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to save topics' }, { status: 500 })
   }
 }

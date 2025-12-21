@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/pipeline/runs')
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +45,7 @@ export async function GET() {
 
     return NextResponse.json({ runs })
   } catch (error) {
-    console.error('Failed to load pipeline runs', error)
+    log.error('Failed to load pipeline runs', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to load pipeline runs' }, { status: 500 })
   }
 }

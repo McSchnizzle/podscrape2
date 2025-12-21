@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/publishing')
 
 export async function GET() {
   const auth = await requireAuth()
@@ -13,7 +16,7 @@ export async function GET() {
 
     return NextResponse.json({ digests, pipelineRuns })
   } catch (error) {
-    console.error('Publishing overview error:', error)
+    log.error('Publishing overview error', { error: error instanceof Error ? error.message : 'Unknown error' })
     return NextResponse.json({ error: 'Failed to load publishing overview' }, { status: 500 })
   }
 }

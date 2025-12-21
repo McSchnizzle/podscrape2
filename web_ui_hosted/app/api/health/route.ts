@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server'
 import { DatabaseClient } from '@/utils/supabase'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('api/health')
 
 export async function GET() {
   try {
@@ -18,7 +21,7 @@ export async function GET() {
       environment: process.env.NODE_ENV || 'unknown'
     })
   } catch (error) {
-    console.error('Health check failed:', error)
+    log.error('Health check failed', { error: error instanceof Error ? error.message : 'Unknown error' })
 
     return NextResponse.json(
       {
