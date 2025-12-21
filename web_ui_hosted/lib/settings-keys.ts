@@ -108,3 +108,143 @@ export const SettingsKeys = {
 
 // Type helper for strongly-typed category access
 export type SettingsCategory = typeof SettingsKeys[keyof typeof SettingsKeys]["CATEGORY"];
+
+/**
+ * Setting value types mapped from Python schema types
+ */
+export type SettingType = 'string' | 'int' | 'float' | 'bool';
+
+/**
+ * Union type for all possible setting values
+ */
+export type SettingValue = string | number | boolean;
+
+/**
+ * Schema metadata for a single setting
+ */
+export interface SettingMeta {
+  type: SettingType;
+  default: SettingValue;
+  min?: number | null;
+  max?: number | null;
+}
+
+/**
+ * Full settings schema structure - matches SETTINGS_SCHEMA in api/settings/schema/route.ts
+ */
+export interface SettingsSchemaType {
+  content_filtering: {
+    score_threshold: SettingMeta;
+    max_episodes_per_digest: SettingMeta;
+    min_episodes_per_digest: SettingMeta;
+  };
+  audio_processing: {
+    chunk_duration_minutes: SettingMeta;
+    transcribe_all_chunks: SettingMeta;
+    max_chunks_per_episode: SettingMeta;
+  };
+  pipeline: {
+    max_episodes_per_run: SettingMeta;
+    discovery_lookback_days: SettingMeta;
+  };
+  retention: {
+    local_mp3_days: SettingMeta;
+    audio_cache_days: SettingMeta;
+    audio_chunks_days: SettingMeta;
+    logs_days: SettingMeta;
+    episode_retention_days: SettingMeta;
+    digest_retention_days: SettingMeta;
+    github_releases_days: SettingMeta;
+  };
+  topic_tracking: {
+    min_score_for_extraction: SettingMeta;
+    max_topics_per_episode: SettingMeta;
+    retention_days: SettingMeta;
+    extraction_model: SettingMeta;
+  };
+  ad_filtering: {
+    enabled: SettingMeta;
+    confidence_threshold: SettingMeta;
+  };
+  topic_evolution: {
+    enable_novelty_detection: SettingMeta;
+    novelty_threshold: SettingMeta;
+    embedding_model: SettingMeta;
+    similarity_threshold: SettingMeta;
+  };
+  ai_content_scoring: {
+    model: SettingMeta;
+    max_tokens: SettingMeta;
+    max_episodes_per_batch: SettingMeta;
+    max_input_tokens: SettingMeta;
+    prompt_max_chars: SettingMeta;
+  };
+  ai_digest_generation: {
+    model: SettingMeta;
+    max_output_tokens: SettingMeta;
+    max_input_tokens: SettingMeta;
+    transcript_buffer_percent: SettingMeta;
+    transcript_min_chars: SettingMeta;
+    transcript_max_chars: SettingMeta;
+  };
+  ai_metadata_generation: {
+    model: SettingMeta;
+    max_input_tokens: SettingMeta;
+    max_title_tokens: SettingMeta;
+    max_summary_tokens: SettingMeta;
+    max_description_tokens: SettingMeta;
+  };
+  ai_tts_generation: {
+    model: SettingMeta;
+    max_characters: SettingMeta;
+  };
+  ai_stt_transcription: {
+    model: SettingMeta;
+    max_file_size_mb: SettingMeta;
+  };
+  transcript_processing: {
+    ad_trim_enabled: SettingMeta;
+    ad_trim_start_percent: SettingMeta;
+    ad_trim_end_percent: SettingMeta;
+  };
+  database: {
+    pool_size: SettingMeta;
+    max_overflow: SettingMeta;
+    pool_recycle_seconds: SettingMeta;
+  };
+  api_timeouts: {
+    openai_timeout: SettingMeta;
+    elevenlabs_timeout: SettingMeta;
+    elevenlabs_dialogue_timeout: SettingMeta;
+    github_timeout: SettingMeta;
+    github_upload_timeout: SettingMeta;
+    http_default_timeout: SettingMeta;
+    ffmpeg_timeout: SettingMeta;
+    audio_download_timeout: SettingMeta;
+  };
+  tts: {
+    rate_limit_delay: SettingMeta;
+  };
+  discovery: {
+    max_entries_per_feed: SettingMeta;
+    max_story_arcs_context: SettingMeta;
+  };
+}
+
+/**
+ * Settings values structure - same categories/keys but with actual values instead of SettingMeta
+ */
+export type SettingsValues = {
+  [K in keyof SettingsSchemaType]: {
+    [P in keyof SettingsSchemaType[K]]: SettingValue;
+  };
+};
+
+/**
+ * Partial settings values for incremental updates
+ */
+export type PartialSettingsValues = Partial<{
+  [K in keyof SettingsSchemaType]: Partial<{
+    [P in keyof SettingsSchemaType[K]]: SettingValue;
+  }>;
+}>;

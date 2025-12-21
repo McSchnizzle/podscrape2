@@ -2,25 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from '@/components/Toast'
-
-interface Settings {
-  [category: string]: {
-    [key: string]: any
-  }
-}
-
-interface SettingMeta {
-  type: string
-  default: any
-  min?: number | null
-  max?: number | null
-}
-
-interface SettingsSchema {
-  [category: string]: {
-    [key: string]: SettingMeta
-  }
-}
+import {
+  SettingMeta,
+  SettingValue
+} from '@/lib/settings-keys'
 
 interface Section {
   id: string
@@ -65,9 +50,9 @@ const SECTIONS: Section[] = [
 ]
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({})
-  const [originalSettings, setOriginalSettings] = useState<Settings>({})
-  const [schema, setSchema] = useState<SettingsSchema>({})
+  const [settings, setSettings] = useState<Record<string, Record<string, SettingValue>>>({})
+  const [originalSettings, setOriginalSettings] = useState<Record<string, Record<string, SettingValue>>>({})
+  const [schema, setSchema] = useState<Record<string, Record<string, SettingMeta>>>({})
   const [schemaLoaded, setSchemaLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -145,7 +130,7 @@ export default function SettingsPage() {
     return () => observer.disconnect()
   }, [schemaLoaded]) // Re-run when schema loads and sections render
 
-  const updateLocalSetting = (category: string, key: string, value: any) => {
+  const updateLocalSetting = (category: string, key: string, value: SettingValue) => {
     setSettings(prev => ({
       ...prev,
       [category]: {
@@ -312,7 +297,7 @@ export default function SettingsPage() {
   }
 
   // Get setting value, falling back to schema default
-  const getSetting = (category: string, key: string) => {
+  const getSetting = (category: string, key: string): SettingValue => {
     const value = settings[category]?.[key]
     if (value !== undefined && value !== null) {
       return value
@@ -324,6 +309,22 @@ export default function SettingsPage() {
     }
     // If schema not loaded yet, return a safe default based on type
     return 0
+  }
+
+  // Type-safe getters for specific value types
+  const getSettingNumber = (category: string, key: string): number => {
+    const value = getSetting(category, key)
+    return typeof value === 'number' ? value : Number(value)
+  }
+
+  const getSettingString = (category: string, key: string): string => {
+    const value = getSetting(category, key)
+    return String(value)
+  }
+
+  const getSettingBoolean = (category: string, key: string): boolean => {
+    const value = getSetting(category, key)
+    return typeof value === 'boolean' ? value : Boolean(value)
   }
 
   // Get min/max constraints from schema for input validation
@@ -425,7 +426,7 @@ export default function SettingsPage() {
                   min="0"
                   max="1"
                   className="input"
-                  value={getSetting('content_filtering', 'score_threshold')}
+                  value={getSettingNumber('content_filtering', 'score_threshold')}
                   onChange={(e) => updateLocalSetting('content_filtering', 'score_threshold', parseFloat(e.target.value))}
                   disabled={saving}
                 />
@@ -442,7 +443,7 @@ export default function SettingsPage() {
                   min="1"
                   max="20"
                   className="input"
-                  value={getSetting('content_filtering', 'max_episodes_per_digest')}
+                  value={getSettingNumber('content_filtering', 'max_episodes_per_digest')}
                   onChange={(e) => updateLocalSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
                   disabled={saving}
                 />
@@ -456,7 +457,7 @@ export default function SettingsPage() {
                   min="0"
                   max="10"
                   className="input"
-                  value={getSetting('content_filtering', 'min_episodes_per_digest')}
+                  value={getSettingNumber('content_filtering', 'min_episodes_per_digest')}
                   onChange={(e) => updateLocalSetting('content_filtering', 'min_episodes_per_digest', parseInt(e.target.value))}
                   disabled={saving}
                 />
@@ -482,7 +483,7 @@ export default function SettingsPage() {
                   min="1"
                   max="20"
                   className="input"
-                  value={getSetting('pipeline', 'max_episodes_per_run')}
+                  value={getSettingNumber('pipeline', 'max_episodes_per_run')}
                   onChange={(e) => updateLocalSetting('pipeline', 'max_episodes_per_run', parseInt(e.target.value))}
                   disabled={saving}
                 />
@@ -496,12 +497,12 @@ export default function SettingsPage() {
                   min="1"
                   max="30"
                   className="input"
-                  value={getSetting('pipeline', 'discovery_lookback_days')}
+                  value={getSettingNumber('pipeline', 'discovery_lookback_days')}
                   onChange={(e) => {
                     const newValue = parseInt(e.target.value)
                     updateLocalSetting('pipeline', 'discovery_lookback_days', newValue)
                     // Auto-adjust episode retention if needed
-                    const currentRetention = getSetting('retention', 'episode_retention_days')
+                    const currentRetention = getSettingNumber('retention', 'episode_retention_days')
                     if (newValue >= currentRetention) {
                       updateLocalSetting('retention', 'episode_retention_days', newValue + 1)
                     }
@@ -530,7 +531,7 @@ export default function SettingsPage() {
                   min="1"
                   max="30"
                   className="input"
-                  value={getSetting('audio_processing', 'chunk_duration_minutes')}
+                  value={getSettingNumber('audio_processing', 'chunk_duration_minutes')}
                   onChange={(e) => updateLocalSetting('audio_processing', 'chunk_duration_minutes', parseInt(e.target.value))}
                   disabled={saving}
                 />
@@ -544,7 +545,7 @@ export default function SettingsPage() {
                   min="1"
                   max="10"
                   className="input"
-                  value={getSetting('audio_processing', 'max_chunks_per_episode')}
+                  value={getSettingNumber('audio_processing', 'max_chunks_per_episode')}
                   onChange={(e) => updateLocalSetting('audio_processing', 'max_chunks_per_episode', parseInt(e.target.value))}
                   disabled={saving}
                 />
@@ -554,7 +555,7 @@ export default function SettingsPage() {
                   type="checkbox"
                   id="transcribe-all-chunks"
                   className="h-4 w-4 text-primary-600 rounded border-gray-300"
-                  checked={getSetting('audio_processing', 'transcribe_all_chunks')}
+                  checked={getSettingBoolean('audio_processing', 'transcribe_all_chunks')}
                   onChange={(e) => updateLocalSetting('audio_processing', 'transcribe_all_chunks', e.target.checked)}
                   disabled={saving}
                 />
@@ -577,7 +578,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_content_scoring', 'model')}
+                    value={getSettingString('ai_content_scoring', 'model')}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -601,7 +602,7 @@ export default function SettingsPage() {
                     min="100"
                     max="4000"
                     className="input"
-                    value={getSetting('ai_content_scoring', 'max_tokens')}
+                    value={getSettingNumber('ai_content_scoring', 'max_tokens')}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -615,7 +616,7 @@ export default function SettingsPage() {
                     min="1000"
                     max="200000"
                     className="input"
-                    value={getSetting('ai_content_scoring', 'max_input_tokens')}
+                    value={getSettingNumber('ai_content_scoring', 'max_input_tokens')}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_input_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -629,7 +630,7 @@ export default function SettingsPage() {
                     min="1"
                     max="20"
                     className="input"
-                    value={getSetting('ai_content_scoring', 'max_episodes_per_batch')}
+                    value={getSettingNumber('ai_content_scoring', 'max_episodes_per_batch')}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'max_episodes_per_batch', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -643,7 +644,7 @@ export default function SettingsPage() {
                     min="0"
                     max="200000"
                     className="input"
-                    value={getSetting('ai_content_scoring', 'prompt_max_chars')}
+                    value={getSettingNumber('ai_content_scoring', 'prompt_max_chars')}
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'prompt_max_chars', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -666,7 +667,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_digest_generation', 'model')}
+                    value={getSettingString('ai_digest_generation', 'model')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -690,7 +691,7 @@ export default function SettingsPage() {
                     min="1000"
                     max="50000"
                     className="input"
-                    value={getSetting('ai_digest_generation', 'max_output_tokens')}
+                    value={getSettingNumber('ai_digest_generation', 'max_output_tokens')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'max_output_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -704,7 +705,7 @@ export default function SettingsPage() {
                     min="1000"
                     max="200000"
                     className="input"
-                    value={getSetting('ai_digest_generation', 'max_input_tokens')}
+                    value={getSettingNumber('ai_digest_generation', 'max_input_tokens')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'max_input_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -719,7 +720,7 @@ export default function SettingsPage() {
                     min="0"
                     max="50"
                     className="input"
-                    value={getSetting('ai_digest_generation', 'transcript_buffer_percent')}
+                    value={getSettingNumber('ai_digest_generation', 'transcript_buffer_percent')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_buffer_percent', parseFloat(e.target.value))}
                     disabled={saving}
                   />
@@ -736,7 +737,7 @@ export default function SettingsPage() {
                     min="0"
                     max="500000"
                     className="input"
-                    value={getSetting('ai_digest_generation', 'transcript_min_chars')}
+                    value={getSettingNumber('ai_digest_generation', 'transcript_min_chars')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_min_chars', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -753,7 +754,7 @@ export default function SettingsPage() {
                     min="0"
                     max="1000000"
                     className="input"
-                    value={getSetting('ai_digest_generation', 'transcript_max_chars')}
+                    value={getSettingNumber('ai_digest_generation', 'transcript_max_chars')}
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'transcript_max_chars', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -776,7 +777,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'model')}
+                    value={getSettingString('ai_metadata_generation', 'model')}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -800,7 +801,7 @@ export default function SettingsPage() {
                     min="1000"
                     max="128000"
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'max_input_tokens')}
+                    value={getSettingNumber('ai_metadata_generation', 'max_input_tokens')}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_input_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -817,7 +818,7 @@ export default function SettingsPage() {
                     min="10"
                     max="100"
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'max_title_tokens')}
+                    value={getSettingNumber('ai_metadata_generation', 'max_title_tokens')}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_title_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -831,7 +832,7 @@ export default function SettingsPage() {
                     min="50"
                     max="500"
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'max_summary_tokens')}
+                    value={getSettingNumber('ai_metadata_generation', 'max_summary_tokens')}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_summary_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -845,7 +846,7 @@ export default function SettingsPage() {
                     min="100"
                     max="1000"
                     className="input"
-                    value={getSetting('ai_metadata_generation', 'max_description_tokens')}
+                    value={getSettingNumber('ai_metadata_generation', 'max_description_tokens')}
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'max_description_tokens', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -865,7 +866,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_tts_generation', 'model')}
+                    value={getSettingString('ai_tts_generation', 'model')}
                     onChange={(e) => updateLocalSetting('ai_tts_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -884,7 +885,7 @@ export default function SettingsPage() {
                     min="1000"
                     max="50000"
                     className="input"
-                    value={getSetting('ai_tts_generation', 'max_characters')}
+                    value={getSettingNumber('ai_tts_generation', 'max_characters')}
                     onChange={(e) => updateLocalSetting('ai_tts_generation', 'max_characters', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -907,7 +908,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('ai_stt_transcription', 'model')}
+                    value={getSettingString('ai_stt_transcription', 'model')}
                     onChange={(e) => updateLocalSetting('ai_stt_transcription', 'model', e.target.value)}
                     disabled={saving}
                   >
@@ -924,7 +925,7 @@ export default function SettingsPage() {
                     min="1"
                     max="100"
                     className="input"
-                    value={getSetting('ai_stt_transcription', 'max_file_size_mb')}
+                    value={getSettingNumber('ai_stt_transcription', 'max_file_size_mb')}
                     onChange={(e) => updateLocalSetting('ai_stt_transcription', 'max_file_size_mb', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -944,7 +945,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('topic_tracking', 'extraction_model')}
+                    value={getSettingString('topic_tracking', 'extraction_model')}
                     onChange={(e) => updateLocalSetting('topic_tracking', 'extraction_model', e.target.value)}
                     disabled={saving}
                   >
@@ -972,7 +973,7 @@ export default function SettingsPage() {
                     min="0"
                     max="1"
                     className="input"
-                    value={getSetting('topic_tracking', 'min_score_for_extraction')}
+                    value={getSettingNumber('topic_tracking', 'min_score_for_extraction')}
                     onChange={(e) => updateLocalSetting('topic_tracking', 'min_score_for_extraction', parseFloat(e.target.value))}
                     disabled={saving}
                   />
@@ -989,7 +990,7 @@ export default function SettingsPage() {
                     min="3"
                     max="20"
                     className="input"
-                    value={getSetting('topic_tracking', 'max_topics_per_episode')}
+                    value={getSettingNumber('topic_tracking', 'max_topics_per_episode')}
                     onChange={(e) => updateLocalSetting('topic_tracking', 'max_topics_per_episode', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -1006,7 +1007,7 @@ export default function SettingsPage() {
                     min="7"
                     max="90"
                     className="input"
-                    value={getSetting('topic_tracking', 'retention_days')}
+                    value={getSettingNumber('topic_tracking', 'retention_days')}
                     onChange={(e) => updateLocalSetting('topic_tracking', 'retention_days', parseInt(e.target.value))}
                     disabled={saving}
                   />
@@ -1028,7 +1029,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="ad-filtering-enabled"
                     className="h-4 w-4 text-primary-600 rounded border-gray-300"
-                    checked={getSetting('ad_filtering', 'enabled')}
+                    checked={getSettingBoolean('ad_filtering', 'enabled')}
                     onChange={(e) => updateLocalSetting('ad_filtering', 'enabled', e.target.checked)}
                     disabled={saving}
                   />
@@ -1046,7 +1047,7 @@ export default function SettingsPage() {
                     min="0"
                     max="1"
                     className="input"
-                    value={getSetting('ad_filtering', 'confidence_threshold')}
+                    value={getSettingNumber('ad_filtering', 'confidence_threshold')}
                     onChange={(e) => updateLocalSetting('ad_filtering', 'confidence_threshold', parseFloat(e.target.value))}
                     disabled={saving}
                   />
@@ -1073,7 +1074,7 @@ export default function SettingsPage() {
                     type="checkbox"
                     id="enable-novelty-detection"
                     className="h-4 w-4 text-primary-600 rounded border-gray-300"
-                    checked={getSetting('topic_evolution', 'enable_novelty_detection')}
+                    checked={getSettingBoolean('topic_evolution', 'enable_novelty_detection')}
                     onChange={(e) => updateLocalSetting('topic_evolution', 'enable_novelty_detection', e.target.checked)}
                     disabled={saving}
                   />
@@ -1091,7 +1092,7 @@ export default function SettingsPage() {
                     min="0"
                     max="1"
                     className="input"
-                    value={getSetting('topic_evolution', 'novelty_threshold')}
+                    value={getSettingNumber('topic_evolution', 'novelty_threshold')}
                     onChange={(e) => updateLocalSetting('topic_evolution', 'novelty_threshold', parseFloat(e.target.value))}
                     disabled={saving}
                   />
@@ -1105,7 +1106,7 @@ export default function SettingsPage() {
                   </label>
                   <select
                     className="input"
-                    value={getSetting('topic_evolution', 'embedding_model')}
+                    value={getSettingString('topic_evolution', 'embedding_model')}
                     onChange={(e) => updateLocalSetting('topic_evolution', 'embedding_model', e.target.value)}
                     disabled={saving}
                   >
@@ -1126,7 +1127,7 @@ export default function SettingsPage() {
                     min="0.5"
                     max="1"
                     className="input"
-                    value={getSetting('topic_evolution', 'similarity_threshold')}
+                    value={getSettingNumber('topic_evolution', 'similarity_threshold')}
                     onChange={(e) => updateLocalSetting('topic_evolution', 'similarity_threshold', parseFloat(e.target.value))}
                     disabled={saving}
                   />
@@ -1154,7 +1155,7 @@ export default function SettingsPage() {
                   type="checkbox"
                   id="ad-trim-enabled"
                   className="h-4 w-4 text-primary-600 rounded border-gray-300"
-                  checked={getSetting('transcript_processing', 'ad_trim_enabled')}
+                  checked={getSettingBoolean('transcript_processing', 'ad_trim_enabled')}
                   onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_enabled', e.target.checked)}
                   disabled={saving}
                 />
@@ -1172,7 +1173,7 @@ export default function SettingsPage() {
                   min="0"
                   max="50"
                   className="input"
-                  value={getSetting('transcript_processing', 'ad_trim_start_percent')}
+                  value={getSettingNumber('transcript_processing', 'ad_trim_start_percent')}
                   onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_start_percent', parseFloat(e.target.value))}
                   disabled={saving}
                 />
@@ -1190,7 +1191,7 @@ export default function SettingsPage() {
                   min="0"
                   max="50"
                   className="input"
-                  value={getSetting('transcript_processing', 'ad_trim_end_percent')}
+                  value={getSettingNumber('transcript_processing', 'ad_trim_end_percent')}
                   onChange={(e) => updateLocalSetting('transcript_processing', 'ad_trim_end_percent', parseFloat(e.target.value))}
                   disabled={saving}
                 />
@@ -1220,10 +1221,10 @@ export default function SettingsPage() {
                         min="1"
                         max="90"
                         className="input"
-                        value={getSetting('retention', 'episode_retention_days')}
+                        value={getSettingNumber('retention', 'episode_retention_days')}
                         onChange={(e) => {
                           const newValue = parseInt(e.target.value)
-                          const lookbackDays = getSetting('pipeline', 'discovery_lookback_days')
+                          const lookbackDays = getSettingNumber('pipeline', 'discovery_lookback_days')
                           if (newValue <= lookbackDays) {
                             toast.error('Validation Error', {
                               description: `Episode retention days must be greater than discovery lookback days (${lookbackDays})`,
@@ -1248,7 +1249,7 @@ export default function SettingsPage() {
                         min="1"
                         max="90"
                         className="input"
-                        value={getSetting('retention', 'digest_retention_days')}
+                        value={getSettingNumber('retention', 'digest_retention_days')}
                         onChange={(e) => updateLocalSetting('retention', 'digest_retention_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
@@ -1272,7 +1273,7 @@ export default function SettingsPage() {
                         min="1"
                         max="90"
                         className="input"
-                        value={getSetting('retention', 'local_mp3_days')}
+                        value={getSettingNumber('retention', 'local_mp3_days')}
                         onChange={(e) => updateLocalSetting('retention', 'local_mp3_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
@@ -1289,7 +1290,7 @@ export default function SettingsPage() {
                         min="1"
                         max="30"
                         className="input"
-                        value={getSetting('retention', 'audio_cache_days')}
+                        value={getSettingNumber('retention', 'audio_cache_days')}
                         onChange={(e) => updateLocalSetting('retention', 'audio_cache_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
@@ -1306,7 +1307,7 @@ export default function SettingsPage() {
                         min="0"
                         max="30"
                         className="input"
-                        value={getSetting('retention', 'audio_chunks_days')}
+                        value={getSettingNumber('retention', 'audio_chunks_days')}
                         onChange={(e) => updateLocalSetting('retention', 'audio_chunks_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
@@ -1323,7 +1324,7 @@ export default function SettingsPage() {
                         min="1"
                         max="365"
                         className="input"
-                        value={getSetting('retention', 'logs_days')}
+                        value={getSettingNumber('retention', 'logs_days')}
                         onChange={(e) => updateLocalSetting('retention', 'logs_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
@@ -1347,7 +1348,7 @@ export default function SettingsPage() {
                         min="0"
                         max="365"
                         className="input"
-                        value={getSetting('retention', 'github_releases_days')}
+                        value={getSettingNumber('retention', 'github_releases_days')}
                         onChange={(e) => updateLocalSetting('retention', 'github_releases_days', parseInt(e.target.value))}
                         disabled={saving}
                       />
