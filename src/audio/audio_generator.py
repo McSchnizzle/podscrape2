@@ -64,15 +64,33 @@ class AudioGenerator:
         # Setup output directory
         self.audio_dir = Path("data/completed-tts")
         self.audio_dir.mkdir(exist_ok=True)
-        
+
         # ElevenLabs API configuration (lazy loading to handle dotenv timing)
         self.api_key = None
         self._api_key_checked = False
-        
+
         self.base_url = "https://api.elevenlabs.io/v1"
-        
-        # Rate limiting settings
-        self.request_delay = 1.0  # seconds between requests
+
+        # Load timeout and rate limit settings from web config
+        if self.web_config:
+            self.request_delay = self.web_config.get_setting(
+                SettingsKeys.Tts.CATEGORY, SettingsKeys.Tts.RATE_LIMIT_DELAY, 1.0
+            )
+            self.elevenlabs_timeout = self.web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.ELEVENLABS_TIMEOUT, 60
+            )
+            self.elevenlabs_dialogue_timeout = self.web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.ELEVENLABS_DIALOGUE_TIMEOUT, 300
+            )
+            self.ffmpeg_timeout = self.web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.FFMPEG_TIMEOUT, 300
+            )
+        else:
+            self.request_delay = 1.0
+            self.elevenlabs_timeout = 60
+            self.elevenlabs_dialogue_timeout = 300
+            self.ffmpeg_timeout = 300
+
         self.last_request_time = 0
     
     def _ensure_api_key(self):
@@ -447,7 +465,7 @@ class AudioGenerator:
                     url,
                     json=payload,
                     headers=self.headers,
-                    timeout=120,  # Increased timeout for longer scripts
+                    timeout=self.elevenlabs_timeout,
                     stream=False  # Ensure we get full response, not streaming
                 )
                 response.raise_for_status()
@@ -589,7 +607,7 @@ class AudioGenerator:
                     url,
                     json=payload,
                     headers=self.headers,
-                    timeout=180,  # 3 minutes for dialogue generation
+                    timeout=self.elevenlabs_dialogue_timeout,
                     stream=False
                 )
                 response.raise_for_status()
@@ -691,7 +709,7 @@ class AudioGenerator:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minutes max
+                timeout=self.ffmpeg_timeout
             )
 
             if result.returncode != 0:

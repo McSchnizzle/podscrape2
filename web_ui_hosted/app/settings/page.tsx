@@ -58,6 +58,10 @@ const SECTIONS: Section[] = [
   { id: 'ad-filtering', label: 'Ad Filtering', categories: ['ad_filtering'] },
   { id: 'transcript', label: 'Transcript Processing', categories: ['transcript_processing'] },
   { id: 'retention', label: 'Retention', categories: ['retention'] },
+  { id: 'database', label: 'Database', categories: ['database'] },
+  { id: 'api-timeouts', label: 'API Timeouts', categories: ['api_timeouts'] },
+  { id: 'tts', label: 'TTS', categories: ['tts'] },
+  { id: 'discovery', label: 'Discovery', categories: ['discovery'] },
 ]
 
 export default function SettingsPage() {

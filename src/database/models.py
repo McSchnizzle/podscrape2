@@ -43,6 +43,7 @@ from .sqlalchemy_models import (
     WorkflowError as WorkflowErrorModel,
 )
 from src.config.env import require_database_url
+from src.config.web_config import SettingsKeys, DEFAULTS
 
 # Note: Valid statuses defined in src.database.episode_status.EpisodeStatus
 # Configure logging
@@ -222,12 +223,27 @@ class DatabaseManager:
 
     def __init__(self, database_url: str = None):
         self.database_url = database_url or require_database_url()
+
+        # Get pool settings from DEFAULTS (avoids circular import with WebConfigManager)
+        pool_size = DEFAULTS.get(
+            (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.POOL_SIZE),
+            {"default": 5}
+        )["default"]
+        max_overflow = DEFAULTS.get(
+            (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.MAX_OVERFLOW),
+            {"default": 10}
+        )["default"]
+        pool_recycle = DEFAULTS.get(
+            (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.POOL_RECYCLE_SECONDS),
+            {"default": 3600}
+        )["default"]
+
         self.engine = create_engine(
             self.database_url,
             pool_pre_ping=True,
-            pool_recycle=300,
-            pool_size=10,  # Increased from default 5 for database logging concurrency
-            max_overflow=20,  # Increased from default 10 for database logging concurrency
+            pool_recycle=pool_recycle,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
             echo=False  # Set to True for SQL debugging
         )
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)

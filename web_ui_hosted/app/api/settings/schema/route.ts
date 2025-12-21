@@ -84,6 +84,28 @@ const SETTINGS_SCHEMA: Record<string, Record<string, {
     ad_trim_enabled: { type: 'bool', default: true, min: null, max: null },
     ad_trim_start_percent: { type: 'float', default: 5.0, min: 0.0, max: 50.0 },
     ad_trim_end_percent: { type: 'float', default: 5.0, min: 0.0, max: 50.0 }
+  },
+  database: {
+    pool_size: { type: 'int', default: 5, min: 1, max: 20 },
+    max_overflow: { type: 'int', default: 10, min: 0, max: 50 },
+    pool_recycle_seconds: { type: 'int', default: 3600, min: 300, max: 86400 }
+  },
+  api_timeouts: {
+    openai_timeout: { type: 'int', default: 120, min: 10, max: 600 },
+    elevenlabs_timeout: { type: 'int', default: 60, min: 10, max: 300 },
+    elevenlabs_dialogue_timeout: { type: 'int', default: 300, min: 60, max: 600 },
+    github_timeout: { type: 'int', default: 180, min: 30, max: 600 },
+    github_upload_timeout: { type: 'int', default: 180, min: 60, max: 600 },
+    http_default_timeout: { type: 'int', default: 30, min: 5, max: 120 },
+    ffmpeg_timeout: { type: 'int', default: 300, min: 60, max: 1800 },
+    audio_download_timeout: { type: 'int', default: 300, min: 60, max: 1800 }
+  },
+  tts: {
+    rate_limit_delay: { type: 'float', default: 1.0, min: 0.0, max: 10.0 }
+  },
+  discovery: {
+    max_entries_per_feed: { type: 'int', default: 50, min: 10, max: 200 },
+    max_story_arcs_context: { type: 'int', default: 20, min: 5, max: 50 }
   }
 }
 

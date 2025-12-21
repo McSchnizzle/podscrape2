@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from ..utils.logging_config import get_logger
 from ..utils.error_handling import retry_with_backoff, PodcastError
+from ..config.web_config import WebConfigManager, SettingsKeys
 
 logger = get_logger(__name__)
 
@@ -36,29 +37,38 @@ class VercelDeployer:
     def __init__(self, project_name: str = "podcast-paulrbrown-org"):
         """
         Initialize Vercel deployer
-        
+
         Args:
             project_name: Vercel project name (defaults to podcast.paulrbrown.org project)
         """
         self.project_name = project_name
-        
+
+        # Load timeout settings from web config
+        try:
+            web_config = WebConfigManager()
+            self.http_default_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.HTTP_DEFAULT_TIMEOUT, 30
+            )
+        except Exception:
+            self.http_default_timeout = 30
+
         # Verify Vercel CLI is available and authenticated
         self._verify_vercel_cli()
-        
+
         logger.info(f"Vercel Deployer initialized for project: {project_name}")
     
     def _verify_vercel_cli(self):
         """Verify Vercel CLI is installed and authenticated"""
         try:
             # Check if vercel command exists
-            result = subprocess.run(['which', 'vercel'], 
-                                  capture_output=True, text=True, timeout=10)
+            result = subprocess.run(['which', 'vercel'],
+                                  capture_output=True, text=True, timeout=self.http_default_timeout)
             if result.returncode != 0:
                 raise PodcastError("Vercel CLI not found. Please install with: npm install -g vercel")
-            
+
             # Check if authenticated
-            result = subprocess.run(['vercel', 'whoami'], 
-                                  capture_output=True, text=True, timeout=10)
+            result = subprocess.run(['vercel', 'whoami'],
+                                  capture_output=True, text=True, timeout=self.http_default_timeout)
             if result.returncode != 0:
                 raise PodcastError("Vercel CLI not authenticated. Please run: vercel login")
             
@@ -364,8 +374,8 @@ class VercelDeployer:
             if self.project_name:
                 cmd.extend(['--scope', self.project_name])
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.http_default_timeout)
+
             if result.returncode == 0:
                 deployments = json.loads(result.stdout)
                 if deployments and len(deployments) > 0:
@@ -404,7 +414,7 @@ class VercelDeployer:
             logger.info(f"Validating deployment: {test_url}")
             
             # Test RSS feed endpoint
-            response = requests.get(test_url, timeout=30)
+            response = requests.get(test_url, timeout=self.http_default_timeout)
             response.raise_for_status()
             
             # Check content type

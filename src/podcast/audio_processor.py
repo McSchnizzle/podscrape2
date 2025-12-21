@@ -18,6 +18,7 @@ import threading
 
 from ..utils.error_handling import retry_with_backoff, PodcastError
 from ..utils.logging_config import get_logger
+from ..config.web_config import WebConfigManager, SettingsKeys
 
 logger = get_logger(__name__)
 
@@ -97,7 +98,20 @@ class AudioProcessor:
         self.session.headers.update({
             'User-Agent': 'RSS Podcast Digest Bot 1.0 (Audio Processor)'
         })
-        
+
+        # Load timeout settings from web config
+        try:
+            web_config = WebConfigManager()
+            self.audio_download_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.AUDIO_DOWNLOAD_TIMEOUT, 300
+            )
+            self.http_default_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.HTTP_DEFAULT_TIMEOUT, 30
+            )
+        except Exception:
+            self.audio_download_timeout = 300
+            self.http_default_timeout = 30
+
         logger.info(f"AudioProcessor initialized - cache: {self.audio_cache_dir}, chunks: {self.chunk_dir}")
     
     def __enter__(self):
@@ -163,7 +177,7 @@ class AudioProcessor:
         
         try:
             # Stream download for large files
-            response = self.session.get(audio_url, stream=True, timeout=30)
+            response = self.session.get(audio_url, stream=True, timeout=self.http_default_timeout)
             
             # Check HTTP status first
             if response.status_code == 404:

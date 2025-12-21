@@ -104,6 +104,32 @@ class SettingsKeys:
         AD_TRIM_START_PERCENT = "ad_trim_start_percent"
         AD_TRIM_END_PERCENT = "ad_trim_end_percent"
 
+    class Database:
+        CATEGORY = "database"
+        POOL_SIZE = "pool_size"
+        MAX_OVERFLOW = "max_overflow"
+        POOL_RECYCLE_SECONDS = "pool_recycle_seconds"
+
+    class ApiTimeouts:
+        CATEGORY = "api_timeouts"
+        OPENAI_TIMEOUT = "openai_timeout"
+        ELEVENLABS_TIMEOUT = "elevenlabs_timeout"
+        ELEVENLABS_DIALOGUE_TIMEOUT = "elevenlabs_dialogue_timeout"
+        GITHUB_TIMEOUT = "github_timeout"
+        GITHUB_UPLOAD_TIMEOUT = "github_upload_timeout"
+        HTTP_DEFAULT_TIMEOUT = "http_default_timeout"
+        FFMPEG_TIMEOUT = "ffmpeg_timeout"
+        AUDIO_DOWNLOAD_TIMEOUT = "audio_download_timeout"
+
+    class Tts:
+        CATEGORY = "tts"
+        RATE_LIMIT_DELAY = "rate_limit_delay"
+
+    class Discovery:
+        CATEGORY = "discovery"
+        MAX_ENTRIES_PER_FEED = "max_entries_per_feed"
+        MAX_STORY_ARCS_CONTEXT = "max_story_arcs_context"
+
 
 # AI Model Definitions and Limits
 AI_MODELS = {
@@ -221,6 +247,28 @@ DEFAULTS = {
     (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_ENABLED): {"type": "bool", "default": True},
     (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_START_PERCENT): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
     (SettingsKeys.TranscriptProcessing.CATEGORY, SettingsKeys.TranscriptProcessing.AD_TRIM_END_PERCENT): {"type": "float", "default": 5.0, "min": 0.0, "max": 50.0},
+
+    # Database Connection Pool Settings
+    (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.POOL_SIZE): {"type": "int", "default": 5, "min": 1, "max": 20},
+    (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.MAX_OVERFLOW): {"type": "int", "default": 10, "min": 0, "max": 50},
+    (SettingsKeys.Database.CATEGORY, SettingsKeys.Database.POOL_RECYCLE_SECONDS): {"type": "int", "default": 3600, "min": 300, "max": 86400},
+
+    # API Timeout Settings (seconds)
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT): {"type": "int", "default": 120, "min": 10, "max": 600},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.ELEVENLABS_TIMEOUT): {"type": "int", "default": 60, "min": 10, "max": 300},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.ELEVENLABS_DIALOGUE_TIMEOUT): {"type": "int", "default": 300, "min": 60, "max": 600},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.GITHUB_TIMEOUT): {"type": "int", "default": 180, "min": 30, "max": 600},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.GITHUB_UPLOAD_TIMEOUT): {"type": "int", "default": 180, "min": 60, "max": 600},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.HTTP_DEFAULT_TIMEOUT): {"type": "int", "default": 30, "min": 5, "max": 120},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.FFMPEG_TIMEOUT): {"type": "int", "default": 300, "min": 60, "max": 1800},
+    (SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.AUDIO_DOWNLOAD_TIMEOUT): {"type": "int", "default": 300, "min": 60, "max": 1800},
+
+    # TTS Settings
+    (SettingsKeys.Tts.CATEGORY, SettingsKeys.Tts.RATE_LIMIT_DELAY): {"type": "float", "default": 1.0, "min": 0.0, "max": 10.0},
+
+    # Discovery Settings
+    (SettingsKeys.Discovery.CATEGORY, SettingsKeys.Discovery.MAX_ENTRIES_PER_FEED): {"type": "int", "default": 50, "min": 10, "max": 200},
+    (SettingsKeys.Discovery.CATEGORY, SettingsKeys.Discovery.MAX_STORY_ARCS_CONTEXT): {"type": "int", "default": 20, "min": 5, "max": 50},
 }
 
 

@@ -64,20 +64,29 @@ class StoryArcExtractor:
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set")
 
-        self.client = OpenAI(api_key=api_key, timeout=120.0)
-        self.repo = get_story_arc_repo()
-        self.max_arcs_per_episode = max_arcs_per_episode
-
-        # Get model from web_settings, fallback to default
+        # Get settings from web_config first
         try:
             self.web_config = WebConfigManager()
+            openai_timeout = self.web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT, 120
+            )
+            self.max_story_arcs_context = self.web_config.get_setting(
+                SettingsKeys.Discovery.CATEGORY, SettingsKeys.Discovery.MAX_STORY_ARCS_CONTEXT, 20
+            )
             self.model = self.web_config.get_setting(
                 SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL, 'gpt-4o-mini'
             )
             logger.info(f"Using extraction model: {self.model}")
         except Exception as e:
+            openai_timeout = 120
+            self.max_story_arcs_context = 20
             self.model = "gpt-4o-mini"
-            logger.warning(f"Failed to get model from settings, using: {self.model}")
+            self.web_config = None
+            logger.warning(f"Failed to get settings from web_config, using defaults: {e}")
+
+        self.client = OpenAI(api_key=api_key, timeout=float(openai_timeout))
+        self.repo = get_story_arc_repo()
+        self.max_arcs_per_episode = max_arcs_per_episode
 
     def _get_token_param_name(self) -> str:
         """
@@ -129,7 +138,7 @@ class StoryArcExtractor:
         try:
             active_arcs_context = self.repo.get_story_arcs_for_prompt(
                 digest_topic=digest_topic,
-                max_arcs=20,
+                max_arcs=self.max_story_arcs_context,
                 max_events_per_arc=4
             )
             arc_count = active_arcs_context.count("STORY ARC") if active_arcs_context else 0

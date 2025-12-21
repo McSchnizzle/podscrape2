@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from ..utils.error_handling import retry_with_backoff, PodcastError
 from ..utils.logging_config import get_logger
+from ..config.web_config import WebConfigManager, SettingsKeys
 
 logger = get_logger(__name__)
 
@@ -139,7 +140,24 @@ class GitHubPublisher:
             'User-Agent': 'RSS-Podcast-Digest-System/1.0',
             'X-GitHub-Api-Version': '2022-11-28'
         }
-        
+
+        # Load timeout settings from web config
+        try:
+            web_config = WebConfigManager()
+            self.github_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.GITHUB_TIMEOUT, 180
+            )
+            self.github_upload_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.GITHUB_UPLOAD_TIMEOUT, 180
+            )
+            self.http_default_timeout = web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.HTTP_DEFAULT_TIMEOUT, 30
+            )
+        except Exception:
+            self.github_timeout = 180
+            self.github_upload_timeout = 180
+            self.http_default_timeout = 30
+
         logger.info(f"GitHub Publisher initialized for repository: {self.repository}")
     
     def _make_request(self, method: str, url: str, **kwargs) -> requests.Response:
@@ -199,7 +217,7 @@ class GitHubPublisher:
                                         '--repo', self.repository,
                                         '--clobber'
                                     ]
-                                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env_nt)
+                                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=self.github_upload_timeout, env=env_nt)
                                     if out.returncode != 0:
                                         logger.error(f"GH CLI asset upload failed: {out.stderr.strip()}")
                                         raise PodcastError(f"GH CLI asset upload failed: {out.stderr.strip()}")
@@ -265,7 +283,7 @@ class GitHubPublisher:
                     '-n', release_body,
                     '--repo', self.repository
                 ]
-                out = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env_nt)
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=self.github_upload_timeout, env=env_nt)
                 if out.returncode != 0:
                     logger.error(f"GH CLI release create failed: {out.stderr.strip()}")
                     raise PodcastError(f"GH CLI release create failed: {out.stderr.strip()}")
@@ -305,7 +323,7 @@ class GitHubPublisher:
                     '--repo', self.repository,
                     '--json', 'id,tagName,name,assets,url,createdAt,publishedAt'
                 ]
-                out = subprocess.run(cmd, capture_output=True, text=True, timeout=20, env=env_nt)
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=self.http_default_timeout, env=env_nt)
                 if out.returncode != 0:
                     logger.error(f"GH CLI view failed: {out.stderr.strip()}")
                     return None

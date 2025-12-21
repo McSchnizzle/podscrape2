@@ -49,23 +49,32 @@ class ContentScorer:
     def __init__(self, config_path: str = None, config_manager: ConfigManager = None, web_config: Any = None):
         """
         Initialize content scorer with OpenAI API and topic configuration.
-        
+
         Args:
             config_path: Path to topics.json config file
         """
-        # Load OpenAI API key
+        # Initialize WebConfig and ConfigManager first to get timeout settings
+        self.web_config = web_config or self._safe_create_web_config()
+
+        # Get OpenAI timeout from settings
+        if self.web_config:
+            openai_timeout = self.web_config.get_setting(
+                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT, 120
+            )
+        else:
+            openai_timeout = 120
+
+        # Load OpenAI API key with configurable timeout
         self.client = OpenAI(
             api_key=os.getenv('OPENAI_API_KEY'),
-            timeout=30.0  # 30 second timeout for testing
+            timeout=float(openai_timeout)
         )
-        
+
         # Determine config directory
         config_dir = None
         if config_path is not None:
             config_dir = str(Path(config_path).parent)
 
-        # Initialize WebConfig and ConfigManager
-        self.web_config = web_config or self._safe_create_web_config()
         self.config_manager = config_manager or ConfigManager(config_dir=config_dir or 'config', web_config=self.web_config)
 
         # Load topics and score threshold via ConfigManager (Web UI settings override JSON where applicable)
