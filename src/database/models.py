@@ -23,7 +23,7 @@ GitHub Issue #9: Consolidate data access on Supabase
 import json
 import logging
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, TypeVar, Type
 from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text, func
@@ -1358,6 +1358,36 @@ def get_database_manager() -> DatabaseManager:
     return _database_manager_instance
 
 
+# Type variable for generic repository factory
+# All repositories inherit from object and take DatabaseManager in __init__
+T = TypeVar('T', FeedRepository, EpisodeRepository, DigestRepository,
+            TopicRepository, DigestEpisodeLinkRepository, PipelineRunRepository,
+            'PipelineLogRepository', 'WorkflowErrorRepository')
+
+
+def get_repo(repo_class: Type[T], db_manager: DatabaseManager = None) -> T:
+    """
+    Generic factory function to get a repository instance.
+
+    Usage:
+        feed_repo = get_repo(FeedRepository)
+        episode_repo = get_repo(EpisodeRepository)
+
+        # With custom database manager:
+        feed_repo = get_repo(FeedRepository, db_manager=custom_manager)
+
+    Args:
+        repo_class: The repository class to instantiate
+        db_manager: Optional DatabaseManager instance. If None, uses singleton.
+
+    Returns:
+        Instance of the specified repository class
+    """
+    if db_manager is None:
+        db_manager = get_database_manager()
+    return repo_class(db_manager)
+
+
 class PipelineLogRepository:
     """Repository for pipeline log storage and retrieval."""
 
@@ -1680,54 +1710,64 @@ class WorkflowErrorRepository:
 
 
 def get_feed_repo(db_manager: DatabaseManager = None) -> FeedRepository:
-    """Get feed repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return FeedRepository(db_manager)
+    """Get feed repository.
+
+    DEPRECATED: Use get_repo(FeedRepository) instead.
+    """
+    return get_repo(FeedRepository, db_manager)
+
 
 def get_episode_repo(db_manager: DatabaseManager = None) -> EpisodeRepository:
-    """Get episode repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return EpisodeRepository(db_manager)
+    """Get episode repository.
+
+    DEPRECATED: Use get_repo(EpisodeRepository) instead.
+    """
+    return get_repo(EpisodeRepository, db_manager)
+
 
 def get_digest_repo(db_manager: DatabaseManager = None) -> DigestRepository:
-    """Get digest repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return DigestRepository(db_manager)
+    """Get digest repository.
+
+    DEPRECATED: Use get_repo(DigestRepository) instead.
+    """
+    return get_repo(DigestRepository, db_manager)
 
 
 def get_topic_repo(db_manager: DatabaseManager = None) -> TopicRepository:
-    """Get topic repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return TopicRepository(db_manager)
+    """Get topic repository.
+
+    DEPRECATED: Use get_repo(TopicRepository) instead.
+    """
+    return get_repo(TopicRepository, db_manager)
 
 
 def get_digest_episode_link_repo(db_manager: DatabaseManager = None) -> DigestEpisodeLinkRepository:
-    """Get digest-episode link repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return DigestEpisodeLinkRepository(db_manager)
+    """Get digest-episode link repository.
+
+    DEPRECATED: Use get_repo(DigestEpisodeLinkRepository) instead.
+    """
+    return get_repo(DigestEpisodeLinkRepository, db_manager)
 
 
 def get_pipeline_run_repo(db_manager: DatabaseManager = None) -> PipelineRunRepository:
-    """Get pipeline run repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return PipelineRunRepository(db_manager)
+    """Get pipeline run repository.
+
+    DEPRECATED: Use get_repo(PipelineRunRepository) instead.
+    """
+    return get_repo(PipelineRunRepository, db_manager)
 
 
 def get_pipeline_log_repo(db_manager: DatabaseManager = None) -> PipelineLogRepository:
-    """Get pipeline log repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return PipelineLogRepository(db_manager)
+    """Get pipeline log repository.
+
+    DEPRECATED: Use get_repo(PipelineLogRepository) instead.
+    """
+    return get_repo(PipelineLogRepository, db_manager)
 
 
 def get_workflow_error_repo(db_manager: DatabaseManager = None) -> WorkflowErrorRepository:
-    """Get workflow error repository"""
-    if db_manager is None:
-        db_manager = get_database_manager()
-    return WorkflowErrorRepository(db_manager)
+    """Get workflow error repository.
+
+    DEPRECATED: Use get_repo(WorkflowErrorRepository) instead.
+    """
+    return get_repo(WorkflowErrorRepository, db_manager)
