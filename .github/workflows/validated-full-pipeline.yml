@@ -126,15 +126,15 @@ jobs:
         run: |
           source "${VENV_PATH}/bin/activate"
           echo "Checking for stuck episodes from previous runs..."
-          python -c "
-from src.database.models import get_episode_repo
-repo = get_episode_repo()
-reset_count = repo.reset_stuck_processing_episodes(timeout_minutes=30)
-if reset_count > 0:
-    print(f'✓ Reset {reset_count} stuck episode(s) to pending')
-else:
-    print('✓ No stuck episodes found')
-"
+          python3 << 'PYTHON_SCRIPT'
+          from src.database.models import get_episode_repo
+          repo = get_episode_repo()
+          reset_count = repo.reset_stuck_processing_episodes(timeout_minutes=30)
+          if reset_count > 0:
+              print(f'✓ Reset {reset_count} stuck episode(s) to pending')
+          else:
+              print('✓ No stuck episodes found')
+          PYTHON_SCRIPT
 
       - name: Phase 1 - Discovery
         run: |
