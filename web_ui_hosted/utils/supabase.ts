@@ -39,6 +39,65 @@ export const supabase = new Proxy({} as any, {
   }
 })
 
+// ==================== UTILITY FUNCTIONS ====================
+
+/**
+ * Sanitize log messages for display in the UI.
+ * Removes raw Python object representations, SQL statements, and technical details
+ * that would be confusing to users.
+ */
+function sanitizeLogMessage(message: string): string {
+  if (!message) return ''
+
+  return message
+    // Remove SQL statements (use [\s\S] instead of /s flag for cross-line matching)
+    .replace(/\[SQL:[\s\S]*?\]/g, '')
+    // Remove SQL parameters with Python object representations
+    .replace(/\[parameters:[\s\S]*?\]/g, '')
+    // Remove Python datetime representations
+    .replace(/datetime\.datetime\([^)]+\)/g, '[timestamp]')
+    // Remove Python dict-like key-value pairs (common in error logs)
+    .replace(/'[a-z_]+': (None|True|False|\d+|'[^']*'),?\s*/g, '')
+    // Remove SQLAlchemy error URLs
+    .replace(/\(Background on this error at:.*?\)/g, '')
+    // Remove empty parentheses left over from cleanup
+    .replace(/\(\s*\)/g, '')
+    // Remove multiple spaces
+    .replace(/\s{2,}/g, ' ')
+    // Trim and limit length
+    .trim()
+    .slice(0, 200)
+}
+
+/**
+ * Extract a human-readable error summary from a technical error message.
+ */
+function extractErrorSummary(message: string): string {
+  if (!message) return 'Unknown error'
+
+  // Common error patterns and their friendly descriptions
+  const errorPatterns: Array<[RegExp, string]> = [
+    [/duplicate key value violates unique constraint.*episode/i, 'Duplicate episode detected (already exists)'],
+    [/duplicate key value violates unique constraint/i, 'Duplicate record detected'],
+    [/connection refused/i, 'Database connection failed'],
+    [/timeout/i, 'Operation timed out'],
+    [/403.*forbidden/i, 'Access denied (403)'],
+    [/404.*not found/i, 'Resource not found (404)'],
+    [/rate limit/i, 'Rate limit exceeded'],
+    [/insufficient.*episode/i, 'Not enough episodes for digest'],
+    [/already exists/i, 'Digest already exists for this date'],
+  ]
+
+  for (const [pattern, summary] of errorPatterns) {
+    if (pattern.test(message)) {
+      return summary
+    }
+  }
+
+  // Fall back to sanitized message
+  return sanitizeLogMessage(message) || 'Unknown error'
+}
+
 // Database types (subset of main types)
 export interface Feed {
   id: number
@@ -1605,13 +1664,14 @@ export class DatabaseClient {
     // Generate summary message with actual error details
     let summary = ''
 
-    // Build error summary for display
+    // Build error summary for display - use sanitization to remove raw Python objects
     const errorSummaries: string[] = []
     if (criticalErrors.length > 0) {
-      // Get unique error messages (truncated)
+      // Get unique error messages (sanitized and truncated)
       const errorMessages = criticalErrors.map(e => {
-        const msg = e.message.replace(/^[\s❌✗]+/, '').trim()
-        return msg.length > 80 ? msg.substring(0, 77) + '...' : msg
+        // Use extractErrorSummary to get human-readable error messages
+        // This removes SQL statements, Python dict representations, and other technical details
+        return extractErrorSummary(e.message)
       })
       const uniqueErrors = Array.from(new Set(errorMessages))
       errorSummaries.push(...uniqueErrors.slice(0, 3))

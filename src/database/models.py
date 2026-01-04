@@ -455,6 +455,18 @@ class EpisodeRepository:
                 logger.error(f"Failed to create episode: {e}")
                 raise
 
+    def get_or_create(self, episode: Episode) -> tuple[int, bool]:
+        """Get existing episode by guid or create new one.
+
+        Returns:
+            Tuple of (episode_id, was_created) where was_created is True if a new
+            episode was created, False if an existing one was found.
+        """
+        existing = self.get_by_episode_guid(episode.episode_guid)
+        if existing:
+            return existing.id, False
+        return self.create(episode), True
+
     def get_by_episode_guid(self, episode_guid: str) -> Optional[Episode]:
         """Get episode by episode_guid"""
         with self.db.get_session() as session:
@@ -575,25 +587,21 @@ class EpisodeRepository:
 
         with self.db.get_session() as session:
             try:
-                # Find episodes stuck in processing status
-                stuck_episodes = session.query(EpisodeModel)\
-                    .filter(EpisodeModel.status == 'processing')\
-                    .filter(EpisodeModel.updated_at < timeout_threshold)\
-                    .all()
-
-                if not stuck_episodes:
-                    return 0
-
-                # Reset to pending status
+                # Use synchronize_session=False to avoid timezone comparison issues
+                # between Python datetime objects and database values
                 reset_count = session.query(EpisodeModel)\
                     .filter(EpisodeModel.status == 'processing')\
                     .filter(EpisodeModel.updated_at < timeout_threshold)\
                     .update({
                         EpisodeModel.status: 'pending',
                         EpisodeModel.updated_at: datetime.now(timezone.utc)
-                    })
+                    }, synchronize_session=False)
 
                 session.commit()
+
+                if reset_count > 0:
+                    logger.info(f"Reset {reset_count} stuck episode(s) from 'processing' to 'pending'")
+
                 return reset_count
             except SQLAlchemyError as e:
                 session.rollback()
@@ -751,6 +759,27 @@ class EpisodeRepository:
             episode_models = session.query(EpisodeModel)\
                 .filter(EpisodeModel.status == 'failed')\
                 .order_by(EpisodeModel.last_failure_at.desc())\
+                .all()
+            return [self._model_to_episode(model) for model in episode_models]
+
+    def get_undigested_episodes(self, limit: int = 50) -> List[Episode]:
+        """Get episodes that haven't been included in any digest.
+
+        Returns episodes that are scored but not yet digested, ordered by
+        published date (most recent first).
+
+        Args:
+            limit: Maximum number of episodes to return. Default is 50.
+
+        Returns:
+            List of Episode objects that are ready for digest inclusion.
+        """
+        with self.db.get_session() as session:
+            episode_models = session.query(EpisodeModel)\
+                .filter(EpisodeModel.status == 'scored')\
+                .filter(EpisodeModel.scores.isnot(None))\
+                .order_by(EpisodeModel.published_date.desc())\
+                .limit(limit)\
                 .all()
             return [self._model_to_episode(model) for model in episode_models]
 

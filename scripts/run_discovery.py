@@ -31,8 +31,10 @@ bootstrap_phase()
 # Import database models with fallback
 try:
     from src.database.models import get_episode_repo, get_feed_repo, Episode
+    from src.database.episode_status import EpisodeStatus
 except ImportError:
     from database.models import get_episode_repo, get_feed_repo, Episode
+    from database.episode_status import EpisodeStatus
 
 import feedparser
 import requests
@@ -260,23 +262,31 @@ class DiscoveryRunner:
 
                     # Check if already processed
                     existing = self.episode_repo.get_by_episode_guid(episode_guid)
-                    if existing and existing.status in ['transcribed', 'scored', 'digested', 'not_relevant']:
-                        self.logger.info(f"SKIP: {title[:60]}... (already processed)")
-                        continue
-                    elif existing and existing.status in ['pending', 'failed', 'downloading']:
-                        self.logger.info(f"RESUME: {title[:60]}... ({existing.status})")
-                        discovered_episodes.append({
-                            'guid': episode_guid,
-                            'title': title,
-                            'feed_name': feed_name,
-                            'feed_id': feed_info.get('id'),
-                            'status': existing.status,
-                            'published_date': published_date.isoformat(),
-                            'audio_url': existing.audio_url,
-                            'mode': 'resume'
-                        })
-                        # IMPORTANT: Skip NEW episode creation for existing episodes
-                        continue
+                    if existing:
+                        # Terminal states - skip completely (already processed)
+                        # Uses EpisodeStatus enum for maintainability
+                        if existing.status in EpisodeStatus.terminal_status_values():
+                            self.logger.info(f"SKIP: {title[:60]}... (already processed: {existing.status})")
+                            continue
+                        # Resumable states - add to discovered list for reprocessing
+                        # Uses EpisodeStatus enum - includes 'processing' for stuck episodes
+                        elif existing.status in EpisodeStatus.resumable_status_values():
+                            self.logger.info(f"RESUME: {title[:60]}... ({existing.status})")
+                            discovered_episodes.append({
+                                'guid': episode_guid,
+                                'title': title,
+                                'feed_name': feed_name,
+                                'feed_id': feed_info.get('id'),
+                                'status': existing.status,
+                                'published_date': published_date.isoformat(),
+                                'audio_url': existing.audio_url,
+                                'mode': 'resume'
+                            })
+                            continue
+                        # Unknown status - log warning and skip (fail-safe)
+                        else:
+                            self.logger.warning(f"SKIP: {title[:60]}... (unknown status: {existing.status})")
+                            continue
 
                     # Find audio URL for new episodes
                     audio_url = None

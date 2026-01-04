@@ -65,6 +65,28 @@ class EpisodeStatus(str, Enum):
         return {cls.PENDING, cls.PROCESSING, cls.TRANSCRIBED, cls.SCORED}
 
     @classmethod
+    def terminal_status_values(cls) -> Set[str]:
+        """
+        Terminal status string values (for discovery phase skip logic).
+        These episodes should NOT be reprocessed.
+        """
+        return {cls.TRANSCRIBED.value, cls.SCORED.value, cls.DIGESTED.value, cls.NOT_RELEVANT.value}
+
+    @classmethod
+    def resumable_status_values(cls) -> Set[str]:
+        """
+        Resumable status string values (for discovery phase resume logic).
+        These episodes CAN be reprocessed on the next run.
+
+        Includes:
+        - pending: Not yet started
+        - processing: May be stuck from a crashed run
+        - failed: Can retry
+        - downloading: Legacy/transitional state
+        """
+        return {cls.PENDING.value, cls.PROCESSING.value, cls.FAILED.value, 'downloading'}
+
+    @classmethod
     def can_transition(cls, from_status: 'EpisodeStatus', to_status: 'EpisodeStatus') -> bool:
         """
         Validate if a status transition is allowed.
