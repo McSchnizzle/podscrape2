@@ -366,8 +366,50 @@ class ScriptGenerator:
             logger.warning(f"Failed to mark story arcs as included: {e}")
             return 0
 
+    def _build_repetition_avoidance_instructions(self, recently_covered_arcs: List[str]) -> str:
+        """
+        Build prompt instructions to avoid repetitive content.
+
+        When story arcs have been covered in recent digests, this generates
+        instructions telling GPT to focus on NEW developments only.
+
+        Args:
+            recently_covered_arcs: List of arc names recently covered
+
+        Returns:
+            Formatted string with repetition avoidance instructions
+        """
+        if not recently_covered_arcs:
+            return ""
+
+        arc_list = "\n".join(f"  - {arc}" for arc in recently_covered_arcs[:10])
+
+        return f"""
+
+## CONTINUING COVERAGE - FOCUS ON NEW DEVELOPMENTS ONLY
+
+The following story arcs were covered in recent digests (last 3 days):
+{arc_list}
+
+**CRITICAL INSTRUCTIONS FOR AVOIDING REPETITION:**
+1. DO NOT repeat benchmark data, statistics, or specific numbers that were likely mentioned before
+2. DO NOT re-explain background context that listeners already know
+3. Focus ONLY on what is NEW or has CHANGED since last coverage
+4. Frame coverage as "latest developments" or "continuing our coverage of..."
+5. If an arc has no new developments in today's episodes, briefly acknowledge it and move on
+6. Prioritize fresh insights, new perspectives, and recent events over rehashing known information
+7. When referencing a continuing story, assume listeners are already familiar with the basics
+
+Example framing for continuing stories:
+- "Building on what we discussed recently about [topic]..."
+- "There's a new development in the [story] we've been following..."
+- "The latest update on [topic] shows..."
+- "Since we last covered [topic], here's what's changed..."
+"""
+
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
-                                  digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
+                                  digest_date: date, instruction: TopicInstruction,
+                                  recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
         """
         Generate dialogue-style script for multi-voice delivery (v3 with audio tags).
         Target: 15,000-20,000 characters with SPEAKER_1/SPEAKER_2 labels.
@@ -377,6 +419,8 @@ class ScriptGenerator:
             episodes: List of episodes to include
             digest_date: Date of digest
             instruction: Topic configuration with voice_config
+            recently_covered_arcs: Optional list of arc names recently covered.
+                If provided, prompts include instructions to focus on NEW content.
 
         Returns:
             Tuple of (script_content, character_count)
@@ -421,6 +465,12 @@ class ScriptGenerator:
         # Retrieve active story arcs for context and deduplication
         story_arc_context = self._get_recent_story_arc_context(topic)
 
+        # Build repetition avoidance instructions if arcs were recently covered
+        repetition_instructions = ""
+        if recently_covered_arcs:
+            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
+            logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
+
         # Generate dialogue script with audio tags for ElevenLabs v3
         system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
 
@@ -456,6 +506,7 @@ CHARACTER ROLES:
 TOPIC INSTRUCTIONS:
 {instruction.content}
 {story_arc_context}
+{repetition_instructions}
 
 REQUIREMENTS:
 - Target 15,000-20,000 characters (this is measured in characters, not words)
@@ -600,7 +651,8 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
         return script, fixed
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
-                                   digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
+                                   digest_date: date, instruction: TopicInstruction,
+                                   recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
         """
         Generate narrative-style script for single-voice delivery (Turbo v2.5).
         Target: 10,000-15,000 characters with TTS optimization.
@@ -610,6 +662,8 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
             episodes: List of episodes to include
             digest_date: Date of digest
             instruction: Topic configuration
+            recently_covered_arcs: Optional list of arc names recently covered.
+                If provided, prompts include instructions to focus on NEW content.
 
         Returns:
             Tuple of (script_content, character_count)
@@ -645,12 +699,19 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
         # Retrieve active story arcs for context and deduplication
         story_arc_context = self._get_recent_story_arc_context(topic)
 
+        # Build repetition avoidance instructions if arcs were recently covered
+        repetition_instructions = ""
+        if recently_covered_arcs:
+            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
+            logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
+
         # Generate narrative script with TTS optimization for ElevenLabs Turbo v2.5
         system_prompt = f"""You are a professional podcast script writer creating a narrative digest for the topic "{topic}".
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
 {story_arc_context}
+{repetition_instructions}
 
 TTS OPTIMIZATION REQUIREMENTS (CRITICAL):
 Your script will be converted to audio using ElevenLabs TTS. Follow these rules EXACTLY:
@@ -777,30 +838,83 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
         
         return all_qualifying
 
-    def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str]:
+    def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str, List[str]]:
         """
-        Check if the episodes would create a repetitive digest.
+        Check if the digest would have significant overlap with recent coverage.
 
-        This is a stub implementation that always allows digest creation.
-        A full implementation could check if the same stories/arcs were
-        recently covered to avoid repetitive content.
+        Compares active story arcs against arcs included in digests from
+        the last 3 days. If >50% of arcs were recently covered, returns
+        info to help the prompt focus on NEW developments only.
 
         Args:
             episodes: List of episodes to check
             topic: Topic name
 
         Returns:
-            Tuple of (is_repetitive, message)
+            Tuple of (has_significant_overlap, message, recently_covered_arc_names)
+            - has_significant_overlap: True if >50% of arcs were recently covered
+            - message: Human-readable description of overlap
+            - recently_covered_arc_names: List of arc names that were recently covered
         """
-        # For now, always allow digest creation
-        # TODO: Implement actual repetition checking using story arcs
-        return False, ""
+        if not self.story_arc_repo:
+            return False, "", []
+
+        try:
+            # Get all active arcs for this topic (last 14 days)
+            active_arcs = self.story_arc_repo.get_active_story_arcs(topic, days=14)
+            if not active_arcs:
+                return False, "No active story arcs found", []
+
+            # Get arcs that were included in digests in the last 3 days
+            recently_included = self.story_arc_repo.get_recently_included_arcs(topic, days=3)
+            recently_included_names = {arc['arc_name'] for arc in recently_included}
+
+            if not recently_included_names:
+                return False, "No recently covered arcs", []
+
+            # Calculate overlap
+            active_arc_names = {arc['arc_name'] for arc in active_arcs}
+            overlap = active_arc_names & recently_included_names
+            overlap_count = len(overlap)
+            total_active = len(active_arc_names)
+
+            if total_active == 0:
+                return False, "No active arcs to compare", []
+
+            overlap_pct = (overlap_count / total_active) * 100
+
+            # Check if significant overlap (>50%)
+            has_significant_overlap = overlap_pct > 50
+
+            if has_significant_overlap:
+                message = (
+                    f"{overlap_count}/{total_active} arcs ({overlap_pct:.0f}%) were covered "
+                    f"in the last 3 days. Digest will focus on NEW developments only."
+                )
+                logger.info(f"Story arc overlap detected for {topic}: {message}")
+            else:
+                message = f"Low overlap: {overlap_count}/{total_active} arcs ({overlap_pct:.0f}%) recently covered"
+
+            return has_significant_overlap, message, list(overlap)
+
+        except Exception as e:
+            logger.warning(f"Failed to check topic repetition for {topic}: {e}")
+            return False, f"Error checking repetition: {e}", []
 
     def generate_script(self, topic: str, episodes: List[Episode],
-                       digest_date: date) -> Tuple[str, int]:
+                       digest_date: date,
+                       recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
         """
         Generate digest script for topic using GPT-5.
         Routes to dialogue or narrative mode based on topic configuration.
+
+        Args:
+            topic: Topic name
+            episodes: List of episodes to include
+            digest_date: Date of the digest
+            recently_covered_arcs: Optional list of arc names that were covered
+                in recent digests. If provided, prompts will include instructions
+                to focus on NEW developments and avoid repeating old content.
 
         Returns (script_content, count) where count is:
         - character_count for dialogue mode
@@ -820,10 +934,10 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
 
         if is_dialogue:
             logger.info(f"Generating DIALOGUE script for {topic} (multi-voice with audio tags)")
-            return self._generate_dialogue_script(topic, episodes, digest_date, instruction)
+            return self._generate_dialogue_script(topic, episodes, digest_date, instruction, recently_covered_arcs)
         else:
             logger.info(f"Generating NARRATIVE script for {topic} (single-voice TTS-optimized)")
-            return self._generate_narrative_script(topic, episodes, digest_date, instruction)
+            return self._generate_narrative_script(topic, episodes, digest_date, instruction, recently_covered_arcs)
     
     def _generate_no_content_script(self, topic: str, digest_date: date) -> Tuple[str, int]:
         """Generate script for days with no qualifying content"""
@@ -906,25 +1020,22 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.info(f"Including {len(episodes)} undigested episodes in {topic} digest (>= min {self.min_episodes_per_digest})")
             # Episodes will be used as-is, capped at max_episodes_per_digest (done by get_qualifying_episodes)
 
-            # Check for topic repetition (skip digest if too many topics are recently covered)
-            is_repetitive, repetition_msg = self._check_topic_repetition(episodes, topic)
-            if is_repetitive:
-                logger.info(f"Skipping digest for {topic} due to repetitive content: {repetition_msg}")
-                # Return existing digest if available, otherwise None
-                existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
-                if existing_digest and existing_digest.script_content:
-                    logger.info(f"Returning existing digest for {topic} on {digest_date} (ID: {existing_digest.id})")
-                    return existing_digest
-                else:
-                    return None
-
             # Check if a digest already exists for this topic/date (for logging purposes)
             existing_digest = self.digest_repo.get_by_topic_date(topic, digest_date)
             if existing_digest:
                 logger.info(f"Creating NEW digest for {topic} on {digest_date} with unique timestamp (existing digest ID: {existing_digest.id} will remain)")
 
-        # Generate script
-        script_content, word_count = self.generate_script(topic, episodes, digest_date)
+        # Check for story arc overlap with recent digests
+        # If significant overlap, we'll add "update framing" to focus on NEW content only
+        has_overlap, overlap_msg, recently_covered_arcs = self._check_topic_repetition(episodes, topic)
+        if has_overlap:
+            logger.info(f"Story arc overlap for {topic}: {overlap_msg}")
+
+        # Generate script (pass repetition info for update framing if needed)
+        script_content, word_count = self.generate_script(
+            topic, episodes, digest_date,
+            recently_covered_arcs=recently_covered_arcs if has_overlap else None
+        )
 
         # Save script to file with timestamp for uniqueness
         digest_timestamp = datetime.now(UTC)

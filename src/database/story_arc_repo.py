@@ -325,6 +325,34 @@ class StoryArcRepository:
                 arc.updated_at = now
                 session.commit()
 
+    def get_recently_included_arcs(
+        self,
+        digest_topic: str,
+        days: int = 3
+    ) -> List[Dict]:
+        """
+        Get story arcs that were included in digests within the lookback window.
+
+        Args:
+            digest_topic: Filter by parent topic
+            days: Lookback period in days (default 3)
+
+        Returns:
+            List of arc dictionaries that were recently included
+        """
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        with self.db_manager.get_session() as session:
+            arcs = session.query(StoryArc).filter(
+                StoryArc.digest_topic == digest_topic,
+                StoryArc.included_at.isnot(None),
+                StoryArc.included_at >= cutoff_date
+            ).order_by(
+                StoryArc.included_at.desc()
+            ).all()
+
+            return [self._arc_to_dict(arc, include_events=False) for arc in arcs]
+
     def cleanup_old_story_arcs(self, days: int = 14) -> int:
         """
         Delete story arcs older than specified days.
