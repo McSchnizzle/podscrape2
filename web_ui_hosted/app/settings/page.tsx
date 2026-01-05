@@ -742,7 +742,7 @@ export default function SettingsPage() {
                     disabled={saving}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Minimum transcript characters required per episode
+                    Minimum transcript characters required per episode (0-500,000)
                   </p>
                 </div>
                 <div>
@@ -759,7 +759,7 @@ export default function SettingsPage() {
                     disabled={saving}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Maximum transcript characters to include per episode in digest
+                    Max transcript chars per episode sent to AI (0-1,000,000). Use 200,000+ for full transcripts with no truncation.
                   </p>
                 </div>
               </div>

@@ -226,7 +226,7 @@ DEFAULTS = {
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 150000, "min": 10000, "max": 272000},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MIN_CHARS): {"type": "int", "default": 2000, "min": 0, "max": 500000},
-    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS): {"type": "int", "default": 20000, "min": 0, "max": 1000000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS): {"type": "int", "default": 200000, "min": 0, "max": 1000000},
 
     # AI Configuration - Metadata Generation Phase
     (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL): {"type": "string", "default": "gpt-5-mini"},

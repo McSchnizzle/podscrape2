@@ -22,7 +22,7 @@ from ..database.models import (
     DigestEpisodeLink,
     get_digest_episode_link_repo,
 )
-from ..database.topic_tracking_repo import get_topic_tracking_repo
+from ..database.story_arc_repo import get_story_arc_repo
 from ..topic_tracking.ad_filter import AdFilter
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager, SettingsKeys
@@ -79,12 +79,12 @@ class ScriptGenerator:
                 logger.debug("Digest episode link repository unavailable: %s", exc)
                 self.digest_episode_link_repo = None
 
-        # Initialize topic tracking repository for deduplication
+        # Initialize story arc repository for context and deduplication
         try:
-            self.topic_tracking_repo = get_topic_tracking_repo()
+            self.story_arc_repo = get_story_arc_repo()
         except Exception as exc:
-            logger.debug("Topic tracking repository unavailable: %s", exc)
-            self.topic_tracking_repo = None
+            logger.debug("Story arc repository unavailable: %s", exc)
+            self.story_arc_repo = None
 
         # Initialize ad filter for transcript cleaning
         try:
@@ -121,6 +121,14 @@ class ScriptGenerator:
             self.max_output_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS, 25000)
             self.max_input_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 150000)
 
+            # Load transcript limit settings (previously hardcoded, now from web config)
+            self.transcript_min_chars = int(self.web_config.get_setting(
+                SettingsKeys.AIDigestGeneration.CATEGORY,
+                SettingsKeys.AIDigestGeneration.TRANSCRIPT_MIN_CHARS, 2000))
+            self.transcript_max_chars = int(self.web_config.get_setting(
+                SettingsKeys.AIDigestGeneration.CATEGORY,
+                SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS, 200000))  # Default to 200K, not 20K
+
             # Validate token limits against model capabilities
             self.max_output_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_output_tokens, 'max_output')
             self.max_input_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_input_tokens, 'max_input')
@@ -128,6 +136,8 @@ class ScriptGenerator:
             self.ai_model = 'gpt-5'
             self.max_output_tokens = 25000
             self.max_input_tokens = 150000
+            self.transcript_min_chars = 2000
+            self.transcript_max_chars = 200000  # Default to 200K for full transcript support
 
         logger.info(
             'ScriptGenerator initialized with model: %s, max_output_tokens: %s, max_input_tokens: %s',
@@ -218,138 +228,143 @@ class ScriptGenerator:
         return self.topic_instructions.get(topic_name)
 
     def _calculate_transcript_limit(self, num_episodes: int) -> int:
-        """Calculate transcript character limit based on configured input token cap"""
+        """Calculate transcript character limit based on configured input token cap and web settings."""
         if not getattr(self, 'max_input_tokens', None):
             return 8000
 
+        # Get limits from web settings (loaded in __init__)
+        min_chars = getattr(self, 'transcript_min_chars', 2000)
+        max_chars = getattr(self, 'transcript_max_chars', 200000)
+
+        # Calculate available space based on input token budget
         available_input_tokens = int(self.max_input_tokens * 0.8)
         available_chars = available_input_tokens * 4
         chars_per_episode = available_chars // max(num_episodes, 1)
-        return min(max(chars_per_episode, 2000), 20000)
 
-    def _get_recent_topic_history(self, digest_topic: str, days_back: int = None) -> str:
+        # Apply configurable min/max limits from web settings
+        return min(max(chars_per_episode, min_chars), max_chars)
+
+    def _get_recent_story_arc_context(self, digest_topic: str, days_back: int = None) -> str:
         """
-        Retrieve recent topic history for deduplication.
+        Retrieve active story arcs for deduplication and context.
 
         Args:
             digest_topic: Name of the digest topic (e.g., "AI and Technology")
             days_back: Number of days to look back (default from config)
 
         Returns:
-            Formatted string of recent topics, or empty string if unavailable
+            Formatted string of active story arcs for GPT prompt
         """
-        if not self.topic_tracking_repo:
-            logger.debug("Topic tracking repository unavailable, skipping deduplication")
+        if not self.story_arc_repo:
+            logger.debug("Story arc repository unavailable, skipping context")
             return ""
 
         # Get lookback window from config
         if days_back is None:
             if self.web_config:
-                days_back = self.web_config.get_setting(SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RETENTION_DAYS, 14)
+                days_back = self.web_config.get_setting(
+                    SettingsKeys.TopicTracking.CATEGORY,
+                    SettingsKeys.TopicTracking.RETENTION_DAYS,
+                    14
+                )
             else:
                 days_back = 14
 
         try:
-            # Get topics from last N days that were included in digests
-            recent_topics = self.topic_tracking_repo.get_topics_last_n_days(
+            # Get story arcs that haven't been included yet
+            arcs = self.story_arc_repo.get_story_arcs_for_digest(
                 digest_topic=digest_topic,
-                days=days_back,
-                only_used=True  # Only topics that were included in published digests
+                min_events=2,           # Only arcs with multiple events
+                exclude_included=False  # Include all for context (mark after generation)
             )
 
-            if not recent_topics:
-                logger.debug(f"No recent topic history found for {digest_topic}")
+            if not arcs:
+                logger.debug(f"No active story arcs found for {digest_topic}")
                 return ""
 
-            # Format topics for GPT prompt
-            history_text = f"\n\n## RECENT TOPICS COVERED (Last {days_back} days)\n"
-            history_text += "The following topics have been recently covered in digests. AVOID repeating these unless there are significant NEW developments:\n\n"
+            # Format arcs for GPT prompt
+            context = f"\n\n## ACTIVE STORY ARCS (Last {days_back} days)\n"
+            context += "The following story arcs are being tracked. Consider including significant developments:\n\n"
 
-            for topic_data in recent_topics:
-                topic_name = topic_data.get('topic_name', '')
-                key_points = topic_data.get('key_points', [])
+            for arc in arcs[:15]:  # Limit to top 15 arcs
+                arc_name = arc.get('arc_name', '')
+                category = arc.get('functional_category', 'other')
+                event_count = arc.get('event_count', 0)
+                source_count = arc.get('source_count', 0)
 
-                history_text += f"- **{topic_name}**\n"
-                if key_points:
-                    for point in key_points[:2]:  # Limit to first 2 key points for brevity
-                        history_text += f"  - {point}\n"
+                context += f"### {arc_name}\n"
+                context += f"Category: {category} | Events: {event_count} | Sources: {source_count}\n"
 
-            logger.info(f"Retrieved {len(recent_topics)} recent topics for {digest_topic} deduplication")
-            return history_text
+                # Include recent events for context
+                events = arc.get('events', [])
+                if events:
+                    context += "Recent developments:\n"
+                    for event in events[-3:]:  # Last 3 events
+                        summary = event.get('event_summary', '')
+                        perspective = event.get('perspective', 'neutral')
+                        source = event.get('source_name', 'Unknown')
+                        context += f"- [{perspective}] {summary} (via {source})\n"
+                context += "\n"
+
+            # Add instruction about avoiding already-included arcs
+            included_arcs = [a for a in arcs if a.get('included_in_digest_id')]
+            if included_arcs:
+                context += f"\n**Note:** {len(included_arcs)} arcs were already included in recent digests. "
+                context += "Focus on NEW developments in these stories or arcs not yet covered.\n"
+
+            logger.info(f"Retrieved {len(arcs)} story arcs for {digest_topic} context")
+            return context
 
         except Exception as e:
-            logger.warning(f"Failed to retrieve topic history for {digest_topic}: {e}")
+            logger.warning(f"Failed to retrieve story arc context for {digest_topic}: {e}")
             return ""
 
-    def _check_topic_repetition(self, episodes: List[Episode], digest_topic: str,
-                               repetition_threshold: float = 0.8) -> Tuple[bool, str]:
+    def mark_covered_story_arcs(self, digest_id: int, digest_topic: str, script_content: str) -> int:
         """
-        Check if episodes contain too many repetitive topics.
-        Now uses novelty scores instead of binary repetition (v2.01+).
+        Mark story arcs as included in the digest based on content analysis.
 
         Args:
-            episodes: List of episodes to check
-            digest_topic: Name of the digest topic
-            repetition_threshold: Minimum average novelty required (default 0.8 → 0.2 novelty = 20%)
+            digest_id: The database ID of the generated digest
+            digest_topic: The topic name
+            script_content: The generated script content
 
         Returns:
-            Tuple of (is_too_repetitive, reason_message)
+            Number of arcs marked as included
         """
-        if not self.topic_tracking_repo:
-            logger.debug("Topic tracking unavailable, skipping repetition check")
-            return False, ""
-
-        if not episodes:
-            return False, ""
+        if not self.story_arc_repo:
+            return 0
 
         try:
-            # Get topics from current episodes with their novelty scores
-            novelty_scores = []
-            for episode in episodes:
-                episode_topics = self.topic_tracking_repo.get_topics_for_episode(
-                    episode_id=episode.id,
-                    digest_topic=digest_topic
-                )
-                for topic in episode_topics:
-                    # Get novelty score, default to 1.0 for legacy topics without score
-                    novelty = topic.get('novelty_score', 1.0)
-                    novelty_scores.append(novelty)
+            # Get all active arcs
+            arcs = self.story_arc_repo.get_story_arcs_for_digest(
+                digest_topic=digest_topic,
+                min_events=1,
+                exclude_included=True  # Only unincluded arcs
+            )
 
-            if not novelty_scores:
-                # No topics extracted yet - not repetitive
-                logger.debug(f"No topics found for episodes, allowing digest")
-                return False, ""
+            # Check which arcs are mentioned in the script
+            script_lower = script_content.lower()
+            arcs_marked = 0
 
-            # Calculate average novelty
-            avg_novelty = sum(novelty_scores) / len(novelty_scores)
+            for arc in arcs:
+                arc_name = arc.get('arc_name', '')
+                # Check if arc name or key terms appear in script
+                if arc_name.lower() in script_lower:
+                    self.story_arc_repo.mark_story_arc_included(
+                        story_arc_id=arc['id'],
+                        digest_id=digest_id
+                    )
+                    arcs_marked += 1
+                    logger.debug(f"Marked arc '{arc_name}' as included in digest {digest_id}")
 
-            # Convert repetition threshold to novelty threshold
-            # Old: 80% repetitive = skip
-            # New: 20% novel = skip (inverse)
-            novelty_threshold = 1.0 - repetition_threshold
+            if arcs_marked > 0:
+                logger.info(f"Marked {arcs_marked} story arcs as included in digest {digest_id}")
 
-            is_too_repetitive = avg_novelty < novelty_threshold
-
-            if is_too_repetitive:
-                message = (
-                    f"Skipping digest: Average novelty {avg_novelty:.0%} "
-                    f"< threshold {novelty_threshold:.0%} "
-                    f"({len(novelty_scores)} topics checked)"
-                )
-                logger.info(message)
-                return True, message
-            else:
-                logger.info(
-                    f"Digest has sufficient novelty: {avg_novelty:.0%} "
-                    f">= threshold {novelty_threshold:.0%} "
-                    f"({len(novelty_scores)} topics)"
-                )
-                return False, ""
+            return arcs_marked
 
         except Exception as e:
-            logger.warning(f"Failed to check topic repetition: {e}")
-            # On error, allow digest to proceed
-            return False, ""
+            logger.warning(f"Failed to mark story arcs as included: {e}")
+            return 0
 
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
                                   digest_date: date, instruction: TopicInstruction) -> Tuple[str, int]:
@@ -403,8 +418,8 @@ class ScriptGenerator:
 
         transcript_limit = self._calculate_transcript_limit(len(transcripts))
 
-        # Retrieve recent topic history for deduplication
-        topic_history = self._get_recent_topic_history(topic)
+        # Retrieve active story arcs for context and deduplication
+        story_arc_context = self._get_recent_story_arc_context(topic)
 
         # Generate dialogue script with audio tags for ElevenLabs v3
         system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
@@ -440,7 +455,7 @@ CHARACTER ROLES:
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
-{topic_history}
+{story_arc_context}
 
 REQUIREMENTS:
 - Target 15,000-20,000 characters (this is measured in characters, not words)
@@ -457,6 +472,9 @@ Episodes: {len(transcripts)}"""
 
         user_prompt = f"""Create a dialogue-style digest script from these {len(transcripts)} episode(s):
 
+IMPORTANT - TRANSCRIPT AVAILABILITY:
+You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+
 """
 
         for i, transcript_data in enumerate(transcripts, 1):
@@ -470,6 +488,8 @@ Transcript:
 """
 
         user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes.
+
+REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable.
 
 CRITICAL: Use EXACT format for EVERY turn:
 SPEAKER_1: [audio_tag] dialogue text...
@@ -622,15 +642,15 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
 
         transcript_limit = self._calculate_transcript_limit(len(transcripts))
 
-        # Retrieve recent topic history for deduplication
-        topic_history = self._get_recent_topic_history(topic)
+        # Retrieve active story arcs for context and deduplication
+        story_arc_context = self._get_recent_story_arc_context(topic)
 
         # Generate narrative script with TTS optimization for ElevenLabs Turbo v2.5
         system_prompt = f"""You are a professional podcast script writer creating a narrative digest for the topic "{topic}".
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
-{topic_history}
+{story_arc_context}
 
 TTS OPTIMIZATION REQUIREMENTS (CRITICAL):
 Your script will be converted to audio using ElevenLabs TTS. Follow these rules EXACTLY:
@@ -679,6 +699,9 @@ Episodes: {len(transcripts)}"""
 
         user_prompt = f"""Create a narrative digest script from these {len(transcripts)} episode(s):
 
+IMPORTANT - TRANSCRIPT AVAILABILITY:
+You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+
 """
 
         for i, transcript_data in enumerate(transcripts, 1):
@@ -691,7 +714,9 @@ Transcript:
 
 """
 
-        user_prompt += f"""Generate a TTS-optimized narrative script following ALL the text normalization rules above. Target 10,000-15,000 characters. Remember: expand ALL numbers, dates, and abbreviations to their full spoken form."""
+        user_prompt += f"""Generate a TTS-optimized narrative script following ALL the text normalization rules above. Target 10,000-15,000 characters. Remember: expand ALL numbers, dates, and abbreviations to their full spoken form.
+
+REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable."""
 
         try:
             response = self.client.responses.create(
@@ -1127,6 +1152,9 @@ Focus on extracting the most interesting and valuable insights across all episod
 
         user_prompt = f"""Create a general podcast digest for {digest_date.strftime('%B %d, %Y')} from these episodes:
 
+IMPORTANT - TRANSCRIPT AVAILABILITY:
+You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided.
+
 """
         for i, transcript in enumerate(transcripts, 1):
             user_prompt += f"""
@@ -1135,7 +1163,7 @@ Transcript: {transcript['transcript'][:transcript_limit]}
 
 """
 
-        user_prompt += "\nCreate an engaging general digest that highlights the most interesting insights from these episodes."
+        user_prompt += "\nCreate an engaging general digest that highlights the most interesting insights from these episodes. You have full transcripts for all episodes above - discuss each episode's content directly."
 
         try:
             response = self.client.responses.create(
