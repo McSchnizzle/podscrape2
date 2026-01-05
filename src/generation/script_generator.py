@@ -776,7 +776,26 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
             return sorted_episodes[:cap]
         
         return all_qualifying
-    
+
+    def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str]:
+        """
+        Check if the episodes would create a repetitive digest.
+
+        This is a stub implementation that always allows digest creation.
+        A full implementation could check if the same stories/arcs were
+        recently covered to avoid repetitive content.
+
+        Args:
+            episodes: List of episodes to check
+            topic: Topic name
+
+        Returns:
+            Tuple of (is_repetitive, message)
+        """
+        # For now, always allow digest creation
+        # TODO: Implement actual repetition checking using story arcs
+        return False, ""
+
     def generate_script(self, topic: str, episodes: List[Episode],
                        digest_date: date) -> Tuple[str, int]:
         """
