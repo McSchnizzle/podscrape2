@@ -1068,6 +1068,12 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.info(f"Marking {len(episodes)} episodes as digested")
             self.mark_digest_episodes_as_digested(digest)
 
+        # Mark story arcs that were covered in this digest
+        if digest.id and script_content:
+            arcs_marked = self.mark_covered_story_arcs(digest.id, topic, script_content)
+            if arcs_marked > 0:
+                logger.info(f"Marked {arcs_marked} story arcs as included in digest {digest.id}")
+
         # Delete local script file now that content is safely in database (database-first architecture)
         if script_path and Path(script_path).exists():
             try:
