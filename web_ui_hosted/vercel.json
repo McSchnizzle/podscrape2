@@ -8,5 +8,11 @@
       "source": "/ai-tech-digest.xml",
       "destination": "/api/rss/ai-tech-digest"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/heartbeat",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }
