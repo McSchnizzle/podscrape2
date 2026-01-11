@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import packageJson from '../../../package.json';
+import { VERSION } from '../../version';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,10 +14,11 @@ export async function GET(request: Request) {
 
   const heartbeat = {
     status: 'healthy',
-    version: packageJson.version,
+    version: VERSION,
     metadata: {
-      project_name: packageJson.name,
+      project_name: 'podscrape-admin',
       git_commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7),
+      git_commit_date: process.env.VERCEL_GIT_COMMIT_DATE || '',
       git_branch: process.env.VERCEL_GIT_COMMIT_REF,
       type: 'vercel-cron',
       script_version: '1.1.0',
