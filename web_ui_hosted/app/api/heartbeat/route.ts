@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { VERSION } from '../../version';
+import { VERSION, getBuildInfo } from '../../version';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     metadata: {
       project_name: 'podscrape-admin',
       git_commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7),
-      git_commit_date: process.env.VERCEL_GIT_COMMIT_DATE || '',
+      git_commit_date: process.env.VERCEL_GIT_COMMIT_DATE || getBuildInfo().buildTime || '',
       git_branch: process.env.VERCEL_GIT_COMMIT_REF,
       type: 'vercel-cron',
       script_version: '1.1.0',
