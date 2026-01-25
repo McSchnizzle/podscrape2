@@ -1,8 +1,11 @@
 name: Validated Full Pipeline
 
 on:
-  schedule:
-    - cron: '0 5 * * *'  # Daily at 5:00 AM UTC
+  # DISABLED: Cron job moved to et01 server (Jan 2026)
+  # The pipeline now runs at 9 PM Pacific daily on the et01 server
+  # See move-cron-to-et01.md for server configuration details
+  # schedule:
+  #   - cron: '0 5 * * *'  # Daily at 5:00 AM UTC
   workflow_dispatch:
     inputs:
       dry_run:
