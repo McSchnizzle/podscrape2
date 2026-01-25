@@ -319,9 +319,106 @@ class ScriptGenerator:
             logger.warning(f"Failed to retrieve story arc context for {digest_topic}: {e}")
             return ""
 
+    def _extract_arc_key_terms(self, arc_name: str) -> List[str]:
+        """
+        Extract searchable key terms from a story arc name.
+
+        Extracts company names, product names, and significant phrases that
+        would indicate the arc is being discussed in a script.
+
+        Args:
+            arc_name: Full arc name like "OpenAI Introduces Advertising Into ChatGPT"
+
+        Returns:
+            List of key terms to search for (e.g., ["openai", "chatgpt", "advertising"])
+        """
+        import re
+
+        # Known entities to always extract (case-insensitive matching)
+        known_entities = [
+            'openai', 'anthropic', 'google', 'microsoft', 'meta', 'apple', 'amazon', 'nvidia',
+            'chatgpt', 'gpt-5', 'gpt-4', 'claude', 'gemini', 'grok', 'copilot', 'siri',
+            'deepmind', 'deepseek', 'mistral', 'llama', 'qwen',
+            'tiktok', 'twitter', 'x.com',
+        ]
+
+        arc_lower = arc_name.lower()
+        terms = []
+
+        # Extract known entities
+        for entity in known_entities:
+            if entity in arc_lower:
+                terms.append(entity)
+
+        # Extract capitalized multi-word phrases (likely product/project names)
+        # e.g., "Claude Code", "Vibe Coding", "Ralph Loop"
+        words = arc_name.split()
+        for i, word in enumerate(words):
+            # Skip common words
+            if word.lower() in ['the', 'a', 'an', 'of', 'in', 'to', 'for', 'and', 'or', 'as', 'by', 'on', 'with']:
+                continue
+            # Two-word capitalized phrases
+            if i < len(words) - 1 and word[0].isupper() and words[i+1][0].isupper():
+                phrase = f"{word} {words[i+1]}".lower()
+                if phrase not in terms and len(phrase) > 5:
+                    terms.append(phrase)
+
+        # Extract significant single words (capitalized, not common)
+        common_words = {
+            'new', 'launches', 'introduces', 'emerges', 'becomes', 'expands', 'evolves',
+            'into', 'from', 'over', 'under', 'through', 'about', 'against', 'between',
+            'strategy', 'system', 'systems', 'platform', 'model', 'models', 'release',
+            'industry', 'trend', 'trends', 'adoption', 'development', 'technology',
+        }
+        for word in words:
+            if len(word) > 4 and word[0].isupper() and word.lower() not in common_words:
+                if word.lower() not in terms:
+                    terms.append(word.lower())
+
+        # Ensure we have at least some terms
+        if not terms:
+            # Fallback: use significant words from the arc name
+            for word in words:
+                if len(word) > 5 and word.lower() not in common_words:
+                    terms.append(word.lower())
+                    if len(terms) >= 2:
+                        break
+
+        return terms[:5]  # Limit to 5 key terms
+
+    def _arc_matches_script(self, arc_name: str, key_terms: List[str], script_lower: str) -> bool:
+        """
+        Check if an arc's key terms appear in the script content.
+
+        Uses a scoring approach: arc is considered covered if enough
+        key terms appear in the script.
+
+        Args:
+            arc_name: Full arc name
+            key_terms: List of key terms extracted from arc name
+            script_lower: Lowercase script content
+
+        Returns:
+            True if arc appears to be covered in the script
+        """
+        if not key_terms:
+            return False
+
+        # Count how many key terms appear
+        matches = sum(1 for term in key_terms if term in script_lower)
+
+        # Require at least 2 matches, or 1 match if only 1-2 terms
+        if len(key_terms) <= 2:
+            return matches >= 1
+        else:
+            return matches >= 2
+
     def mark_covered_story_arcs(self, digest_id: int, digest_topic: str, script_content: str) -> int:
         """
         Mark story arcs as included in the digest based on content analysis.
+
+        Uses key term extraction to find arcs discussed in the script,
+        rather than exact arc name matching.
 
         Args:
             digest_id: The database ID of the generated digest
@@ -342,20 +439,21 @@ class ScriptGenerator:
                 exclude_included=True  # Only unincluded arcs
             )
 
-            # Check which arcs are mentioned in the script
             script_lower = script_content.lower()
             arcs_marked = 0
 
             for arc in arcs:
                 arc_name = arc.get('arc_name', '')
-                # Check if arc name or key terms appear in script
-                if arc_name.lower() in script_lower:
+                key_terms = self._extract_arc_key_terms(arc_name)
+
+                # Check if key terms appear in script
+                if self._arc_matches_script(arc_name, key_terms, script_lower):
                     self.story_arc_repo.mark_story_arc_included(
                         story_arc_id=arc['id'],
                         digest_id=digest_id
                     )
                     arcs_marked += 1
-                    logger.debug(f"Marked arc '{arc_name}' as included in digest {digest_id}")
+                    logger.debug(f"Marked arc '{arc_name}' as included in digest {digest_id} (terms: {key_terms})")
 
             if arcs_marked > 0:
                 logger.info(f"Marked {arcs_marked} story arcs as included in digest {digest_id}")

@@ -32,20 +32,26 @@ class SemanticTopicMatcher:
     Uses configurable embedding model for cost-effective comparisons.
     """
 
-    def __init__(self, similarity_threshold: float = 0.85):
+    def __init__(self, similarity_threshold: float = None):
         """
         Initialize SemanticTopicMatcher.
 
         Args:
             similarity_threshold: Consider topics as duplicates if similarity >= threshold.
-                                 Default 0.85 = 85% similar means same topic.
+                                 If None, reads from web_settings (default 0.75 = 75% similar).
         """
         self.client = OpenAI()
         self.web_config = WebConfigManager()
         self.embedding_model = self.web_config.get_setting(
             SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL, "text-embedding-3-small"
         )
-        self.similarity_threshold = similarity_threshold
+        # Read threshold from web_config if not explicitly provided
+        if similarity_threshold is None:
+            self.similarity_threshold = self.web_config.get_setting(
+                SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD, 0.75
+            )
+        else:
+            self.similarity_threshold = similarity_threshold
         self._embedding_cache: Dict[str, np.ndarray] = {}
 
     def find_matching_topic(
@@ -390,6 +396,10 @@ class SemanticTopicMatcher:
         self._embedding_cache.clear()
 
 
-def get_semantic_matcher(similarity_threshold: float = 0.85) -> SemanticTopicMatcher:
-    """Factory function to create SemanticTopicMatcher instance"""
+def get_semantic_matcher(similarity_threshold: float = None) -> SemanticTopicMatcher:
+    """Factory function to create SemanticTopicMatcher instance.
+
+    Args:
+        similarity_threshold: If None, reads from web_settings (default 0.75)
+    """
     return SemanticTopicMatcher(similarity_threshold=similarity_threshold)

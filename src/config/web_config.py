@@ -211,7 +211,7 @@ DEFAULTS = {
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.ENABLE_NOVELTY_DETECTION): {"type": "bool", "default": True},
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.NOVELTY_THRESHOLD): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL): {"type": "string", "default": "text-embedding-3-small"},
-    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD): {"type": "float", "default": 0.85, "min": 0.5, "max": 1.0},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD): {"type": "float", "default": 0.75, "min": 0.5, "max": 1.0},
 
     # AI Configuration - Content Scoring Phase
     (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL): {"type": "string", "default": "gpt-5-mini"},

@@ -52,7 +52,7 @@ class StoryArcExtractor:
 
     def __init__(
         self,
-        max_arcs_per_episode: int = 10,
+        max_arcs_per_episode: int = 3,
     ):
         """
         Initialize StoryArcExtractor.
@@ -339,11 +339,45 @@ For this episode from "{episode_title}", identify:
    - Add a NEW EVENT capturing what this episode says about the story
    - Capture the episode's PERSPECTIVE (positive, negative, neutral, analytical)
    - Include 2-3 specific key points from this episode
+   - BE GENEROUS with matching - if content is thematically related to an existing arc, add to it
 
 2. **NEW ARCS**: New stories not in the active list
-   - Only create if this is a significant, newsworthy development
-   - Don't create arcs for general discussion topics (too broad)
-   - Each arc should be specific enough to track over time
+   - ONLY create if ALL of these conditions are met:
+     a) This is a MAJOR breaking news story (not routine coverage)
+     b) It involves a specific entity or event (not a general trend)
+     c) You are confident it will appear in future episodes
+     d) No existing arc covers this topic even tangentially
+   - NEW ARCS SHOULD BE RARE - most episodes should have 0 new arcs
+
+## CRITICAL GUIDELINES - READ CAREFULLY
+
+### RULE 1: ALMOST NEVER CREATE NEW ARCS
+- **Default behavior: Add events to existing arcs, return empty new_arcs array**
+- Creating a new arc should be EXCEPTIONAL - maybe 1 in every 5-10 episodes
+- If you're unsure whether to create a new arc, DON'T - add to the most relevant existing arc instead
+
+### RULE 2: BE AGGRESSIVE ABOUT MATCHING EXISTING ARCS
+- Look for THEMATIC overlap, not just exact topic matches
+- "AI coding assistant update" → add to existing "Coding Agents" or "Claude Code" arc
+- "Company announces new monetization" → add to existing monetization/ads arc
+- "Researcher discusses capability gaps" → add to existing "Adoption Gap" arc
+- When multiple arcs could apply, pick the one with the most events
+
+### RULE 3: DO NOT CREATE ARCS FOR
+- General industry trends or discussions (too broad)
+- One-off mentions of products or companies (not a story)
+- Topics that are variations of existing arcs
+- Anything that could reasonably be added to an existing arc
+- Speculative or theoretical discussions
+
+### RULE 4: MAXIMUM LIMITS
+- Maximum 2 continuing arc events per episode (pick the most significant)
+- Maximum 1 new arc per episode (and prefer 0)
+- Total maximum 3 story arcs per episode
+
+### RULE 5: NAME MATCHING
+When adding to a continuing arc, use the EXACT arc name from the active list.
+Do not create slight variations like "OpenAI Ads" vs "OpenAI Advertising" - use the existing name.
 
 ## CLASSIFICATION CATEGORIES
 Use one of these for each arc:
