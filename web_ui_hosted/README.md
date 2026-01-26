@@ -104,7 +104,7 @@ podcast.paulrbrown.org → Vercel deployment
 ### Hosted Next.js UI
 - Production admin interface
 - Serverless-optimized
-- GitHub Actions integration
 - Supabase connection pooling
+- **Pipeline execution**: Cron jobs on et01 server (migrated from GitHub Actions in v2.72)
 
 Both UIs share the same Supabase database and configuration system.

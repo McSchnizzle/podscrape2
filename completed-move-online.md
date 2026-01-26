@@ -2,14 +2,17 @@
 
 **Successfully implemented phases moving the project from local-only to online infrastructure**
 
+> **⚠️ UPDATE (v2.72)**: The GitHub Actions pipeline was migrated to cron jobs on the et01 server. GitHub Actions workflow files were removed in v2.74. The documentation below reflects the original implementation; the current production setup runs via crontab on et01.
+
 ## ✅ Architecture Decisions
 
-**Selected Stack**: GitHub Actions + Supabase + Vercel
-- **Database**: Supabase Postgres (shared by CI and Web UI)
-- **Pipeline**: GitHub Actions for scheduled daily runs
+**Original Stack**: GitHub Actions + Supabase + Vercel
+**Current Stack (v2.72+)**: et01 Server Cron + Supabase + Vercel
+- **Database**: Supabase Postgres (shared by server and Web UI)
+- **Pipeline**: ~~GitHub Actions for scheduled daily runs~~ → et01 server crontab (v2.72)
 - **Web UI**: Vercel hosting at `podcast.paulrbrown.org`
-- **Storage**: GitHub Releases for MP3s, GitHub Actions Artifacts for logs
-- **RSS**: Static feed deployed on Vercel with GitHub Release asset URLs
+- **Storage**: GitHub Releases for MP3s
+- **RSS**: Dynamic API route on Vercel with GitHub Release asset URLs
 
 ## ✅ Phase 0 — Foundation Setup
 

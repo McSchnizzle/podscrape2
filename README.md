@@ -215,11 +215,16 @@ Welcome to today's digest on artificial intelligence and technology. We're explo
 
 ## 🔄 Daily Operation
 
-### Automated Execution
+### Automated Execution (et01 Server)
+**Production cron jobs run on the et01 SSH server** (migrated from GitHub Actions in v2.72).
+
+The pipeline runs daily at 6 AM via crontab on et01:
 ```bash
-# Add to crontab for daily 6 AM execution
+# Production crontab on et01 server
 0 6 * * * cd /path/to/podscrape2 && timeout 15m python3 run_full_pipeline_orchestrator.py
 ```
+
+**Note**: GitHub Actions workflows were removed in v2.74. All scheduled pipeline execution now happens on et01.
 
 ### Manual Execution
 ```bash

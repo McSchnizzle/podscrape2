@@ -1,6 +1,26 @@
 # Operations Runbook
 
-## Secret Inventory (Phase 4.0 – CI/CD Bootstrap)
+## ⚠️ IMPORTANT: Cron Job Migration (v2.72)
+
+**As of v2.72, all scheduled pipeline execution has been migrated from GitHub Actions to the et01 SSH server.**
+
+- **GitHub Actions workflows removed**: v2.74 deleted all workflow files (`.github/workflows/` directory)
+- **Production cron location**: et01 server crontab
+- **Daily schedule**: 6 AM via crontab on et01
+
+```bash
+# View production crontab
+ssh et01 'crontab -l'
+
+# Run pipeline manually on et01
+ssh et01 'cd /path/to/podscrape2 && python3 run_full_pipeline_orchestrator.py'
+```
+
+The GitHub Actions documentation below is retained for historical reference only.
+
+---
+
+## [HISTORICAL] Secret Inventory (Phase 4.0 – CI/CD Bootstrap)
 The following GitHub repository secrets are required for the CI bootstrap and subsequent Phase 4 workflows:
 
 - `DATABASE_URL`
@@ -238,8 +258,15 @@ gh release view daily-YYYY-MM-DD
   - `--dry-run true/false`: Enable dry-run mode
 - **Recent Success**: Run ID `17873538510` - Complete end-to-end pipeline execution
 
-### Active Workflows Post-Consolidation
-- ✅ **phase-tts.yml**: Primary orchestrated pipeline (scheduled + manual dispatch)
-- ✅ **ci-bootstrap.yml**: Environment validation and secret verification
-- ✅ **publishing-only.yml**: Standalone publishing for maintenance scenarios
-- ✅ **tts-simulator*.yml**: Development testing workflows
+### [DEPRECATED] Active Workflows Post-Consolidation
+**Note**: All GitHub Actions workflows were removed in v2.74. Pipeline now runs via crontab on et01 server.
+
+~~- ✅ **phase-tts.yml**: Primary orchestrated pipeline (scheduled + manual dispatch)~~
+~~- ✅ **ci-bootstrap.yml**: Environment validation and secret verification~~
+~~- ✅ **publishing-only.yml**: Standalone publishing for maintenance scenarios~~
+~~- ✅ **tts-simulator*.yml**: Development testing workflows~~
+
+**Current Production Setup (v2.72+)**:
+- Cron jobs run on et01 server
+- Daily pipeline execution at 6 AM
+- No GitHub Actions dependencies

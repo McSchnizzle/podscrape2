@@ -41,9 +41,11 @@ Based on `move-online.md`, the remaining Phase 1 tasks are:
 - RSS generation and Vercel deployment
 
 ### Phase 3: CI/CD Setup
-- GitHub Actions for daily pipeline execution
+- ~~GitHub Actions for daily pipeline execution~~ → **Migrated to et01 server crontab (v2.72)**
 - Automated testing and deployment
 - Secret management
+
+> **Note (v2.72)**: GitHub Actions workflows were removed in v2.74. Pipeline execution now runs via crontab on the et01 SSH server.
 
 ### Phase 4: Web UI Hosting
 - Deploy web UI to Vercel

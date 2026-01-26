@@ -146,6 +146,22 @@ brew install ffmpeg  # Audio processing
 brew install gh && gh auth login  # GitHub publishing
 ```
 
+### Production Cron Jobs (et01 Server)
+**IMPORTANT**: As of v2.72, all scheduled pipeline execution runs on the **et01 SSH server**, not GitHub Actions.
+
+- **Migration**: Cron jobs migrated from GitHub Actions to et01 in v2.72
+- **GitHub Actions**: All workflow files removed in v2.74 (`.github/workflows/` directory deleted)
+- **Daily Schedule**: Pipeline runs at 6 AM via crontab on et01
+- **Server Access**: SSH to et01 server for cron management
+
+```bash
+# View crontab on et01
+ssh et01 'crontab -l'
+
+# Edit crontab on et01
+ssh et01 'crontab -e'
+```
+
 ### Core Pipeline Commands
 ```bash
 # Full pipeline orchestrator: RSS → Audio → Transcript → Score → Script → MP3 → Publish
