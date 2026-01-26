@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Context
+
+**IMPORTANT**: At the start of each session:
+1. Note the current date/time from the system environment
+2. **Timezone**: The user is in **Pacific Time (PT)** - all time references should use PT unless otherwise specified
+3. When reviewing logs or timestamps, convert UTC to Pacific Time for clarity
+4. Cron jobs on et01 server run in PT (server is configured for America/Los_Angeles)
+
 ## High-Level Architecture
 
 This is an automated RSS podcast digest system that follows this flow:
