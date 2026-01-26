@@ -45,6 +45,7 @@ class CleanupStats:
     github_releases_deleted: int = 0
     episodes_deleted: int = 0
     digests_deleted: int = 0
+    story_arcs_deleted: int = 0
     errors: List[str] = None
 
     def __post_init__(self):
@@ -184,10 +185,12 @@ class RetentionManager:
             if dry_run:
                 logger.info(f"Dry run complete - would delete {stats.files_deleted} files, "
                            f"{stats.episodes_deleted} episodes, {stats.digests_deleted} digests, "
+                           f"{stats.story_arcs_deleted} story arcs, "
                            f"free {self._format_bytes(stats.bytes_freed)}")
             else:
                 logger.info(f"Cleanup complete - deleted {stats.files_deleted} files, "
                            f"{stats.episodes_deleted} episodes, {stats.digests_deleted} digests, "
+                           f"{stats.story_arcs_deleted} story arcs, "
                            f"freed {self._format_bytes(stats.bytes_freed)}")
             
             return stats
@@ -242,10 +245,18 @@ class RetentionManager:
                     )
                     digests_count = digests_query.count()
 
+                    # Count orphaned 0-episode draft digests
+                    orphan_digests_query = session.query(DigestModel).filter(
+                        DigestModel.episode_count == 0,
+                        DigestModel.mp3_path.is_(None),
+                        DigestModel.status == 'draft'
+                    )
+                    orphan_count = orphan_digests_query.count()
+
                     if dry_run:
-                        logger.info(f"Would delete {episodes_count} episodes, {digests_count} digests")
+                        logger.info(f"Would delete {episodes_count} episodes, {digests_count} digests, {orphan_count} orphaned 0-episode drafts")
                         stats.episodes_deleted = episodes_count
-                        stats.digests_deleted = digests_count
+                        stats.digests_deleted = digests_count + orphan_count
                     else:
                         # Delete episodes
                         if episodes_count > 0:
@@ -259,8 +270,47 @@ class RetentionManager:
                             stats.digests_deleted = digests_deleted
                             logger.info(f"Deleted {digests_deleted} old digests")
 
+                        # Delete orphaned 0-episode draft digests (no content, never will have MP3)
+                        # These are created when topics have no qualifying episodes but the system
+                        # still creates a draft digest entry
+                        orphan_digests_query = session.query(DigestModel).filter(
+                            DigestModel.episode_count == 0,
+                            DigestModel.mp3_path.is_(None),
+                            DigestModel.status == 'draft'
+                        )
+                        orphan_count = orphan_digests_query.count()
+                        if orphan_count > 0:
+                            orphan_deleted = orphan_digests_query.delete()
+                            stats.digests_deleted += orphan_deleted
+                            logger.info(f"Deleted {orphan_deleted} orphaned 0-episode draft digests")
+
                         # Commit the transaction
                         session.commit()
+
+                    # Clean up story arcs (separate transaction)
+                    try:
+                        story_arc_retention_days = int(wc.get_setting(
+                            SettingsKeys.Retention.CATEGORY, 'story_arc_retention_days', 14
+                        ))
+                        story_arc_inactivity_days = int(wc.get_setting(
+                            SettingsKeys.Retention.CATEGORY, 'story_arc_inactivity_days', 7
+                        ))
+
+                        from ..database.story_arc_repo import get_story_arc_repo
+                        story_arc_repo = get_story_arc_repo()
+
+                        if dry_run:
+                            logger.info(f"Would clean up story arcs (max_age={story_arc_retention_days}d, inactivity={story_arc_inactivity_days}d)")
+                        else:
+                            arcs_deleted = story_arc_repo.cleanup_old_story_arcs(
+                                max_age_days=story_arc_retention_days,
+                                inactivity_days=story_arc_inactivity_days
+                            )
+                            stats.story_arcs_deleted = arcs_deleted
+                            if arcs_deleted > 0:
+                                logger.info(f"Deleted {arcs_deleted} old story arcs")
+                    except Exception as e:
+                        logger.warning(f"Story arc cleanup failed: {e}")
 
                     return stats
 
@@ -422,6 +472,7 @@ class RetentionManager:
         main_stats.github_releases_deleted += additional_stats.github_releases_deleted
         main_stats.episodes_deleted += additional_stats.episodes_deleted
         main_stats.digests_deleted += additional_stats.digests_deleted
+        main_stats.story_arcs_deleted += additional_stats.story_arcs_deleted
         main_stats.errors.extend(additional_stats.errors)
     
     def _format_bytes(self, bytes_count: int) -> str:

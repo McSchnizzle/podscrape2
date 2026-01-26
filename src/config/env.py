@@ -1,22 +1,36 @@
 import os
+from pathlib import Path
 from typing import Iterable, List, Optional
 from urllib.parse import urlparse
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
     _DOTENV_AVAILABLE = True
 except ImportError:
     _DOTENV_AVAILABLE = False
 
-    def load_dotenv() -> None:
+    def _load_dotenv(dotenv_path=None, **kwargs) -> bool:
         """No-op when dotenv is not available (e.g., in CI environments)."""
-        pass
+        return False
+
+
+# Project root is two levels up from this file (src/config/env.py -> project root)
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 def load_env() -> None:
-    """Load environment variables from .env if present."""
+    """Load environment variables from .env if present.
+
+    Uses explicit path to project root to ensure .env is found
+    regardless of current working directory (important for nohup/background runs).
+    """
     if _DOTENV_AVAILABLE:
-        load_dotenv()
+        env_path = _PROJECT_ROOT / ".env"
+        if env_path.exists():
+            _load_dotenv(dotenv_path=env_path)
+        else:
+            # Fall back to default behavior (searches cwd)
+            _load_dotenv()
 
 
 class MissingEnvError(RuntimeError):

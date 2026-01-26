@@ -1077,12 +1077,17 @@ class DigestRepository:
         return []
 
     def get_digests_pending_tts(self) -> List[Digest]:
-        """Get digests that have scripts but no MP3 files (pending TTS)"""
+        """Get digests that have scripts but no MP3 files (pending TTS)
+
+        Filters out 0-episode digests since they have no content to convert to audio.
+        Orders by episode_count DESC so digests with content are processed first.
+        """
         with self.db.get_session() as session:
             digest_models = session.query(DigestModel)\
                 .filter(DigestModel.script_path.isnot(None))\
                 .filter(DigestModel.mp3_path.is_(None))\
-                .order_by(DigestModel.digest_date.asc())\
+                .filter(DigestModel.episode_count > 0)\
+                .order_by(DigestModel.episode_count.desc(), DigestModel.digest_date.asc())\
                 .all()
             return [self._model_to_digest(model) for model in digest_models]
 
