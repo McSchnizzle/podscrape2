@@ -46,7 +46,7 @@ from src.database.models import get_digest_repo
 from src.publishing.github_publisher import create_github_publisher
 from src.publishing.rss_generator import create_rss_generator, PodcastEpisode, create_podcast_metadata, PodcastMetadata
 from src.publishing.retention_manager import create_retention_manager
-from src.publishing.vercel_deployer import create_vercel_deployer
+# NOTE: vercel_deployer no longer needed - RSS is dynamically generated via Next.js API route (v1.49)
 from src.utils.rss_timestamps import generate_unique_pubdate
 from src.utils.timezone import get_pacific_now
 
@@ -82,18 +82,15 @@ class PublishingPipelineRunner:
         self.digest_repo = get_digest_repo()
         
         # Initialize publishing components
-        self.vercel_deployer = None
-        gh_actions_val = os.getenv("GH_ACTIONS", os.getenv("GITHUB_ACTIONS", ""))
-        self._is_github_actions = gh_actions_val.lower() == "true"
-        self.logger.info(f"GitHub Actions detection: GH_ACTIONS={os.getenv('GH_ACTIONS')}, GITHUB_ACTIONS={os.getenv('GITHUB_ACTIONS')}, _is_github_actions={self._is_github_actions}")
+        # NOTE: Vercel deployer removed in v2.80 - RSS is dynamically generated via Next.js API route
         if not dry_run:
             self.github_publisher = create_github_publisher()
-            
+
             # Create podcast metadata for RSS generator
             podcast_metadata = PodcastMetadata(
                 title="Daily AI & Tech Digest",
                 description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
-                author="Paul Brown", 
+                author="Paul Brown",
                 email="brownpr0@gmail.com",
                 category="Technology",
                 subcategory="Tech News",
@@ -101,12 +98,8 @@ class PublishingPipelineRunner:
                 copyright="© 2025 Paul Brown"
             )
             self.rss_generator = create_rss_generator(podcast_metadata)
-            
+
             self.retention_manager = create_retention_manager()
-            if not self._is_github_actions:
-                self.vercel_deployer = create_vercel_deployer()
-            else:
-                self.logger.info("Skipping Vercel deployer initialization in GitHub Actions environment")
         
         self.logger.info("Publishing pipeline initialized successfully")
     
