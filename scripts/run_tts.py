@@ -65,7 +65,7 @@ def serialize_for_json(obj):
 class TTSRunner:
     """TTS audio generation phase"""
 
-    def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False):
+    def __init__(self, dry_run: bool = False, limit: int = None, verbose: bool = False, no_parallel: bool = False):
         # Set up phase-specific logging
         self.pipeline_logger = setup_phase_logging("tts", verbose=verbose, console_output=True)
         self.logger = self.pipeline_logger.get_logger()
@@ -73,6 +73,7 @@ class TTSRunner:
         self.dry_run = dry_run
         self.limit = limit
         self.verbose = verbose
+        self.no_parallel = no_parallel
 
         # Initialize database configuration reader
         from src.config.web_config import WebConfigReader
@@ -131,11 +132,13 @@ class TTSRunner:
             digests = digests[:self.limit]
 
         # Use parallel processing for better performance (40-70% time reduction)
-        if len(digests) > 1 and not self.dry_run:
+        # Unless --no-parallel is set (safer for single-server deployments)
+        if len(digests) > 1 and not self.dry_run and not self.no_parallel:
             self.logger.info(f"Generating audio for {len(digests)} digests in parallel (max 5 concurrent)")
             audio_results = self._generate_audio_parallel(digests)
         else:
-            self.logger.info(f"Generating audio for {len(digests)} digests sequentially")
+            mode_reason = "sequential mode forced" if self.no_parallel else "single digest or dry-run"
+            self.logger.info(f"Generating audio for {len(digests)} digests sequentially ({mode_reason})")
             audio_results = self._generate_audio_sequential(digests)
 
         # Summary
@@ -391,6 +394,7 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of digests')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
+    parser.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (safer for single-server deployments)')
 
     args = parser.parse_args()
 
@@ -400,7 +404,8 @@ def main():
         runner = TTSRunner(
             dry_run=dry_run,
             limit=args.limit,
-            verbose=args.verbose
+            verbose=args.verbose,
+            no_parallel=args.no_parallel
         )
 
         # DEPRECATED: JSON input is no longer used - TTS phase reads directly from database

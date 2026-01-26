@@ -36,7 +36,8 @@ class PipelineOrchestrator:
     """
 
     def __init__(self, log_file: str = None, phase_stop: str = None, dry_run: bool = False,
-                 limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False):
+                 limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False,
+                 sequential: bool = False):
 
         # Move legacy logs on first run
         move_legacy_logs_to_logs_dir()
@@ -56,6 +57,7 @@ class PipelineOrchestrator:
         self.days_back = days_back if days_back != 7 else self._get_web_setting('pipeline', 'discovery_lookback_days', 7)
         self.episode_guid = episode_guid
         self.verbose = verbose
+        self.sequential = sequential
 
         # Script paths - phase scripts are in the scripts directory
         self.scripts_dir = Path(__file__).parent
@@ -74,6 +76,8 @@ class PipelineOrchestrator:
             self.logger.info(f"📅 TIMEFRAME: Processing episodes from last {self.days_back} days")
         if self.verbose:
             self.logger.info("🔍 VERBOSE: Debug logging enabled")
+        if self.sequential:
+            self.logger.info("🔄 SEQUENTIAL: Parallel processing disabled for audio phase")
 
         # Initialize retention manager with WebConfig settings
         try:
@@ -151,6 +155,13 @@ class PipelineOrchestrator:
                     cmd.extend(['--episode-guid', self.episode_guid])
                 if self.limit:
                     cmd.extend(['--limit', str(self.limit)])
+
+            # Add sequential mode for audio and TTS phases (disables parallel processing)
+            # This is important for single-server deployments like et01 where
+            # parallel Whisper/FFmpeg processes can cause resource contention
+            if script_name in ['scripts/run_audio.py', 'scripts/run_tts.py']:
+                if self.sequential:
+                    cmd.append('--no-parallel')
 
             # Add Web UI settings as CLI flags for scripts that support them
             if script_name == 'scripts/run_scoring.py':
@@ -593,6 +604,8 @@ def main():
     parser.add_argument('--days-back', type=int, help='Only process episodes from N days back', default=7)
     parser.add_argument('--episode-guid', help='Process specific episode by GUID', default=None)
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--sequential', action='store_true',
+                       help='Disable parallel processing in audio phase (safer for single-server deployments)')
 
     args = parser.parse_args()
 
@@ -603,7 +616,8 @@ def main():
         limit=args.limit,
         days_back=args.days_back,
         episode_guid=args.episode_guid,
-        verbose=args.verbose
+        verbose=args.verbose,
+        sequential=args.sequential
     )
 
     orchestrator.run_pipeline()
