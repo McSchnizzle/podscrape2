@@ -128,7 +128,7 @@ class PipelineOrchestrator:
 
         try:
             # Build command
-            cmd = ['python3', str(script_path)]
+            cmd = [sys.executable, str(script_path)]
 
             # Set environment variable to indicate orchestrated execution
             env = os.environ.copy()
