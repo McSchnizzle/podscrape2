@@ -333,6 +333,7 @@ class AudioProcessor:
                     # NOTE: Use bytes mode to avoid UTF-8 decoding errors from non-ASCII metadata
                     result = subprocess.run(
                         cmd,
+                        stdin=subprocess.DEVNULL,   # CRITICAL: Prevent FFmpeg interactive mode hang
                         stdout=subprocess.DEVNULL,  # Don't capture verbose output
                         stderr=subprocess.PIPE,     # Keep stderr for error messages
                         # NO text=True - handle encoding manually to avoid UTF-8 errors
@@ -478,6 +479,7 @@ class AudioProcessor:
 
             result = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,   # CRITICAL: Prevent FFmpeg interactive mode hang
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 # No text=True - handle encoding manually to avoid UTF-8 errors from metadata
@@ -574,6 +576,7 @@ class AudioProcessor:
                 test_result = subprocess.run(
                     ['ffmpeg', '-v', 'error', '-i', chunk_path, '-t', '5',
                      '-f', 'null', '-'],
+                    stdin=subprocess.DEVNULL,  # CRITICAL: Prevent FFmpeg interactive mode hang
                     capture_output=True,
                     # No text=True - handle encoding manually to avoid UTF-8 errors
                     timeout=10
@@ -648,6 +651,7 @@ class AudioProcessor:
 
             result = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,   # CRITICAL: Prevent FFmpeg interactive mode hang
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 text=True

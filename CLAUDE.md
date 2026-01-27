@@ -343,6 +343,33 @@ Real data reveals actual RSS behavior, network issues, and audio CDN problems th
 - **TTS**: ElevenLabs with topic-specific voice IDs and settings (single-voice or multi-voice dialogue)
 - **Cleanup**: Automatic cleanup of intermediate audio files after processing
 
+### FFmpeg Subprocess Requirements (CRITICAL)
+**IMPORTANT**: When calling FFmpeg/FFprobe via Python subprocess, you MUST always include `stdin=subprocess.DEVNULL`.
+
+**Why**: FFmpeg enables interactive mode by default ("Press [q] to stop, [?] for help"). When running without a TTY (cron jobs, background processes, SSH commands), FFmpeg will hang indefinitely waiting for stdin input that never comes. This causes 100% CPU usage and the process never completes.
+
+**The Fix**:
+```python
+# CORRECT - prevents FFmpeg interactive mode hang
+result = subprocess.run(
+    cmd,
+    stdin=subprocess.DEVNULL,  # CRITICAL: Prevents hang in non-interactive mode
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+
+# WRONG - will hang in cron/background
+result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+```
+
+**Alternative**: Use `-nostdin` flag in FFmpeg command, but `stdin=subprocess.DEVNULL` is more reliable.
+
+**Files affected**: `src/podcast/audio_processor.py` - all subprocess calls to ffmpeg/ffprobe
+
+**References**:
+- [FFmpeg mailing list discussion](https://ffmpeg.org/pipermail/ffmpeg-user/2017-November/037754.html)
+- [ffmpeg-python issue #452](https://github.com/kkroening/ffmpeg-python/issues/452)
+
 ### Multi-Voice Dialogue Mode (v1.79+)
 The system supports two script generation modes per topic:
 
