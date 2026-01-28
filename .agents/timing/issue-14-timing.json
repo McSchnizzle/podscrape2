@@ -1,5 +1,15 @@
 {
   "issue": "14",
   "workflow": "3-agent",
-  "workflow_start": "2025-12-20T07:48:26.000Z"
+  "workflow_start": "2025-12-20T07:48:26.000Z",
+  "workflow_end": "2025-12-20T07:58:55.000Z",
+  "phases": {
+    "scout_and_plan": "15m",
+    "build": "10m",
+    "test_and_cleanup": "5m"
+  },
+  "total_duration": "30m",
+  "commit": "62fe033",
+  "version": "2.30",
+  "status": "COMPLETE"
 }

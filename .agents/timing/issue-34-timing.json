@@ -5,5 +5,6 @@
   "test_cleanup_start": "2025-12-20T18:00:00.000Z",
   "test_cleanup_end": "2025-12-20T18:10:00.000Z",
   "status": "complete",
-  "version": "2.50"
+  "version": "2.50",
+  "commit": "7037259cfc0b9cdb91ed3fc4437aacddc04e6e5d"
 }

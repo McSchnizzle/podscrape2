@@ -1,0 +1,14 @@
+# Claude Code Context Preservation State
+# This file is automatically updated before context compaction
+
+active_work:
+  issue: null
+  branch: main
+  phase: null
+  last_action: null
+
+files_modified: []
+
+pending_tasks: []
+
+key_decisions: []
