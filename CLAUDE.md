@@ -460,6 +460,8 @@ Next.js application providing hosted configuration interface at podcast.paulrbro
 
 ### Publishing Architecture
 - **GitHub Releases**: Daily tags (`daily-YYYY-MM-DD`) with MP3 assets uploaded and stored
+  - **CRITICAL**: Repository MUST be PUBLIC for MP3 downloads to work. Podcatcher apps access release assets without authentication. Private repos cause 404 errors.
+  - Run `scripts/doctor.py` to verify repo visibility
 - **Dynamic RSS API**: Next.js API route generates RSS 2.0 XML from database on-demand (v1.49)
   - URL: `podcast.paulrbrown.org/daily-digest.xml` → `/api/rss/daily-digest`
   - 5-minute edge cache, no static files, database is single source of truth

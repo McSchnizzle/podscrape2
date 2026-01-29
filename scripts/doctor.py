@@ -251,6 +251,52 @@ def check_pg_dump_with_paths() -> Tuple[str, bool, str]:
     return (f"❌ pg_dump", False, f"PostgreSQL client for database backups - not found. {instruction}")
 
 
+def check_github_repo_visibility() -> Tuple[str, bool, str]:
+    """Check that the GitHub repository is public.
+
+    CRITICAL: The repository MUST be public for podcast RSS feeds to work.
+    Podcatcher apps download MP3 files from GitHub releases without authentication.
+    If the repo is private, downloads will return 404 errors.
+    """
+    import subprocess
+    from src.config.env import load_env
+    load_env()
+
+    repo = os.getenv('GITHUB_REPOSITORY')
+    if not repo:
+        return ("⚠️  GitHub repo visibility", False, "GITHUB_REPOSITORY not set - cannot check visibility")
+
+    try:
+        result = subprocess.run(
+            ['gh', 'repo', 'view', repo, '--json', 'visibility,isPrivate'],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            return ("⚠️  GitHub repo visibility", False, f"Could not check repo: {result.stderr[:100]}")
+
+        import json
+        data = json.loads(result.stdout)
+        is_private = data.get('isPrivate', True)
+        visibility = data.get('visibility', 'unknown')
+
+        if is_private:
+            return (
+                "❌ GitHub repo visibility [CRITICAL]",
+                False,
+                f"Repository {repo} is PRIVATE - MP3 downloads will fail with 404. "
+                f"Run: gh repo edit {repo} --visibility public --accept-visibility-change-consequences"
+            )
+        else:
+            return ("✅ GitHub repo visibility", True, f"Repository {repo} is {visibility} - downloads will work")
+
+    except FileNotFoundError:
+        return ("⚠️  GitHub repo visibility", False, "gh CLI not found - cannot check repo visibility")
+    except json.JSONDecodeError:
+        return ("⚠️  GitHub repo visibility", False, "Could not parse gh output")
+    except Exception as e:
+        return ("⚠️  GitHub repo visibility", False, f"Error checking repo: {e}")
+
+
 def check_external_tools() -> List[Tuple[str, bool, str]]:
     """Check availability of external tools."""
     checks = []
@@ -377,6 +423,16 @@ def main():
             print(f"    → {description}")
             if "ffmpeg" in check_name and "❌" in check_name:
                 critical_failures.append((check_name, description))
+
+    print("\n🌐 GitHub Repository")
+    repo_check = check_github_repo_visibility()
+    all_checks.append(repo_check)
+    check_name, passed, description = repo_check
+    print(f"  {check_name}")
+    if not passed:
+        print(f"    → {description}")
+        if "[CRITICAL]" in check_name:
+            critical_failures.append((check_name, description))
 
     print("\n🐍 Python Dependencies")
     dep_checks = check_python_dependencies()
