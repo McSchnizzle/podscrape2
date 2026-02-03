@@ -227,8 +227,145 @@ class ScriptGenerator:
         """
         return self.topic_instructions.get(topic_name)
 
-    def _calculate_transcript_limit(self, num_episodes: int) -> int:
-        """Calculate transcript character limit based on configured input token cap and web settings."""
+    def _classify_story_arcs(self, arcs: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        Classify arcs into 'hot' and 'developing' categories based on prominence.
+
+        Classification thresholds:
+        - Hot: 5+ events OR 3+ sources (priority framing)
+        - Developing: 2-4 events with 1-2 sources (standard tracking)
+
+        Args:
+            arcs: List of arc dictionaries from story_arc_repo
+
+        Returns:
+            Dict with 'hot' and 'developing' keys containing filtered arc lists
+        """
+        hot = []
+        developing = []
+
+        for arc in arcs:
+            event_count = arc.get('event_count', 0)
+            source_count = arc.get('source_count', 0)
+
+            # Hot: 5+ events OR 3+ sources
+            if event_count >= 5 or source_count >= 3:
+                hot.append(arc)
+            # Developing: 2-4 events (already filtered by min_events=2 in query)
+            elif event_count >= 2:
+                developing.append(arc)
+
+        # Sort by event count descending within each category
+        hot.sort(key=lambda a: a.get('event_count', 0), reverse=True)
+        developing.sort(key=lambda a: a.get('event_count', 0), reverse=True)
+
+        logger.debug(f"Classified arcs: {len(hot)} hot, {len(developing)} developing")
+        return {'hot': hot, 'developing': developing}
+
+    def _match_arcs_to_episodes(self, arcs: List[Dict], episodes: List[Episode]) -> List[Dict]:
+        """
+        Filter arcs to only those with supporting evidence in episode transcripts.
+
+        This prevents hallucinations by ensuring GPT only references arcs that
+        have actual content in the provided episodes.
+
+        Args:
+            arcs: List of arc dictionaries
+            episodes: List of episodes with transcript_content
+
+        Returns:
+            List of arcs enriched with 'supporting_episodes' field,
+            filtered to only arcs with at least one supporting episode
+        """
+        if not arcs or not episodes:
+            return []
+
+        grounded_arcs = []
+
+        for arc in arcs:
+            arc_name = arc.get('arc_name', '')
+            key_terms = self._extract_arc_key_terms(arc_name)
+
+            if not key_terms:
+                continue
+
+            # Find episodes that contain key terms
+            supporting_episodes = []
+            for episode in episodes:
+                transcript = (episode.transcript_content or '').lower()
+                if not transcript:
+                    continue
+
+                # Check if enough key terms appear in transcript
+                matches = sum(1 for term in key_terms if term in transcript)
+                min_matches = 1 if len(key_terms) <= 2 else 2
+
+                if matches >= min_matches:
+                    supporting_episodes.append(episode.title)
+
+            # Only include arc if it has supporting evidence
+            if supporting_episodes:
+                arc_copy = arc.copy()
+                arc_copy['supporting_episodes'] = supporting_episodes[:3]  # Limit to 3
+                grounded_arcs.append(arc_copy)
+
+        logger.info(f"Story arc grounding: {len(grounded_arcs)}/{len(arcs)} arcs have supporting episodes")
+        return grounded_arcs
+
+    def _normalize_arc_name_for_tts(self, arc_name: str) -> str:
+        """
+        Convert arc name to TTS-safe spoken form for narrative mode.
+
+        Handles common abbreviations and formatting that TTS systems struggle with.
+
+        Args:
+            arc_name: Raw arc name (e.g., "GPT-4 vs Claude AI Benchmark")
+
+        Returns:
+            TTS-normalized name (e.g., "G P T four vs Claude A I Benchmark")
+        """
+        import re
+
+        result = arc_name
+
+        # Common AI/tech abbreviations to expand
+        abbreviations = {
+            r'\bAI\b': 'A I',
+            r'\bGPT-5\b': 'G P T five',
+            r'\bGPT-4\b': 'G P T four',
+            r'\bGPT-4o\b': 'G P T four oh',
+            r'\bGPT\b': 'G P T',
+            r'\bLLM\b': 'L L M',
+            r'\bLLMs\b': 'L L Ms',
+            r'\bAPI\b': 'A P I',
+            r'\bAPIs\b': 'A P Is',
+            r'\bML\b': 'M L',
+            r'\bNLP\b': 'N L P',
+            r'\bCEO\b': 'C E O',
+            r'\bCTO\b': 'C T O',
+            r'\bIPO\b': 'I P O',
+            r'\bUS\b': 'U S',
+            r'\bU\.S\.\b': 'U S',
+            r'\bEU\b': 'E U',
+            r'\bUK\b': 'U K',
+        }
+
+        for pattern, replacement in abbreviations.items():
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
+        return result
+
+    def _calculate_transcript_limit(self, num_episodes: int, arc_context_length: int = 0) -> int:
+        """
+        Calculate transcript character limit based on configured input token cap and web settings.
+
+        Args:
+            num_episodes: Number of episodes to divide budget across
+            arc_context_length: Length of story arc context in chars (reserves tokens)
+
+        Returns:
+            Character limit per episode transcript
+        """
         if not getattr(self, 'max_input_tokens', None):
             return 8000
 
@@ -236,25 +373,41 @@ class ScriptGenerator:
         min_chars = getattr(self, 'transcript_min_chars', 2000)
         max_chars = getattr(self, 'transcript_max_chars', 200000)
 
-        # Calculate available space based on input token budget
-        available_input_tokens = int(self.max_input_tokens * 0.8)
+        # Reserve tokens for: system prompt (~2k tokens), arc context, repetition instructions
+        # Arc context chars / 4 = approximate tokens
+        reserved_tokens = 3000 + (arc_context_length // 4)
+
+        # Calculate available space based on input token budget minus reserved
+        available_input_tokens = int(self.max_input_tokens * 0.8) - reserved_tokens
+        available_input_tokens = max(available_input_tokens, 10000)  # Floor to prevent negative
+
         available_chars = available_input_tokens * 4
         chars_per_episode = available_chars // max(num_episodes, 1)
 
         # Apply configurable min/max limits from web settings
         return min(max(chars_per_episode, min_chars), max_chars)
 
-    def _get_recent_story_arc_context(self, digest_topic: str, days_back: int = None) -> str:
+    def _get_recent_story_arc_context(
+        self,
+        digest_topic: str,
+        episodes: Optional[List[Episode]] = None,
+        days_back: int = None,
+        for_narrative: bool = False
+    ) -> str:
         """
-        Retrieve active story arcs for deduplication and context.
+        Retrieve active story arcs with grounding and classification.
 
         Args:
             digest_topic: Name of the digest topic (e.g., "AI and Technology")
+            episodes: List of episodes for grounding (filters to supported arcs only)
             days_back: Number of days to look back (default from config)
+            for_narrative: If True, include TTS-normalized arc names
 
         Returns:
-            Formatted string of active story arcs for GPT prompt
+            Formatted string of active story arcs for GPT prompt (max 4000 chars)
         """
+        MAX_CONTEXT_CHARS = 4000  # Cap to prevent token overflow
+
         if not self.story_arc_repo:
             logger.debug("Story arc repository unavailable, skipping context")
             return ""
@@ -282,42 +435,90 @@ class ScriptGenerator:
                 logger.debug(f"No active story arcs found for {digest_topic}")
                 return ""
 
-            # Format arcs for GPT prompt
-            context = f"\n\n## ACTIVE STORY ARCS (Last {days_back} days)\n"
-            context += "The following story arcs are being tracked. Consider including significant developments:\n\n"
+            # Ground arcs to episodes if provided (prevents hallucinations)
+            if episodes:
+                arcs = self._match_arcs_to_episodes(arcs, episodes)
+                if not arcs:
+                    logger.info(f"No story arcs have supporting evidence in episodes for {digest_topic}")
+                    return ""
 
-            for arc in arcs[:15]:  # Limit to top 15 arcs
-                arc_name = arc.get('arc_name', '')
-                category = arc.get('functional_category', 'other')
-                event_count = arc.get('event_count', 0)
-                source_count = arc.get('source_count', 0)
+            # Classify into hot/developing
+            classified = self._classify_story_arcs(arcs)
+            hot_arcs = classified['hot']
+            developing_arcs = classified['developing']
 
-                context += f"### {arc_name}\n"
-                context += f"Category: {category} | Events: {event_count} | Sources: {source_count}\n"
+            # Build context with new framing
+            context = "\n\n## STORY ARC INTEGRATION\n\n"
+            context += "This digest is part of an ongoing series. The following story arcs have "
+            if episodes:
+                context += "supporting evidence in today's episodes:\n\n"
+            else:
+                context += "been tracked recently:\n\n"
 
-                # Include recent events for context
-                events = arc.get('events', [])
-                if events:
-                    context += "Recent developments:\n"
-                    for event in events[-3:]:  # Last 3 events
-                        summary = event.get('event_summary', '')
-                        perspective = event.get('perspective', 'neutral')
-                        source = event.get('source_name', 'Unknown')
-                        context += f"- [{perspective}] {summary} (via {source})\n"
-                context += "\n"
+            # Hot stories section
+            if hot_arcs:
+                context += "**HOT STORIES** (5+ events OR 3+ sources - PRIORITY):\n\n"
+                for arc in hot_arcs[:5]:  # Limit to top 5 hot
+                    context += self._format_arc_for_context(arc, for_narrative)
 
-            # Add instruction about avoiding already-included arcs
-            included_arcs = [a for a in arcs if a.get('included_in_digest_id')]
-            if included_arcs:
-                context += f"\n**Note:** {len(included_arcs)} arcs were already included in recent digests. "
-                context += "Focus on NEW developments in these stories or arcs not yet covered.\n"
+            # Developing stories section
+            if developing_arcs:
+                context += "**DEVELOPING STORIES**:\n\n"
+                for arc in developing_arcs[:5]:  # Limit to top 5 developing
+                    context += self._format_arc_for_context(arc, for_narrative)
 
-            logger.info(f"Retrieved {len(arcs)} story arcs for {digest_topic} context")
+            # Add framing instructions
+            context += """**FRAMING INSTRUCTIONS:**
+1. When covering content related to a story arc, reference it naturally
+2. Use phrases like "In the ongoing [topic] story..." or "Building on recent coverage..."
+3. ONLY reference arcs that have supporting evidence in the transcripts above
+4. If an arc has no new developments in today's content, do not force a mention
+5. For previously covered arcs, focus on what's NEW - don't rehash background
+"""
+
+            # Truncate if too long
+            if len(context) > MAX_CONTEXT_CHARS:
+                context = context[:MAX_CONTEXT_CHARS - 50] + "\n\n[Context truncated for length]\n"
+                logger.warning(f"Story arc context truncated from {len(context)} to {MAX_CONTEXT_CHARS} chars")
+
+            logger.info(f"Arc context generated: {len(context)} chars, {len(hot_arcs)} hot, {len(developing_arcs)} developing")
             return context
 
         except Exception as e:
             logger.warning(f"Failed to retrieve story arc context for {digest_topic}: {e}")
             return ""
+
+    def _format_arc_for_context(self, arc: Dict, for_narrative: bool = False) -> str:
+        """Format a single arc for inclusion in the prompt context."""
+        arc_name = arc.get('arc_name', '')
+        category = arc.get('functional_category', 'other')
+        event_count = arc.get('event_count', 0)
+        source_count = arc.get('source_count', 0)
+        supporting = arc.get('supporting_episodes', [])
+
+        result = f"### {arc_name}\n"
+
+        # Add TTS-safe name for narrative mode
+        if for_narrative:
+            tts_name = self._normalize_arc_name_for_tts(arc_name)
+            if tts_name != arc_name:
+                result += f"(Spoken: \"{tts_name}\")\n"
+
+        result += f"Category: {category} | Events: {event_count} | Sources: {source_count}\n"
+
+        # Show which episodes support this arc
+        if supporting:
+            result += f"Supported by: {', '.join(f'\"{ep}\"' for ep in supporting[:2])}\n"
+
+        # Include recent events for context (limit to 2 for brevity)
+        events = arc.get('events', [])
+        if events:
+            result += "Recent: "
+            event_summaries = [e.get('event_summary', '')[:80] for e in events[:2]]
+            result += "; ".join(event_summaries) + "\n"
+
+        result += "\n"
+        return result
 
     def _extract_arc_key_terms(self, arc_name: str) -> List[str]:
         """
@@ -471,6 +672,11 @@ class ScriptGenerator:
         When story arcs have been covered in recent digests, this generates
         instructions telling GPT to focus on NEW developments only.
 
+        PRECEDENCE RULES (resolves conflict with mandatory arc framing):
+        - Recently covered arcs should ONLY be mentioned if there are NEW developments
+        - If no new developments exist for a recently covered arc, SKIP it entirely
+        - Frame as "update" rather than new coverage
+
         Args:
             recently_covered_arcs: List of arc names recently covered
 
@@ -484,25 +690,35 @@ class ScriptGenerator:
 
         return f"""
 
-## CONTINUING COVERAGE - FOCUS ON NEW DEVELOPMENTS ONLY
+## PRECEDENCE RULE: RECENTLY COVERED ARCS (CRITICAL)
 
-The following story arcs were covered in recent digests (last 3 days):
+The following story arcs were covered in digests within the last 3 days:
 {arc_list}
 
-**CRITICAL INSTRUCTIONS FOR AVOIDING REPETITION:**
-1. DO NOT repeat benchmark data, statistics, or specific numbers that were likely mentioned before
-2. DO NOT re-explain background context that listeners already know
-3. Focus ONLY on what is NEW or has CHANGED since last coverage
-4. Frame coverage as "latest developments" or "continuing our coverage of..."
-5. If an arc has no new developments in today's episodes, briefly acknowledge it and move on
-6. Prioritize fresh insights, new perspectives, and recent events over rehashing known information
-7. When referencing a continuing story, assume listeners are already familiar with the basics
+**STRICT RULES FOR THESE ARCS:**
 
-Example framing for continuing stories:
-- "Building on what we discussed recently about [topic]..."
-- "There's a new development in the [story] we've been following..."
-- "The latest update on [topic] shows..."
-- "Since we last covered [topic], here's what's changed..."
+1. **CHECK FOR NEW DEVELOPMENTS FIRST**
+   - Before mentioning any of these arcs, verify there is NEW information in today's transcripts
+   - If the transcript content only repeats what was likely covered before, SKIP the arc entirely
+
+2. **IF NEW DEVELOPMENTS EXIST:**
+   - Frame as UPDATE only: "The latest on [arc]..." or "Since we last covered..."
+   - Focus EXCLUSIVELY on what has CHANGED
+   - Do NOT rehash background, benchmarks, or statistics already discussed
+   - Keep coverage brief - listeners are already familiar with the story
+
+3. **IF NO NEW DEVELOPMENTS:**
+   - Do NOT mention the arc at all
+   - Do NOT say "no updates on..." - just skip it
+   - Move on to fresh content
+
+4. **FRAMING EXAMPLES:**
+   - "Building on our recent coverage of [topic], there's a new development..."
+   - "The [story] we've been tracking has taken a turn..."
+   - "Quick update on [topic]: [new info only]"
+
+**This rule takes precedence over any instruction to include story arcs.**
+If an arc is on this list AND has no new developments, it must be skipped.
 """
 
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
@@ -558,16 +774,22 @@ Example framing for continuing stories:
         if total_ads_filtered > 0:
             logger.info(f"Total ad filtering: {total_ads_filtered} ad types removed from {len(episodes)} episodes")
 
-        transcript_limit = self._calculate_transcript_limit(len(transcripts))
-
-        # Retrieve active story arcs for context and deduplication
-        story_arc_context = self._get_recent_story_arc_context(topic)
+        # Retrieve active story arcs FIRST (need length for token budget)
+        story_arc_context = self._get_recent_story_arc_context(
+            topic,
+            episodes=episodes,  # Ground arcs to episode content
+            for_narrative=False
+        )
 
         # Build repetition avoidance instructions if arcs were recently covered
         repetition_instructions = ""
         if recently_covered_arcs:
             repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
             logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
+
+        # Calculate transcript limit with arc context reserved
+        arc_context_length = len(story_arc_context) + len(repetition_instructions)
+        transcript_limit = self._calculate_transcript_limit(len(transcripts), arc_context_length)
 
         # Generate dialogue script with audio tags for ElevenLabs v3
         system_prompt = f"""You are a professional podcast script writer creating a conversational digest for the topic "{topic}".
@@ -605,6 +827,11 @@ TOPIC INSTRUCTIONS:
 {instruction.content}
 {story_arc_context}
 {repetition_instructions}
+
+**CRITICAL - STORY ARC GROUNDING:**
+Only reference story arcs that have supporting evidence in the episode transcripts provided below.
+Do not invent or assume developments not present in the transcript content.
+If a story arc is listed above but has no supporting content in today's episodes, do not mention it.
 
 REQUIREMENTS:
 - Target 15,000-20,000 characters (this is measured in characters, not words)
@@ -792,16 +1019,22 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
         if total_ads_filtered > 0:
             logger.info(f"Total ad filtering: {total_ads_filtered} ad types removed from {len(episodes)} episodes")
 
-        transcript_limit = self._calculate_transcript_limit(len(transcripts))
-
-        # Retrieve active story arcs for context and deduplication
-        story_arc_context = self._get_recent_story_arc_context(topic)
+        # Retrieve active story arcs FIRST with TTS-safe names (need length for token budget)
+        story_arc_context = self._get_recent_story_arc_context(
+            topic,
+            episodes=episodes,  # Ground arcs to episode content
+            for_narrative=True  # Include TTS-safe arc names
+        )
 
         # Build repetition avoidance instructions if arcs were recently covered
         repetition_instructions = ""
         if recently_covered_arcs:
             repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
             logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
+
+        # Calculate transcript limit with arc context reserved
+        arc_context_length = len(story_arc_context) + len(repetition_instructions)
+        transcript_limit = self._calculate_transcript_limit(len(transcripts), arc_context_length)
 
         # Generate narrative script with TTS optimization for ElevenLabs Turbo v2.5
         system_prompt = f"""You are a professional podcast script writer creating a narrative digest for the topic "{topic}".
@@ -810,6 +1043,11 @@ TOPIC INSTRUCTIONS:
 {instruction.content}
 {story_arc_context}
 {repetition_instructions}
+
+**CRITICAL - STORY ARC GROUNDING:**
+Only reference story arcs that have supporting evidence in the episode transcripts provided below.
+Do not invent or assume developments not present in the transcript content.
+When referencing arc names, use the "Spoken" form if provided for TTS compatibility.
 
 TTS OPTIMIZATION REQUIREMENTS (CRITICAL):
 Your script will be converted to audio using ElevenLabs TTS. Follow these rules EXACTLY:
