@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, Record<string, SettingValue>>>({})
   const [originalSettings, setOriginalSettings] = useState<Record<string, Record<string, SettingValue>>>({})
   const [schema, setSchema] = useState<Record<string, Record<string, SettingMeta>>>({})
+  const [aiModels, setAiModels] = useState<Record<string, Record<string, { display_name: string }>>>({})
   const [schemaLoaded, setSchemaLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -76,6 +77,9 @@ export default function SettingsPage() {
           if (schemaData.settings) {
             setSchema(schemaData.settings)
             setSchemaLoaded(true)
+          }
+          if (schemaData.ai_models) {
+            setAiModels(schemaData.ai_models)
           }
         } else {
           console.error('Failed to fetch settings schema')
@@ -336,6 +340,15 @@ export default function SettingsPage() {
     }
   }
 
+  // Render model options from aiModels data
+  const renderModelOptions = (provider: string) => {
+    const models = aiModels[provider]
+    if (!models) return null
+    return Object.entries(models).map(([modelId, info]) => (
+      <option key={modelId} value={modelId}>{info.display_name}</option>
+    ))
+  }
+
   if (loading || !schemaLoaded) {
     return (
       <div className="flex items-center justify-center min-h-64">
@@ -582,15 +595,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_content_scoring', 'model', e.target.value)}
                     disabled={saving}
                   >
-                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
-                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
-                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
-                    <option value="gpt-5.1">GPT-5.1</option>
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="gpt-5-mini">GPT-5 Mini</option>
-                    <option value="gpt-5-nano">GPT-5 Nano</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
+                    {renderModelOptions('openai')}
                   </select>
                 </div>
                 <div>
@@ -671,15 +676,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
-                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
-                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
-                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
-                    <option value="gpt-5.1">GPT-5.1</option>
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="gpt-5-mini">GPT-5 Mini</option>
-                    <option value="gpt-5-nano">GPT-5 Nano</option>
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    {renderModelOptions('openai')}
                   </select>
                 </div>
                 <div>
@@ -781,15 +778,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_metadata_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
-                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
-                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
-                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
-                    <option value="gpt-5.1">GPT-5.1</option>
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="gpt-5-mini">GPT-5 Mini</option>
-                    <option value="gpt-5-nano">GPT-5 Nano</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
+                    {renderModelOptions('openai')}
                   </select>
                 </div>
                 <div>
@@ -870,10 +859,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_tts_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
-                    <option value="eleven_v3">ElevenLabs v3 (Highest Quality)</option>
-                    <option value="eleven_turbo_v2_5">ElevenLabs Turbo v2.5</option>
-                    <option value="eleven_flash_v2_5">ElevenLabs Flash v2.5 (Low Latency)</option>
-                    <option value="eleven_multilingual_v2">ElevenLabs Multilingual v2</option>
+                    {renderModelOptions('elevenlabs')}
                   </select>
                 </div>
                 <div>
@@ -949,15 +935,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('topic_tracking', 'extraction_model', e.target.value)}
                     disabled={saving}
                   >
-                    <option value="gpt-5.2">GPT-5.2 Thinking</option>
-                    <option value="gpt-5.2-chat-latest">GPT-5.2 Instant</option>
-                    <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
-                    <option value="gpt-5.1">GPT-5.1</option>
-                    <option value="gpt-5">GPT-5</option>
-                    <option value="gpt-5-mini">GPT-5 Mini</option>
-                    <option value="gpt-5-nano">GPT-5 Nano</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
+                    {renderModelOptions('openai')}
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Model used for extracting topics from transcripts
@@ -1014,6 +992,66 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 mt-1">
                     Number of days to look back for duplicate topic detection
                   </p>
+                </div>
+
+                {/* Reconciliation Settings */}
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <h4 className="text-md font-medium text-gray-800 mb-3">Digest Reconciliation</h4>
+                  <p className="text-xs text-gray-500 mb-4">
+                    After digest generation, analyze recent scripts to detect recurring stories not yet tracked as arcs.
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Reconciliation Model
+                      </label>
+                      <select
+                        className="input"
+                        value={getSettingString('topic_tracking', 'reconciliation_model')}
+                        onChange={(e) => updateLocalSetting('topic_tracking', 'reconciliation_model', e.target.value)}
+                        disabled={saving}
+                      >
+                        {renderModelOptions('openai')}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        GPT model used for detecting recurring stories across digests
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Reconciliation Lookback (digests)
+                      </label>
+                      <input
+                        type="number"
+                        min="3"
+                        max="15"
+                        className="input"
+                        value={getSettingNumber('topic_tracking', 'reconciliation_lookback')}
+                        onChange={(e) => updateLocalSetting('topic_tracking', 'reconciliation_lookback', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Number of recent digests to analyze for recurring stories
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Min Occurrences
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="5"
+                        className="input"
+                        value={getSettingNumber('topic_tracking', 'reconciliation_min_occurrences')}
+                        onChange={(e) => updateLocalSetting('topic_tracking', 'reconciliation_min_occurrences', parseInt(e.target.value))}
+                        disabled={saving}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Minimum digest appearances required to create a story arc
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

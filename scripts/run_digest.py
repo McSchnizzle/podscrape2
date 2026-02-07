@@ -160,6 +160,10 @@ class DigestRunner:
                 f"Generated {len(generated_digests)} digests successfully"
             )
 
+            # Run post-digest story arc reconciliation
+            if not self.dry_run and generated_digests:
+                self._run_reconciliation(generated_digests)
+
             return {
                 'success': True,
                 'digests_generated': len(generated_digests),
@@ -181,6 +185,29 @@ class DigestRunner:
                 'failed': [{'error': str(e)}]
             }
 
+
+    def _run_reconciliation(self, generated_digests: list):
+        """Run post-digest story arc reconciliation for each topic that produced a digest."""
+        try:
+            from src.topic_tracking.digest_arc_reconciler import DigestArcReconciler
+            reconciler = DigestArcReconciler()
+
+            # Get unique topics from generated digests
+            topics = set(d.get('topic') for d in generated_digests if d.get('topic'))
+
+            for topic in topics:
+                try:
+                    result = reconciler.reconcile(topic)
+                    self.logger.info(
+                        f"Reconciliation for '{topic}': "
+                        f"{result['arcs_created']} created, "
+                        f"{result['arcs_skipped']} skipped, "
+                        f"{result['stories_found']} stories found"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Reconciliation failed for '{topic}': {e}")
+        except Exception as e:
+            self.logger.warning(f"Story arc reconciliation skipped: {e}")
 
     def _digest_to_dict(self, digest):
         """Convert digest object to dictionary.

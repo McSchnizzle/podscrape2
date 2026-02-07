@@ -353,24 +353,39 @@ class StoryArcRepository:
 
             return [self._arc_to_dict(arc, include_events=False) for arc in arcs]
 
-    def cleanup_old_story_arcs(self, days: int = 14) -> int:
+    def cleanup_old_story_arcs(
+        self,
+        max_age_days: int = 14,
+        inactivity_days: int = 7
+    ) -> int:
         """
-        Delete story arcs older than specified days.
+        Delete story arcs that are:
+        1. Older than max_age_days (regardless of activity), OR
+        2. Haven't had new events in inactivity_days
 
         Args:
-            days: Delete arcs not updated in this many days
+            max_age_days: Maximum age for arcs (delete if started before this)
+            inactivity_days: Delete if no events for this many days
 
         Returns:
             Number of arcs deleted
         """
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        now = datetime.now(timezone.utc)
+        max_age_cutoff = now - timedelta(days=max_age_days)
+        inactivity_cutoff = now - timedelta(days=inactivity_days)
 
         with self.db_manager.get_session() as session:
             # Events are cascade deleted
+            # Delete arcs that are either too old OR inactive
             result = session.query(StoryArc).filter(
-                StoryArc.last_updated_at < cutoff_date
+                (StoryArc.started_at < max_age_cutoff) |
+                (StoryArc.last_updated_at < inactivity_cutoff)
             ).delete()
             session.commit()
+            logger.info(
+                f"Cleaned up {result} old story arcs "
+                f"(max_age={max_age_days}d, inactivity={inactivity_days}d)"
+            )
             return result
 
     def get_story_arc_by_id(self, arc_id: int) -> Optional[Dict]:

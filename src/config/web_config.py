@@ -50,6 +50,9 @@ class SettingsKeys:
         MAX_TOPICS_PER_EPISODE = "max_topics_per_episode"
         RETENTION_DAYS = "retention_days"
         EXTRACTION_MODEL = "extraction_model"
+        RECONCILIATION_MODEL = "reconciliation_model"
+        RECONCILIATION_LOOKBACK = "reconciliation_lookback"
+        RECONCILIATION_MIN_OCCURRENCES = "reconciliation_min_occurrences"
 
     class AdFiltering:
         CATEGORY = "ad_filtering"
@@ -134,14 +137,13 @@ class SettingsKeys:
 # AI Model Definitions and Limits
 AI_MODELS = {
     'openai': {
+        'gpt-5.2': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Thinking'},
+        'gpt-5.2-chat-latest': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Instant'},
+        'gpt-5.2-pro': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Pro'},
         'gpt-5.1': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.1'},
         'gpt-5': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5'},
         'gpt-5-mini': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5 Mini'},
         'gpt-5-nano': {'max_output': 64000, 'max_input': 128000, 'display_name': 'GPT-5 Nano'},
-        'gpt-4-turbo-preview': {'max_output': 4096, 'max_input': 128000, 'display_name': 'GPT-4 Turbo'},
-        'gpt-4o': {'max_output': 16384, 'max_input': 128000, 'display_name': 'GPT-4o'},
-        'gpt-4o-mini': {'max_output': 16384, 'max_input': 128000, 'display_name': 'GPT-4o Mini'},
-        'gpt-3.5-turbo': {'max_output': 4096, 'max_input': 16385, 'display_name': 'GPT-3.5 Turbo'}
     },
     'elevenlabs': {
         'eleven_v3': {'max_characters': 5000, 'display_name': 'v3 (5k chars, highest quality)'},
@@ -202,6 +204,9 @@ DEFAULTS = {
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MAX_TOPICS_PER_EPISODE): {"type": "int", "default": 15, "min": 3, "max": 20},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RETENTION_DAYS): {"type": "int", "default": 14, "min": 7, "max": 90},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_LOOKBACK): {"type": "int", "default": 7, "min": 3, "max": 15},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MIN_OCCURRENCES): {"type": "int", "default": 2, "min": 2, "max": 5},
 
     # Ad Filtering Configuration
     (SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.ENABLED): {"type": "bool", "default": True},

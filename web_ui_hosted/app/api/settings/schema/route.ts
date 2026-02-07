@@ -38,7 +38,10 @@ const SETTINGS_SCHEMA: Record<string, Record<string, {
     min_score_for_extraction: { type: 'float', default: 0.70, min: 0.0, max: 1.0 },
     max_topics_per_episode: { type: 'int', default: 15, min: 3, max: 20 },
     retention_days: { type: 'int', default: 14, min: 7, max: 90 },
-    extraction_model: { type: 'string', default: 'gpt-5-mini', min: null, max: null }
+    extraction_model: { type: 'string', default: 'gpt-5-mini', min: null, max: null },
+    reconciliation_model: { type: 'string', default: 'gpt-5-mini', min: null, max: null },
+    reconciliation_lookback: { type: 'int', default: 7, min: 3, max: 15 },
+    reconciliation_min_occurrences: { type: 'int', default: 2, min: 2, max: 5 }
   },
   ad_filtering: {
     enabled: { type: 'bool', default: true, min: null, max: null },
@@ -112,14 +115,13 @@ const SETTINGS_SCHEMA: Record<string, Record<string, {
 // Mirror of src/config/web_config.py AI_MODELS (lines 109-132)
 const AI_MODELS = {
   openai: {
+    'gpt-5.2': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Thinking' },
+    'gpt-5.2-chat-latest': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Instant' },
+    'gpt-5.2-pro': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Pro' },
     'gpt-5.1': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.1' },
     'gpt-5': { max_output: 128000, max_input: 272000, display_name: 'GPT-5' },
     'gpt-5-mini': { max_output: 128000, max_input: 400000, display_name: 'GPT-5 Mini' },
     'gpt-5-nano': { max_output: 64000, max_input: 128000, display_name: 'GPT-5 Nano' },
-    'gpt-4-turbo-preview': { max_output: 4096, max_input: 128000, display_name: 'GPT-4 Turbo' },
-    'gpt-4o': { max_output: 16384, max_input: 128000, display_name: 'GPT-4o' },
-    'gpt-4o-mini': { max_output: 16384, max_input: 128000, display_name: 'GPT-4o Mini' },
-    'gpt-3.5-turbo': { max_output: 4096, max_input: 16385, display_name: 'GPT-3.5 Turbo' }
   },
   elevenlabs: {
     'eleven_v3': { max_characters: 5000, display_name: 'v3 (5k chars, highest quality)' },

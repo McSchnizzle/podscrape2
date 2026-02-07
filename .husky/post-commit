@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Post-commit hook: Deploy to et01 after every commit
+# Runs in background so it doesn't block the terminal
+
+echo "Deploying to et01 in background..."
+./scripts/deploy_to_et01.sh > /tmp/deploy-et01.log 2>&1 &
+echo "Deploy started (pid $!). Check /tmp/deploy-et01.log for status."

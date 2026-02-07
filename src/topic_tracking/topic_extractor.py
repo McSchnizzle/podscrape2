@@ -74,13 +74,13 @@ class StoryArcExtractor:
                 SettingsKeys.Discovery.CATEGORY, SettingsKeys.Discovery.MAX_STORY_ARCS_CONTEXT, 20
             )
             self.model = self.web_config.get_setting(
-                SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL, 'gpt-4o-mini'
+                SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL, 'gpt-5-mini'
             )
             logger.info(f"Using extraction model: {self.model}")
         except Exception as e:
             openai_timeout = 120
             self.max_story_arcs_context = 20
-            self.model = "gpt-4o-mini"
+            self.model = "gpt-5-mini"
             self.web_config = None
             logger.warning(f"Failed to get settings from web_config, using defaults: {e}")
 
@@ -92,9 +92,9 @@ class StoryArcExtractor:
         """
         Get the correct token parameter name based on model.
 
-        GPT-5.2* models use 'max_completion_tokens' instead of 'max_tokens'.
+        GPT-5+ models use 'max_completion_tokens' instead of 'max_tokens'.
         """
-        if self.model.startswith("gpt-5.2"):
+        if self.model.startswith("gpt-5"):
             return "max_completion_tokens"
         return "max_tokens"
 
@@ -168,7 +168,7 @@ class StoryArcExtractor:
                         "strict": True,
                     },
                 },
-                self._get_token_param_name(): 3000,
+                self._get_token_param_name(): 16000,
             }
             response = self.client.chat.completions.create(**api_kwargs)
 
