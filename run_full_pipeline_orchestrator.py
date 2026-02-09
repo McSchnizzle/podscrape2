@@ -396,38 +396,40 @@ class PipelineOrchestrator:
                 'episodes_found': episodes_found
             })
 
-            if episodes_found == 0:
-                return self._log_success(start_time, episodes_found, [], [], [])
-
             if self.phase_stop == 'discovery':
                 self.logger.info("Stopping after discovery phase as requested")
                 return self._log_success(start_time, episodes_found, [], [], [])
 
             # Phase 2: Audio Processing
-            self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 2: AUDIO PROCESSING")
-            self.logger.info("="*80)
-
-            self._record_phase_event('audio', 'starting', {
-                'episodes_in': episodes_found
-            })
-
-            audio_result = self.run_phase_script('scripts/run_audio.py', discovery_result)
-
-            audio_failed = not audio_result.get('success')
-            if audio_failed:
-                self.logger.warning(f"⚠️  Audio phase failed: {audio_result.get('error')}")
+            if episodes_found == 0:
+                self.logger.info("\n📝 No new episodes discovered - skipping audio phase")
                 self.logger.info("📝 Continuing to digest phase to process already-scored episodes...")
-                self._record_phase_event('audio', 'failed', {
-                    'error': audio_result.get('error')
-                })
                 episodes_processed = 0
             else:
-                episodes_processed = audio_result.get('episodes_processed', 0)
-                self.logger.info(f"🎵 Episodes processed: {episodes_processed}")
-                self._record_phase_event('audio', 'completed', {
-                    'episodes_processed': episodes_processed
+                self.logger.info("\n" + "="*80)
+                self.logger.info("PHASE 2: AUDIO PROCESSING")
+                self.logger.info("="*80)
+
+                self._record_phase_event('audio', 'starting', {
+                    'episodes_in': episodes_found
                 })
+
+                audio_result = self.run_phase_script('scripts/run_audio.py', discovery_result)
+
+                audio_failed = not audio_result.get('success')
+                if audio_failed:
+                    self.logger.warning(f"⚠️  Audio phase failed: {audio_result.get('error')}")
+                    self.logger.info("📝 Continuing to digest phase to process already-scored episodes...")
+                    self._record_phase_event('audio', 'failed', {
+                        'error': audio_result.get('error')
+                    })
+                    episodes_processed = 0
+                else:
+                    episodes_processed = audio_result.get('episodes_processed', 0)
+                    self.logger.info(f"🎵 Episodes processed: {episodes_processed}")
+                    self._record_phase_event('audio', 'completed', {
+                        'episodes_processed': episodes_processed
+                    })
 
             if self.phase_stop == 'audio':
                 self.logger.info("Stopping after audio phase as requested")
@@ -460,6 +462,10 @@ class PipelineOrchestrator:
             if self.phase_stop == 'digest':
                 self.logger.info("Stopping after digest phase as requested")
                 return self._log_success(start_time, episodes_found, [], digest_result.get('digests', []), [])
+
+            if digests_generated == 0:
+                self.logger.info("No digests generated - skipping TTS and publishing phases")
+                return self._log_success(start_time, episodes_found, [], [], [])
 
             # Phase 4: TTS Audio Generation
             self.logger.info("\n" + "="*80)
