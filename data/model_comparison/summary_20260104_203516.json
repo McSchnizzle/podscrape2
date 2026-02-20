@@ -1,0 +1,50 @@
+{
+  "test_date": "20260104_203516",
+  "episodes": [
+    {
+      "id": 579,
+      "title": "GPT 5.2 Release, Corporate Collapse in 2026, and $1.1M Job Loss w/ Alexander Wissner-Gross, Salim Ismail & Dave Blundin | EP #215",
+      "transcript_length": 117828,
+      "ai_score": 0.96
+    },
+    {
+      "id": 575,
+      "title": "How to vibe-write a country hit",
+      "transcript_length": 113377,
+      "ai_score": 0.9
+    },
+    {
+      "id": 557,
+      "title": "US vs. China: Why Trust Will Win the AI Race | GPT-5.2 & Anthropic IPO w/ Emad Mostaque, Salim Ismail, Dave Blundin & Alexander Wissner-Gross | EP #214",
+      "transcript_length": 113347,
+      "ai_score": 0.98
+    },
+    {
+      "id": 531,
+      "title": "The Man Who Wrote The Book On AI: 2030 Might Be The Point Of No Return! We've Been Lied To About AI!",
+      "transcript_length": 108993,
+      "ai_score": 0.98
+    }
+  ],
+  "total_transcript_chars": 453545,
+  "results": [
+    {
+      "model": "GPT-5.2",
+      "output_chars": 18923,
+      "generation_time_seconds": 113.89472699165344,
+      "error": null
+    },
+    {
+      "model": "Claude Opus 4.5",
+      "output_chars": 22792,
+      "generation_time_seconds": 163.26131081581116,
+      "error": null
+    },
+    {
+      "model": "Gemini 3 Pro",
+      "output_chars": 0,
+      "generation_time_seconds": 0.3463129997253418,
+      "error": "404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-3.0-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}"
+    }
+  ]
+}

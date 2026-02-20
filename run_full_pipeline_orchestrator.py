@@ -541,6 +541,29 @@ class PipelineOrchestrator:
                 self.logger.info(f"🧹 Retention completed: {cleanup_stats.get('total_files', 0)} files, {cleanup_stats.get('total_mb', 0)} MB freed")
                 self._record_phase_event('retention', 'completed', cleanup_stats)
 
+            # Phase 7: Story Arc Deduplication
+            # Consolidates similar story arcs to prevent content duplication
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 7: STORY ARC DEDUPLICATION")
+            self.logger.info("="*80)
+
+            self._record_phase_event('dedup', 'starting', None)
+
+            dedup_result = self.run_phase_script('scripts/run_dedup.py')
+
+            if not dedup_result.get('success'):
+                self.logger.warning(f"Dedup phase had issues: {dedup_result.get('error')}")
+                self._record_phase_event('dedup', 'failed', {
+                    'error': dedup_result.get('error')
+                })
+            else:
+                merged = dedup_result.get('arcs_merged', 0)
+                groups = dedup_result.get('merged_groups', 0)
+                self.logger.info(f"🔗 Dedup completed: {groups} groups, {merged} arcs merged")
+                self._record_phase_event('dedup', 'completed', {
+                    'merged_groups': groups, 'arcs_merged': merged
+                })
+
             # Final summary
             return self._log_success(
                 start_time,

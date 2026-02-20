@@ -38,7 +38,7 @@ class SemanticTopicMatcher:
 
         Args:
             similarity_threshold: Consider topics as duplicates if similarity >= threshold.
-                                 If None, reads from web_settings (default 0.75 = 75% similar).
+                                 If None, reads from web_settings (default 0.65 = 65% similar).
         """
         self.client = OpenAI()
         self.web_config = WebConfigManager()
@@ -48,7 +48,7 @@ class SemanticTopicMatcher:
         # Read threshold from web_config if not explicitly provided
         if similarity_threshold is None:
             self.similarity_threshold = self.web_config.get_setting(
-                SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD, 0.75
+                SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD, 0.65
             )
         else:
             self.similarity_threshold = similarity_threshold

@@ -1081,10 +1081,15 @@ class DigestRepository:
 
         Filters out 0-episode digests since they have no content to convert to audio.
         Orders by episode_count DESC so digests with content are processed first.
+        Accepts digests with either script_path or script_content (database-first).
         """
+        from sqlalchemy import or_
         with self.db.get_session() as session:
             digest_models = session.query(DigestModel)\
-                .filter(DigestModel.script_path.isnot(None))\
+                .filter(or_(
+                    DigestModel.script_path.isnot(None),
+                    DigestModel.script_content.isnot(None)
+                ))\
                 .filter(DigestModel.mp3_path.is_(None))\
                 .filter(DigestModel.episode_count > 0)\
                 .order_by(DigestModel.episode_count.desc(), DigestModel.digest_date.asc())\

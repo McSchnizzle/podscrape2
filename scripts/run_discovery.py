@@ -112,23 +112,16 @@ class DiscoveryRunner:
         self.logger.info(f"Discovery initialized with {len(self.rss_feeds)} RSS feeds")
 
     def _load_feeds_from_database(self):
-        """Load active RSS feeds from database"""
+        """Load active feeds from database (RSS and YouTube)"""
         try:
             self.logger.info("Querying database for active feeds...")
             feeds = self.feed_repo.get_active_feeds()
             self.logger.info(f"✓ Retrieved {len(feeds)} active feeds from database")
 
             feed_list = []
-            self.logger.info("Filtering feeds (skipping YouTube and problematic feeds)...")
+            self.logger.info("Filtering feeds (skipping problematic feeds)...")
             for feed in feeds:
-                # Skip YouTube channels and other problematic feeds
                 if isinstance(feed.feed_url, str):
-                    if ('youtube.com' in feed.feed_url or
-                        'youtu.be' in feed.feed_url or
-                        feed.feed_url.startswith('https://www.youtube.com/@')):
-                        self.logger.info(f"SKIP: {feed.title} (YouTube feed not supported)")
-                        continue
-
                     # Skip feeds with known issues
                     problematic_patterns = [
                         'shows.acast.com/the-hopeful-majority',    # SSL/404 errors
@@ -140,11 +133,24 @@ class DiscoveryRunner:
                     if any(pattern in feed.feed_url for pattern in problematic_patterns):
                         self.logger.info(f"SKIP: {feed.title} (feed has known issues)")
                         continue
+
+                # Detect feed type
+                feed_type = getattr(feed, 'feed_type', 'rss')
+                if feed_type == 'rss' and isinstance(feed.feed_url, str):
+                    # Double-check URL pattern in case feed_type wasn't set
+                    if 'youtube.com' in feed.feed_url or 'youtu.be' in feed.feed_url:
+                        feed_type = 'youtube'
+
                 feed_list.append({
                     'id': feed.id,
                     'url': feed.feed_url,
-                    'name': feed.title
+                    'name': feed.title,
+                    'feed_type': feed_type
                 })
+
+            rss_count = sum(1 for f in feed_list if f['feed_type'] == 'rss')
+            yt_count = sum(1 for f in feed_list if f['feed_type'] == 'youtube')
+            self.logger.info(f"Active feeds: {rss_count} RSS, {yt_count} YouTube")
 
             return feed_list
         except Exception as e:
@@ -202,8 +208,9 @@ class DiscoveryRunner:
 
             feed_url = feed_info['url']
             feed_name = feed_info['name']
+            feed_type = feed_info.get('feed_type', 'rss')
 
-            self.logger.info(f"[{feed_idx}/{len(self.rss_feeds)}] Checking {feed_name}")
+            self.logger.info(f"[{feed_idx}/{len(self.rss_feeds)}] Checking {feed_name} [{feed_type}]")
             self.logger.info(f"  URL: {feed_url}")
 
             # Mark feed as checked
@@ -288,21 +295,34 @@ class DiscoveryRunner:
                             self.logger.warning(f"SKIP: {title[:60]}... (unknown status: {existing.status})")
                             continue
 
-                    # Find audio URL for new episodes
+                    # Find audio/video URL for new episodes
                     audio_url = None
-                    for link in entry.get('links', []):
-                        if link.get('type', '').startswith('audio/'):
-                            audio_url = link['href']
-                            break
 
-                    if not audio_url and hasattr(entry, 'enclosures'):
-                        for enclosure in entry.enclosures:
-                            if enclosure.type.startswith('audio/'):
-                                audio_url = enclosure.href
+                    if feed_type == 'youtube':
+                        # YouTube feeds: use the video watch URL as the "audio_url"
+                        # YouTube RSS entries have link to watch page
+                        audio_url = entry.get('link')
+                        if not audio_url:
+                            # Try extracting from entry ID (format: yt:video:VIDEO_ID)
+                            entry_id = entry.get('id', '')
+                            if 'yt:video:' in entry_id:
+                                video_id = entry_id.split('yt:video:')[-1]
+                                audio_url = f"https://www.youtube.com/watch?v={video_id}"
+                    else:
+                        # RSS podcast feeds: look for audio enclosure
+                        for link in entry.get('links', []):
+                            if link.get('type', '').startswith('audio/'):
+                                audio_url = link['href']
                                 break
 
+                        if not audio_url and hasattr(entry, 'enclosures'):
+                            for enclosure in entry.enclosures:
+                                if enclosure.type.startswith('audio/'):
+                                    audio_url = enclosure.href
+                                    break
+
                     if not audio_url:
-                        self.logger.info(f"SKIP: {title[:60]}... (no audio URL)")
+                        self.logger.info(f"SKIP: {title[:60]}... (no audio/video URL)")
                         continue
 
                     # Found new episode - create database record as 'pending'
@@ -334,6 +354,7 @@ class DiscoveryRunner:
                         'duration_seconds': None,
                         'feed_name': feed_name,
                         'feed_id': feed_info.get('id'),
+                        'feed_type': feed_type,
                         'mode': 'new'
                     })
                     # Continue checking for more episodes in this feed

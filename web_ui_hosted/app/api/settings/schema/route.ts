@@ -134,6 +134,11 @@ const AI_MODELS = {
   },
   whisper: {
     'whisper-1': { max_file_size_mb: 25, display_name: 'Whisper-1 (25MB limit)' }
+  },
+  anthropic: {
+    'claude-opus-4-5-20250220': { max_output: 32000, max_input: 200000, display_name: 'Claude Opus 4.5' },
+    'claude-sonnet-4-6-20250514': { max_output: 16000, max_input: 200000, display_name: 'Claude Sonnet 4.6' },
+    'claude-haiku-4-5-20251001': { max_output: 8192, max_input: 200000, display_name: 'Claude Haiku 4.5' },
   }
 }
 

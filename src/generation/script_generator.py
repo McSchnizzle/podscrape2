@@ -11,6 +11,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
+import anthropic
 
 from ..database.models import (
     Episode,
@@ -93,7 +94,8 @@ class ScriptGenerator:
             logger.debug("Ad filter initialization failed: %s", exc)
             self.ad_filter = None
 
-        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self.openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self.anthropic_client = None  # Lazy init when needed
         # Per-digest episode cap (from web config if available)
         self.max_episodes_per_digest = 5
         if self.web_config:
@@ -186,12 +188,57 @@ class ScriptGenerator:
         logger.info(f"Loaded instructions for {len(instructions)} topics (database-first architecture)")
         return instructions
 
+    def _is_anthropic_model(self, model: str = None) -> bool:
+        """Check if the configured or given model is an Anthropic Claude model."""
+        model = model or self.ai_model
+        return model.startswith('claude-')
+
+    def _get_model_provider(self, model: str = None) -> str:
+        """Determine provider for a model name."""
+        model = model or self.ai_model
+        if model.startswith('claude-'):
+            return 'anthropic'
+        return 'openai'
+
+    def _get_anthropic_client(self):
+        """Lazy-initialize and return the Anthropic client."""
+        if self.anthropic_client is None:
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+            if not api_key:
+                raise ScriptGenerationError("ANTHROPIC_API_KEY environment variable is required for Claude models")
+            self.anthropic_client = anthropic.Anthropic(api_key=api_key)
+        return self.anthropic_client
+
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+        """Route LLM call to the appropriate provider based on configured model."""
+        if self._is_anthropic_model():
+            client = self._get_anthropic_client()
+            response = client.messages.create(
+                model=self.ai_model,
+                max_tokens=int(self.max_output_tokens),
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}]
+            )
+            return response.content[0].text
+        else:
+            response = self.openai_client.responses.create(
+                model=self.ai_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                reasoning={"effort": "medium"},
+                max_output_tokens=self.max_output_tokens
+            )
+            return response.output_text
+
     def _validate_and_adjust_token_limit(self, model: str, requested_tokens: int, limit_type: str) -> int:
         """Validate and adjust token limit based on model capabilities"""
         if not self.web_config:
             return requested_tokens
 
-        max_limit = self.web_config.get_model_limit('openai', model, limit_type)
+        provider = self._get_model_provider(model)
+        max_limit = self.web_config.get_model_limit(provider, model, limit_type)
         if max_limit > 0 and requested_tokens > max_limit:
             logger.warning(
                 f"Requested {requested_tokens} {limit_type} tokens exceeds {model} limit of {max_limit}, adjusting to {max_limit}"
@@ -266,6 +313,7 @@ class ScriptGenerator:
         """
         Filter arcs to only those with supporting evidence in episode transcripts.
 
+        Uses semantic embedding similarity when available, with keyword fallback.
         This prevents hallucinations by ensuring GPT only references arcs that
         have actual content in the provided episodes.
 
@@ -280,6 +328,74 @@ class ScriptGenerator:
         if not arcs or not episodes:
             return []
 
+        # Try embedding-based grounding first
+        grounded_arcs = self._match_arcs_via_embeddings(arcs, episodes)
+        if grounded_arcs is not None:
+            return grounded_arcs
+
+        # Fallback to keyword matching
+        return self._match_arcs_via_keywords(arcs, episodes)
+
+    def _match_arcs_via_embeddings(self, arcs: List[Dict], episodes: List[Episode]) -> Optional[List[Dict]]:
+        """
+        Match arcs to episodes using semantic embedding similarity.
+        Returns None if embeddings are unavailable (triggers keyword fallback).
+        """
+        try:
+            from src.topic_tracking.semantic_matcher import SemanticTopicMatcher
+            matcher = SemanticTopicMatcher()
+
+            # Build episode text snippets (first 2000 chars of transcript for efficiency)
+            episode_texts = []
+            episode_titles = []
+            for ep in episodes:
+                transcript = (ep.transcript_content or '')[:2000]
+                if transcript:
+                    episode_texts.append(f"{ep.title}: {transcript}")
+                    episode_titles.append(ep.title)
+
+            if not episode_texts:
+                return []
+
+            # Get episode embeddings
+            episode_embeddings = [matcher._get_embedding(text) for text in episode_texts]
+
+            grounded_arcs = []
+            similarity_threshold = 0.35  # Lower threshold for arc-to-transcript matching
+
+            for arc in arcs:
+                arc_name = arc.get('arc_name', '')
+                # Include recent event summaries for richer arc representation
+                events = arc.get('events', [])
+                event_text = ' '.join(e.get('event_summary', '')[:100] for e in events[:3])
+                arc_text = f"{arc_name} {event_text}".strip()
+
+                if not arc_text:
+                    continue
+
+                arc_embedding = matcher._get_embedding(arc_text)
+
+                # Find supporting episodes
+                supporting_episodes = []
+                for i, ep_emb in enumerate(episode_embeddings):
+                    similarity = matcher._cosine_similarity(arc_embedding, ep_emb)
+                    if similarity >= similarity_threshold:
+                        supporting_episodes.append(episode_titles[i])
+
+                if supporting_episodes:
+                    arc_copy = arc.copy()
+                    arc_copy['supporting_episodes'] = supporting_episodes[:3]
+                    grounded_arcs.append(arc_copy)
+
+            logger.info(f"Story arc grounding (embeddings): {len(grounded_arcs)}/{len(arcs)} arcs have supporting episodes")
+            return grounded_arcs
+
+        except Exception as e:
+            logger.warning(f"Embedding-based arc grounding failed, falling back to keywords: {e}")
+            return None
+
+    def _match_arcs_via_keywords(self, arcs: List[Dict], episodes: List[Episode]) -> List[Dict]:
+        """Fallback keyword-based arc matching."""
         grounded_arcs = []
 
         for arc in arcs:
@@ -306,10 +422,10 @@ class ScriptGenerator:
             # Only include arc if it has supporting evidence
             if supporting_episodes:
                 arc_copy = arc.copy()
-                arc_copy['supporting_episodes'] = supporting_episodes[:3]  # Limit to 3
+                arc_copy['supporting_episodes'] = supporting_episodes[:3]
                 grounded_arcs.append(arc_copy)
 
-        logger.info(f"Story arc grounding: {len(grounded_arcs)}/{len(arcs)} arcs have supporting episodes")
+        logger.info(f"Story arc grounding (keywords): {len(grounded_arcs)}/{len(arcs)} arcs have supporting episodes")
         return grounded_arcs
 
     def _normalize_arc_name_for_tts(self, arc_name: str) -> str:
@@ -441,6 +557,9 @@ class ScriptGenerator:
                 if not arcs:
                     logger.info(f"No story arcs have supporting evidence in episodes for {digest_topic}")
                     return ""
+
+            # Deprioritize saturated arcs (covered 3+ times) by sorting them lower
+            arcs.sort(key=lambda a: a.get('saturation_score', 0.0))
 
             # Classify into hot/developing
             classified = self._classify_story_arcs(arcs)
@@ -726,7 +845,7 @@ If an arc is on this list AND has no new developments, it must be skipped.
                                   recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
         """
         Generate dialogue-style script for multi-voice delivery (v3 with audio tags).
-        Target: 15,000-20,000 characters with SPEAKER_1/SPEAKER_2 labels.
+        Target: 25,000-30,000 characters with SPEAKER_1/SPEAKER_2 labels.
 
         Args:
             topic: Topic name
@@ -834,7 +953,7 @@ Do not invent or assume developments not present in the transcript content.
 If a story arc is listed above but has no supporting content in today's episodes, do not mention it.
 
 REQUIREMENTS:
-- Target 15,000-20,000 characters (this is measured in characters, not words)
+- Target 25,000-30,000 characters (this is measured in characters, not words)
 - Create engaging dialogue between {speaker_1_name} and {speaker_2_name}
 - Use audio tags liberally to add emotional warmth and expression
 - Follow the structure outlined in the topic instructions
@@ -873,20 +992,10 @@ SPEAKER_2: [audio_tag] dialogue text...
 
 The colon MUST come immediately after the speaker number, BEFORE the audio tag.
 
-Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
+Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
 
         try:
-            response = self.client.responses.create(
-                model=self.ai_model,
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                reasoning={"effort": "medium"},
-                max_output_tokens=self.max_output_tokens
-            )
-
-            script_content = response.output_text
+            script_content = self._call_llm(system_prompt, user_prompt)
             char_count = len(script_content)
 
             # Validate and fix dialogue format (v1.96 - enforce SPEAKER_1: format)
@@ -896,10 +1005,10 @@ Target 15,000-20,000 characters. Use audio tags like [excited], [thoughtful], [c
                 char_count = len(script_content)  # Update char count after fixes
 
             # Validate character count
-            if char_count < 15000:
-                logger.warning(f"Dialogue script is shorter than target: {char_count} < 15,000 characters")
-            elif char_count > 20000:
-                logger.warning(f"Dialogue script exceeds target: {char_count} > 20,000 characters")
+            if char_count < 25000:
+                logger.warning(f"Dialogue script is shorter than target: {char_count} < 25,000 characters")
+            elif char_count > 30000:
+                logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
 
             logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes")
             return script_content, char_count
@@ -1116,17 +1225,7 @@ Transcript:
 REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable."""
 
         try:
-            response = self.client.responses.create(
-                model=self.ai_model,
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                reasoning={"effort": "medium"},
-                max_output_tokens=self.max_output_tokens
-            )
-
-            script_content = response.output_text
+            script_content = self._call_llm(system_prompt, user_prompt)
             char_count = len(script_content)
 
             # Validate character count
@@ -1158,7 +1257,18 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
             start_date=start_date,
             end_date=end_date
         )
-        
+
+        # Filter out episodes with transcripts too short for meaningful digest content
+        MIN_DIGEST_TRANSCRIPT_CHARS = 1000
+        before_count = len(all_qualifying)
+        all_qualifying = [
+            ep for ep in all_qualifying
+            if ep.transcript_content and len(ep.transcript_content) >= MIN_DIGEST_TRANSCRIPT_CHARS
+        ]
+        filtered_count = before_count - len(all_qualifying)
+        if filtered_count > 0:
+            logger.warning(f"Filtered out {filtered_count} episodes with transcripts shorter than {MIN_DIGEST_TRANSCRIPT_CHARS} chars")
+
         # Determine cap
         cap = max_episodes if isinstance(max_episodes, int) and max_episodes > 0 else self.max_episodes_per_digest
         # If we have more than cap, take the highest scoring ones
@@ -1179,7 +1289,7 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
         Check if the digest would have significant overlap with recent coverage.
 
         Compares active story arcs against arcs included in digests from
-        the last 3 days. If >50% of arcs were recently covered, returns
+        the last 3 days. If >20% of arcs were recently covered, returns
         info to help the prompt focus on NEW developments only.
 
         Args:
@@ -1219,8 +1329,8 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
 
             overlap_pct = (overlap_count / total_active) * 100
 
-            # Check if significant overlap (>50%)
-            has_significant_overlap = overlap_pct > 50
+            # Check if significant overlap (>20% - lowered from 50% for better repetition avoidance)
+            has_significant_overlap = overlap_pct > 20
 
             if has_significant_overlap:
                 message = (
@@ -1638,16 +1748,11 @@ Transcript: {transcript['transcript'][:transcript_limit]}
         user_prompt += "\nCreate an engaging general digest that highlights the most interesting insights from these episodes. You have full transcripts for all episodes above - discuss each episode's content directly."
 
         try:
-            response = self.client.responses.create(
-                model=self.ai_model,
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_output_tokens=min(self.max_output_tokens, 2000)
-            )
-            
-            script = response.output_text
+            # For general summary, temporarily override max_output_tokens
+            original_max = self.max_output_tokens
+            self.max_output_tokens = min(int(self.max_output_tokens), 2000)
+            script = self._call_llm(system_prompt, user_prompt)
+            self.max_output_tokens = original_max
             word_count = len(script.split())
             
             if word_count > 1200:

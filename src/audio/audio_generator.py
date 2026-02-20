@@ -893,8 +893,8 @@ class AudioGenerator:
 
         Based on topic configuration (use_dialogue_api, dialogue_model, voice_config)
         """
-        if not digest.script_path:
-            raise AudioGenerationError(f"Digest {digest.id} has no script path")
+        if not digest.script_path and not digest.script_content:
+            raise AudioGenerationError(f"Digest {digest.id} has no script path or script content")
 
         logger.info(f"Generating audio for digest {digest.id}: {digest.topic}")
 
@@ -902,12 +902,13 @@ class AudioGenerator:
         from pathlib import Path as _P
         import re as _re
         ts = None
-        try:
-            m = _re.search(r"_(\d{8}_\d{6})\.md$", str(_P(digest.script_path).name))
-            if m:
-                ts = m.group(1)
-        except Exception:
-            ts = None
+        if digest.script_path:
+            try:
+                m = _re.search(r"_(\d{8}_\d{6})\.md$", str(_P(digest.script_path).name))
+                if m:
+                    ts = m.group(1)
+            except Exception:
+                ts = None
 
         # Get topic configuration from database
         topic_repo = get_topic_repo()

@@ -187,10 +187,16 @@ class DigestRunner:
 
 
     def _run_reconciliation(self, generated_digests: list):
-        """Run post-digest story arc reconciliation for each topic that produced a digest."""
+        """Run post-digest story arc reconciliation for each topic that produced a digest.
+
+        Also marks newly created arcs as covered by the triggering digest,
+        since they were discovered from that digest's content.
+        """
         try:
             from src.topic_tracking.digest_arc_reconciler import DigestArcReconciler
+            from src.database.story_arc_repo import get_story_arc_repo
             reconciler = DigestArcReconciler()
+            arc_repo = get_story_arc_repo()
 
             # Get unique topics from generated digests
             topics = set(d.get('topic') for d in generated_digests if d.get('topic'))
@@ -204,6 +210,25 @@ class DigestRunner:
                         f"{result['arcs_skipped']} skipped, "
                         f"{result['stories_found']} stories found"
                     )
+
+                    # Mark newly created arcs as covered by the triggering digest
+                    if result['arcs_created'] > 0:
+                        # Find the digest that triggered this reconciliation
+                        topic_digests = [d for d in generated_digests if d.get('topic') == topic]
+                        if topic_digests:
+                            digest_id = topic_digests[0].get('id')
+                            if digest_id:
+                                marked = 0
+                                for detail in result.get('details', []):
+                                    if detail.get('action') == 'created' and detail.get('arc_id'):
+                                        arc_repo.mark_story_arc_included(
+                                            story_arc_id=detail['arc_id'],
+                                            digest_id=digest_id
+                                        )
+                                        marked += 1
+                                if marked:
+                                    self.logger.info(f"Marked {marked} reconciled arcs as covered by digest {digest_id}")
+
                 except Exception as e:
                     self.logger.warning(f"Reconciliation failed for '{topic}': {e}")
         except Exception as e:

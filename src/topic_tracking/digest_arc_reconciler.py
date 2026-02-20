@@ -179,22 +179,12 @@ class DigestArcReconciler:
                 arcs_created += 1
             else:
                 try:
-                    now = datetime.now(timezone.utc)
                     arc = self.repo.create_story_arc(
                         arc_name=story_name,
                         digest_topic=digest_topic,
                         functional_category=category,
-                        initial_event={
-                            'event_date': now,
-                            'event_summary': f"Recurring story detected across {occurrences} digests: {summary}",
-                            'key_points': [summary],
-                            'source_feed_id': None,
-                            'source_episode_id': None,
-                            'source_episode_guid': None,
-                            'source_name': 'digest_reconciler',
-                            'perspective': 'neutral',
-                            'relevance_score': None
-                        }
+                        # No initial_event - reconciler creates arc shells only.
+                        # Real events are added when episodes mention the arc.
                     )
                     logger.info(
                         f"Created arc: '{story_name}' (id={arc['id']}, "

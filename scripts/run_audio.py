@@ -250,6 +250,12 @@ class AudioProcessor_Runner:
                     })
                     continue
 
+                # Skip scoring for episodes that were skipped (e.g. YouTube quality check failed)
+                if audio_result.get('skipped'):
+                    self.logger.info(f"⏭️ Skipped: {audio_result.get('message', 'skipped')}")
+                    not_relevant_count += 1
+                    continue
+
                 # Step 2: Score the episode immediately after transcription
                 scoring_outcome = self._score_episode_immediately(episode.episode_guid)
 
@@ -441,7 +447,7 @@ class AudioProcessor_Runner:
                 }
                 
                 audio_result = self._process_episode_audio(episode_data)
-                
+
                 if not audio_result.get('success'):
                     return {
                         'guid': episode.episode_guid,
@@ -449,7 +455,20 @@ class AudioProcessor_Runner:
                         'error': audio_result.get('error', 'Audio processing failed'),
                         'type': 'failed'
                     }
-                
+
+                # Skip scoring for episodes that were skipped (e.g. YouTube quality check failed)
+                if audio_result.get('skipped'):
+                    self.logger.info(f"⏭️ Skipped: {audio_result.get('message', 'skipped')}")
+                    with lock:
+                        not_relevant_count += 1
+                    return {
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'status': 'not_relevant',
+                        'is_relevant': False,
+                        'type': 'skipped'
+                    }
+
                 # Score episode immediately
                 scoring_outcome = self._score_episode_immediately(episode.episode_guid)
                 if not scoring_outcome.get('success'):
@@ -562,10 +581,12 @@ class AudioProcessor_Runner:
         self.logger.info(f"   Peak workers: {actual_max_workers}")
         self.logger.info(f"   Performance: ~{actual_max_workers}x faster than sequential")
 
-        # Success criteria: No failures occurred
-        # Note: Finding 0 relevant episodes is NOT a failure - it's a valid outcome
-        # The pipeline successfully processed all available episodes
-        success = len(failed_episodes) == 0
+        # Success criteria: Phase succeeds if episodes were processed, even if some individually failed
+        # Individual episode failures (e.g. short YouTube transcripts) shouldn't fail the whole phase
+        success = len(processed_episodes) > 0 or len(failed_episodes) == 0
+
+        if len(failed_episodes) > 0:
+            self.logger.warning(f"⚠️ {len(failed_episodes)} episode(s) failed individually (phase still successful)")
 
         if success and relevant_count == 0 and total_processed > 0:
             self.logger.info("✓ Audio phase completed successfully (0 relevant episodes found - this is normal)")
@@ -680,7 +701,7 @@ class AudioProcessor_Runner:
                 })
 
         return {
-            'success': len(failed_episodes) == 0,
+            'success': len(processed_episodes) > 0 or len(failed_episodes) == 0,
             'episodes_processed': len(processed_episodes),
             'episodes_failed': len(failed_episodes),
             'episodes': processed_episodes,
@@ -734,6 +755,10 @@ class AudioProcessor_Runner:
                 'skipped': True,
                 'message': 'Episode previously marked not relevant; skipping audio processing'
             }
+
+        # Check if this is a YouTube episode - fetch transcript directly instead of audio
+        if self._is_youtube_episode(episode_data, db_episode):
+            return self._process_youtube_transcript(episode_data, db_episode)
 
         try:
             # Step 1: Download audio
@@ -835,6 +860,43 @@ class AudioProcessor_Runner:
 
             self.logger.info(f"✅ Transcription complete: {total_words:,} words")
 
+            # Validate minimum transcript length to prevent low-quality content
+            MIN_TRANSCRIPT_WORDS = 50
+            if total_words < MIN_TRANSCRIPT_WORDS:
+                self.logger.warning(
+                    f"Transcript too short ({total_words} words, minimum {MIN_TRANSCRIPT_WORDS}). "
+                    f"Episode may be intro/trailer/music-only. Marking as not_relevant."
+                )
+                self.episode_repo.update_status(episode_guid, 'not_relevant')
+
+                # Track short transcript in workflow_errors for pattern analysis
+                try:
+                    from src.database.models import WorkflowError, get_workflow_error_repo
+                    error_repo = get_workflow_error_repo()
+                    error_repo.create(WorkflowError(
+                        error_date=datetime.now().date(),
+                        occurred_at=datetime.now(),
+                        run_id=f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                        error_category='short_transcript',
+                        phase='audio',
+                        error_message=f"Transcript too short: {total_words} words (min {MIN_TRANSCRIPT_WORDS})",
+                        severity='warning',
+                        feed_id=db_episode.feed_id,
+                        episode_id=db_episode.id,
+                        episode_title=db_episode.title,
+                    ))
+                except Exception as track_err:
+                    self.logger.debug(f"Failed to track short transcript: {track_err}")
+
+                return {
+                    'success': True,
+                    'guid': episode_guid,
+                    'title': db_episode.title,
+                    'status': 'not_relevant',
+                    'skipped': True,
+                    'message': f'Transcript too short ({total_words} words) - likely not substantive content'
+                }
+
             return {
                 'success': True,
                 'guid': episode_guid,
@@ -867,6 +929,141 @@ class AudioProcessor_Runner:
                 'success': False,
                 'error': error_str
             }
+
+    def _is_youtube_episode(self, episode_data, db_episode):
+        """Detect whether this episode is from a YouTube channel."""
+        # Check feed_type from discovery data
+        if episode_data.get('feed_type') == 'youtube':
+            return True
+        # Check audio_url pattern as fallback
+        audio_url = db_episode.audio_url or ''
+        return ('youtube.com/watch' in audio_url or
+                'youtube.com/shorts/' in audio_url or
+                'youtu.be/' in audio_url)
+
+    def _extract_youtube_video_id(self, url):
+        """Extract YouTube video ID from various URL formats."""
+        import re
+        patterns = [
+            r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
+            r'youtube\.com/shorts/([a-zA-Z0-9_-]{11})',
+            r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url or '')
+            if match:
+                return match.group(1)
+        return None
+
+    def _process_youtube_transcript(self, episode_data, db_episode):
+        """Process a YouTube episode by fetching its transcript directly (no audio download)."""
+        episode_guid = db_episode.episode_guid
+        video_id = self._extract_youtube_video_id(db_episode.audio_url)
+
+        if not video_id:
+            self.logger.warning(f"Could not extract video ID from URL: {db_episode.audio_url}")
+            self.episode_repo.mark_failure(episode_guid, "Could not extract YouTube video ID")
+            return {'success': False, 'error': 'Could not extract YouTube video ID'}
+
+        self.logger.info(f"📺 YouTube episode detected - fetching transcript for video: {video_id}")
+
+        try:
+            # Use the existing TranscriptProcessor
+            from src.youtube.transcript_processor import TranscriptProcessor
+
+            processor = TranscriptProcessor()
+            transcript_data = processor.fetch_transcript(video_id)
+
+            if not transcript_data:
+                self.logger.warning(f"No transcript available for YouTube video {video_id}")
+                self.episode_repo.update_status(episode_guid, 'not_relevant')
+                return {
+                    'success': True, 'guid': episode_guid, 'title': db_episode.title,
+                    'status': 'not_relevant', 'skipped': True,
+                    'message': f'No YouTube transcript available for video {video_id}'
+                }
+
+            # Validate transcript quality
+            is_valid, reason = processor.validate_transcript_quality(transcript_data)
+            if not is_valid:
+                self.logger.warning(f"YouTube transcript quality check failed: {reason}")
+                self.episode_repo.update_status(episode_guid, 'not_relevant')
+                return {
+                    'success': True, 'guid': episode_guid, 'title': db_episode.title,
+                    'status': 'not_relevant', 'skipped': True,
+                    'message': f'YouTube transcript quality insufficient: {reason}'
+                }
+
+            # Extract plain text and build transcript with metadata header
+            transcript_text = processor.get_transcript_text(transcript_data)
+            total_words = transcript_data.word_count
+
+            feed_name = episode_data.get('feed_name', 'Unknown')
+            transcript_with_metadata = (
+                f"# Complete Transcript\n"
+                f"# Episode: {db_episode.title}\n"
+                f"# Feed: {feed_name}\n"
+                f"# Source: YouTube ({video_id})\n"
+                f"# GUID: {episode_guid}\n"
+                f"# Language: {transcript_data.language}\n"
+                f"# Auto-generated: {transcript_data.is_auto_generated}\n"
+                f"# Duration: {transcript_data.total_duration:.0f}s\n"
+                f"# Processed: {datetime.now().isoformat()}\n"
+                f"# Words: {total_words:,}\n\n"
+                + transcript_text
+            )
+
+            # Store transcript in database
+            self.episode_repo.update_transcript(episode_guid, None, total_words, transcript_with_metadata)
+
+            # Update duration from transcript data if available
+            if transcript_data.total_duration > 0 and not db_episode.duration_seconds:
+                try:
+                    from src.database.models import get_database_manager
+                    from src.database.sqlalchemy_models import Episode as EpisodeModel
+                    db_manager = get_database_manager()
+                    with db_manager.get_session() as session:
+                        ep = session.query(EpisodeModel).filter(
+                            EpisodeModel.episode_guid == episode_guid
+                        ).first()
+                        if ep:
+                            ep.duration_seconds = int(transcript_data.total_duration)
+                            session.commit()
+                except Exception as dur_err:
+                    self.logger.debug(f"Failed to update duration: {dur_err}")
+
+            self.logger.info(f"✅ YouTube transcript complete: {total_words:,} words, {transcript_data.total_duration:.0f}s")
+
+            # Apply minimum transcript length check (same as audio path)
+            MIN_TRANSCRIPT_WORDS = 50
+            if total_words < MIN_TRANSCRIPT_WORDS:
+                self.logger.warning(
+                    f"YouTube transcript too short ({total_words} words, minimum {MIN_TRANSCRIPT_WORDS}). "
+                    f"Marking as not_relevant."
+                )
+                self.episode_repo.update_status(episode_guid, 'not_relevant')
+                return {
+                    'success': True, 'guid': episode_guid, 'title': db_episode.title,
+                    'status': 'not_relevant', 'skipped': True,
+                    'message': f'YouTube transcript too short ({total_words} words)'
+                }
+
+            return {
+                'success': True,
+                'guid': episode_guid,
+                'title': db_episode.title,
+                'status': 'transcribed',
+                'transcript_path': None,
+                'transcript_words': total_words,
+                'chunks_processed': 0,
+                'source': 'youtube'
+            }
+
+        except Exception as e:
+            error_str = str(e)
+            self.logger.error(f"YouTube transcript fetch failed: {error_str}")
+            self.episode_repo.mark_failure(episode_guid, f"YouTube transcript error: {error_str}")
+            return {'success': False, 'error': error_str}
 
     def _cleanup_audio_files(self, episode_guid, chunk_paths):
         """Clean up temporary audio files"""
@@ -914,8 +1111,10 @@ class AudioProcessor_Runner:
                 self.logger.warning(message)
                 return {'success': False, 'error': message, 'scores': {}}
 
-            if not db_episode.transcript_content:
-                message = f"No transcript available for immediate scoring: {episode_guid}"
+            MIN_SCORING_CHARS = 500
+            transcript_len = len(db_episode.transcript_content or '')
+            if not db_episode.transcript_content or transcript_len < MIN_SCORING_CHARS:
+                message = f"Transcript too short for scoring ({transcript_len} chars, minimum {MIN_SCORING_CHARS}): {episode_guid}"
                 self.logger.warning(message)
                 return {'success': False, 'error': message, 'scores': {}}
 

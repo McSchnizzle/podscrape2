@@ -102,6 +102,7 @@ function extractErrorSummary(message: string): string {
 export interface Feed {
   id: number
   feed_url: string  // matches database field name
+  feed_type: string  // 'rss' or 'youtube'
   title: string
   description?: string
   active: boolean   // matches database field name

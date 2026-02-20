@@ -156,6 +156,11 @@ AI_MODELS = {
     },
     'whisper': {
         'whisper-1': {'max_file_size_mb': 25, 'display_name': 'Whisper-1 (25MB limit)'}
+    },
+    'anthropic': {
+        'claude-opus-4-5-20250220': {'max_output': 32000, 'max_input': 200000, 'display_name': 'Claude Opus 4.5'},
+        'claude-sonnet-4-6-20250514': {'max_output': 16000, 'max_input': 200000, 'display_name': 'Claude Sonnet 4.6'},
+        'claude-haiku-4-5-20251001': {'max_output': 8192, 'max_input': 200000, 'display_name': 'Claude Haiku 4.5'},
     }
 }
 
@@ -407,7 +412,7 @@ class WebConfigManager:
 
         model_info = AI_MODELS[provider][model]
 
-        if provider == 'openai':
+        if provider in ('openai', 'anthropic'):
             if limit_type == 'max_output':
                 return value <= model_info.get('max_output', 4096)
             elif limit_type == 'max_input':
@@ -428,7 +433,7 @@ class WebConfigManager:
 
         model_info = AI_MODELS[provider][model]
 
-        if provider == 'openai':
+        if provider in ('openai', 'anthropic'):
             if limit_type == 'max_output':
                 return model_info.get('max_output', 4096)
             elif limit_type == 'max_input':
@@ -453,7 +458,8 @@ class WebConfigManager:
         limit_type = None
 
         if 'content_scoring' in category or 'digest_generation' in category or 'metadata_generation' in category:
-            provider = 'openai'
+            # Determine provider from model name
+            provider = 'anthropic' if model_name and model_name.startswith('claude-') else 'openai'
             if 'output' in limit_key:
                 limit_type = 'max_output'
             else:

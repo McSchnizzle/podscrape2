@@ -404,8 +404,10 @@ class TranscriptProcessor:
         unique_words = set(words)
         repetition_ratio = len(words) / len(unique_words) if unique_words else 0
         
-        if repetition_ratio > 3.0:  # Too much repetition
-            return False, f"Excessive repetition detected: ratio {repetition_ratio:.1f}"
+        # Auto-generated transcripts have naturally high repetition (5-7 is normal for speech)
+        max_repetition = 10.0 if transcript_data.is_auto_generated else 6.0
+        if repetition_ratio > max_repetition:
+            return False, f"Excessive repetition detected: ratio {repetition_ratio:.1f} (max {max_repetition})"
         
         # Check total duration makes sense
         if transcript_data.total_duration < 180:  # Less than 3 minutes

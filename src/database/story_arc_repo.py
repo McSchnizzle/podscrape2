@@ -10,7 +10,7 @@ from typing import List, Dict, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
-from src.database.sqlalchemy_models import StoryArc, StoryArcEvent, Feed
+from src.database.sqlalchemy_models import StoryArc, StoryArcEvent, StoryArcCoverage, Feed
 from src.database.models import get_database_manager
 
 
@@ -308,6 +308,9 @@ class StoryArcRepository:
         """
         Mark a story arc as included in a digest.
 
+        Writes to both the story_arc_coverage junction table (many-to-many)
+        and the legacy included_in_digest_id column for backward compatibility.
+
         Args:
             story_arc_id: Arc ID
             digest_id: Digest ID
@@ -320,9 +323,27 @@ class StoryArcRepository:
             ).first()
 
             if arc:
+                # Legacy column (backward compat)
                 arc.included_in_digest_id = digest_id
                 arc.included_at = now
                 arc.updated_at = now
+
+                # Junction table (many-to-many)
+                existing = session.query(StoryArcCoverage).filter(
+                    StoryArcCoverage.story_arc_id == story_arc_id,
+                    StoryArcCoverage.digest_id == digest_id
+                ).first()
+                if not existing:
+                    coverage = StoryArcCoverage(
+                        story_arc_id=story_arc_id,
+                        digest_id=digest_id,
+                        covered_at=now
+                    )
+                    session.add(coverage)
+
+                    # Increment saturation score (each coverage adds 0.3, capped at 1.0)
+                    arc.saturation_score = min(1.0, (arc.saturation_score or 0.0) + 0.3)
+
                 session.commit()
 
     def get_recently_included_arcs(
@@ -332,6 +353,9 @@ class StoryArcRepository:
     ) -> List[Dict]:
         """
         Get story arcs that were included in digests within the lookback window.
+
+        Uses the story_arc_coverage junction table for many-to-many lookups,
+        with fallback to the legacy included_at column.
 
         Args:
             digest_topic: Filter by parent topic
@@ -343,13 +367,31 @@ class StoryArcRepository:
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         with self.db_manager.get_session() as session:
-            arcs = session.query(StoryArc).filter(
-                StoryArc.digest_topic == digest_topic,
-                StoryArc.included_at.isnot(None),
-                StoryArc.included_at >= cutoff_date
-            ).order_by(
-                StoryArc.included_at.desc()
-            ).all()
+            # Use junction table for many-to-many lookup
+            try:
+                arc_ids_from_coverage = session.query(
+                    StoryArcCoverage.story_arc_id
+                ).filter(
+                    StoryArcCoverage.covered_at >= cutoff_date
+                ).distinct().subquery()
+
+                arcs = session.query(StoryArc).filter(
+                    StoryArc.digest_topic == digest_topic,
+                    StoryArc.id.in_(
+                        session.query(arc_ids_from_coverage.c.story_arc_id)
+                    )
+                ).order_by(
+                    StoryArc.last_updated_at.desc()
+                ).all()
+            except Exception:
+                # Fallback to legacy column if junction table doesn't exist yet
+                arcs = session.query(StoryArc).filter(
+                    StoryArc.digest_topic == digest_topic,
+                    StoryArc.included_at.isnot(None),
+                    StoryArc.included_at >= cutoff_date
+                ).order_by(
+                    StoryArc.included_at.desc()
+                ).all()
 
             return [self._arc_to_dict(arc, include_events=False) for arc in arcs]
 
@@ -545,6 +587,7 @@ class StoryArcRepository:
             'source_count': arc.source_count,
             'included_in_digest_id': arc.included_in_digest_id,
             'included_at': arc.included_at,
+            'saturation_score': arc.saturation_score or 0.0,
             'created_at': arc.created_at,
             'updated_at': arc.updated_at,
         }
@@ -573,6 +616,87 @@ class StoryArcRepository:
             'extracted_at': event.extracted_at,
             'created_at': event.created_at,
         }
+
+
+    def merge_arcs(self, primary_arc_id: int, duplicate_arc_ids: List[int]) -> Dict:
+        """
+        Merge duplicate arcs into a primary arc.
+
+        Moves all events from duplicates to primary, updates counters,
+        migrates coverage records, and deletes the duplicates.
+
+        Args:
+            primary_arc_id: ID of the arc to keep
+            duplicate_arc_ids: IDs of arcs to merge into the primary
+
+        Returns:
+            Dict with merge results
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        with self.db_manager.get_session() as session:
+            primary = session.query(StoryArc).filter(StoryArc.id == primary_arc_id).first()
+            if not primary:
+                return {'error': f'Primary arc {primary_arc_id} not found', 'merged': 0}
+
+            merged = 0
+            for dup_id in duplicate_arc_ids:
+                dup = session.query(StoryArc).filter(StoryArc.id == dup_id).first()
+                if not dup:
+                    logger.warning(f"Duplicate arc {dup_id} not found, skipping")
+                    continue
+
+                # Move events
+                events = session.query(StoryArcEvent).filter(
+                    StoryArcEvent.story_arc_id == dup.id
+                ).all()
+                for event in events:
+                    event.story_arc_id = primary.id
+
+                # Move coverage records
+                coverages = session.query(StoryArcCoverage).filter(
+                    StoryArcCoverage.story_arc_id == dup.id
+                ).all()
+                for cov in coverages:
+                    # Check if primary already has this digest coverage
+                    existing = session.query(StoryArcCoverage).filter(
+                        StoryArcCoverage.story_arc_id == primary.id,
+                        StoryArcCoverage.digest_id == cov.digest_id
+                    ).first()
+                    if existing:
+                        session.delete(cov)
+                    else:
+                        cov.story_arc_id = primary.id
+
+                # Update counters
+                primary.event_count += dup.event_count
+                primary.source_count = max(primary.source_count, dup.source_count)
+                if dup.started_at < primary.started_at:
+                    primary.started_at = dup.started_at
+                if dup.last_updated_at > primary.last_updated_at:
+                    primary.last_updated_at = dup.last_updated_at
+
+                # Recalculate saturation from coverage count
+                coverage_count = session.query(StoryArcCoverage).filter(
+                    StoryArcCoverage.story_arc_id == primary.id
+                ).count()
+                primary.saturation_score = min(1.0, coverage_count * 0.3)
+
+                logger.info(f"Merged arc #{dup.id} '{dup.arc_name[:50]}' → #{primary.id}")
+                session.delete(dup)
+                merged += 1
+
+            primary.updated_at = datetime.now(timezone.utc)
+            session.commit()
+
+            return {
+                'primary_id': primary.id,
+                'primary_name': primary.arc_name,
+                'merged': merged,
+                'new_event_count': primary.event_count,
+                'new_saturation': primary.saturation_score,
+            }
 
 
 def get_story_arc_repo() -> StoryArcRepository:

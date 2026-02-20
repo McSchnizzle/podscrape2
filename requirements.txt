@@ -12,6 +12,7 @@ yt-dlp>=2023.7.6               # YouTube metadata and channel resolution
 
 # AI & LLM APIs
 openai>=1.0.0                  # GPT-5 models for scoring and generation
+anthropic>=0.75.0              # Claude models for digest generation
 elevenlabs>=0.2.26             # TTS audio generation
 
 # Audio Processing

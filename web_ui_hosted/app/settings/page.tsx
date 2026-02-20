@@ -676,7 +676,12 @@ export default function SettingsPage() {
                     onChange={(e) => updateLocalSetting('ai_digest_generation', 'model', e.target.value)}
                     disabled={saving}
                   >
-                    {renderModelOptions('openai')}
+                    <optgroup label="OpenAI">
+                      {renderModelOptions('openai')}
+                    </optgroup>
+                    <optgroup label="Anthropic">
+                      {renderModelOptions('anthropic')}
+                    </optgroup>
                   </select>
                 </div>
                 <div>

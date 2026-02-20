@@ -35,3 +35,25 @@ Stack: Python 3.13+, Next.js, PostgreSQL (Supabase), OpenAI, ElevenLabs
 - Episode status flow: pending → processing → transcribed → scored → digested
 - RLS enabled on ALL tables - use service role for backend operations
 - Audio chunks: 3 minutes for optimal ASR performance
+
+
+### Learned Patterns (2026-02-20 08:08)
+
+- **Gotcha**: now that i think about it, the only reason that project's youtube transcripts are separate from your rss feeds was because your feed cron job used to 
+
+
+### Learned Patterns (2026-02-20 08:08)
+
+- **Gotcha**: now that i think about it, the only reason that project's youtube transcripts are separate from your rss feeds was because your feed cron job used to 
+
+
+### Learned Patterns (2026-02-20 08:26)
+
+- **Error encountered**: ### Summary of the Issue
+- **Error encountered**: involves episodes with very short transcripts (potentially as low as 241 characters) being accepted into the pipeline, scored by GPT, and included in 
+
+
+### Learned Patterns (2026-02-20 09:25)
+
+- **Error encountered**: with exit code 1</summary>
+- **Gotcha**: to not corrupt the other data

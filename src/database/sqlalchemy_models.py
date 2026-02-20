@@ -47,6 +47,7 @@ class Feed(Base):
 
     id = Column(Integer, primary_key=True)
     feed_url = Column(String(2048), nullable=False, unique=True)
+    feed_type = Column(String(50), nullable=False, default='rss')  # 'rss' or 'youtube'
     title = Column(String(512), nullable=False)
     description = Column(Text)
     active = Column(Boolean, nullable=False, default=True)
@@ -472,6 +473,7 @@ class StoryArc(Base):
     source_count = Column(Integer, nullable=False, default=1)
     included_in_digest_id = Column(Integer)
     included_at = Column(DateTime(timezone=True))
+    saturation_score = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -511,4 +513,20 @@ class StoryArcEvent(Base):
         Index('ix_story_arc_events_arc_id', 'story_arc_id'),
         Index('ix_story_arc_events_date', 'event_date'),
         Index('ix_story_arc_events_episode', 'source_episode_id'),
+    )
+
+
+class StoryArcCoverage(Base):
+    """Junction table tracking which digests covered which story arcs (many-to-many)"""
+    __tablename__ = "story_arc_coverage"
+
+    id = Column(Integer, primary_key=True)
+    story_arc_id = Column(Integer, ForeignKey('story_arcs.id', ondelete='CASCADE'), nullable=False)
+    digest_id = Column(Integer, ForeignKey('digests.id', ondelete='CASCADE'), nullable=False)
+    covered_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_story_arc_coverage_arc_id', 'story_arc_id'),
+        Index('ix_story_arc_coverage_digest_id', 'digest_id'),
+        Index('ix_story_arc_coverage_covered_at', 'covered_at'),
     )
