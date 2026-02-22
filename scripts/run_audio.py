@@ -771,6 +771,15 @@ class AudioProcessor_Runner:
                 'message': 'Episode previously marked not relevant; skipping audio processing'
             }
 
+        # Skip YouTube Shorts - too short for meaningful digest content
+        if self._is_youtube_short(db_episode):
+            self.logger.info(f"⏭️ Skipping YouTube Short: {db_episode.title[:60]}")
+            self.episode_repo.update_status(episode_guid, 'not_relevant')
+            return {
+                'success': True, 'skipped': True,
+                'message': 'YouTube Short - too short for digest'
+            }
+
         # Check if this is a YouTube episode - fetch transcript directly instead of audio
         if self._is_youtube_episode(episode_data, db_episode):
             return self._process_youtube_transcript(episode_data, db_episode)
@@ -945,15 +954,20 @@ class AudioProcessor_Runner:
                 'error': error_str
             }
 
+    def _is_youtube_short(self, db_episode):
+        """Detect YouTube Shorts - too short for meaningful digest content."""
+        return 'youtube.com/shorts/' in (db_episode.audio_url or '')
+
     def _is_youtube_episode(self, episode_data, db_episode):
-        """Detect whether this episode is from a YouTube channel."""
+        """Detect whether this episode is from a YouTube channel (excludes Shorts)."""
+        if self._is_youtube_short(db_episode):
+            return False
         # Check feed_type from discovery data
         if episode_data.get('feed_type') == 'youtube':
             return True
         # Check audio_url pattern as fallback
         audio_url = db_episode.audio_url or ''
         return ('youtube.com/watch' in audio_url or
-                'youtube.com/shorts/' in audio_url or
                 'youtu.be/' in audio_url)
 
     def _extract_youtube_video_id(self, url):

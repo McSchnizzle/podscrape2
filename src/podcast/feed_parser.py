@@ -138,7 +138,12 @@ class FeedParser:
             return None
         
         audio_url, audio_type, audio_size = audio_info
-        
+
+        # Skip YouTube Shorts - too short for meaningful digest content
+        if 'youtube.com/shorts/' in audio_url:
+            logger.debug(f"Skipping YouTube Short: {title}")
+            return None
+
         # Parse duration
         duration_seconds = self._parse_duration(entry)
         

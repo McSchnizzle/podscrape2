@@ -52,8 +52,10 @@ YOUTUBE_PATTERNS = [
 
 
 def is_youtube_url(url: str) -> bool:
-    """Check if a URL is a YouTube video URL."""
+    """Check if a URL is a YouTube video URL (excludes Shorts)."""
     if not url:
+        return False
+    if 'youtube.com/shorts/' in url:
         return False
     return any(re.search(p, url) for p in YOUTUBE_PATTERNS)
 
@@ -72,16 +74,26 @@ def extract_video_id(url: str) -> str | None:
     return None
 
 
-def get_pending_youtube_episodes(limit: int, include_failed: bool = False) -> list:
-    """Query database for pending (and optionally failed) episodes with YouTube URLs."""
+def get_pending_youtube_episodes(limit: int, include_failed: bool = False,
+                                  include_zero_word: bool = False) -> list:
+    """Query database for pending (and optionally failed/0-word) episodes with YouTube URLs."""
     db = get_database_manager()
     with db.get_session() as session:
         statuses = ['pending']
         if include_failed:
             statuses.append('failed')
 
+        from sqlalchemy import or_
+        filters = [EpisodeModel.status.in_(statuses)]
+        if include_zero_word:
+            # Rescue episodes that were scored/not_relevant with 0-word transcripts
+            filters = [or_(
+                EpisodeModel.status.in_(statuses),
+                (EpisodeModel.transcript_word_count == 0) | (EpisodeModel.transcript_word_count.is_(None))
+            )]
+
         episodes = session.query(EpisodeModel)\
-            .filter(EpisodeModel.status.in_(statuses))\
+            .filter(*filters)\
             .order_by(EpisodeModel.published_date.asc())\
             .all()
 
@@ -216,6 +228,8 @@ def main():
                         help='Show what would be fetched without doing it')
     parser.add_argument('--include-failed', action='store_true',
                         help='Also retry episodes in failed status')
+    parser.add_argument('--include-zero-word', action='store_true',
+                        help='Also retry episodes with 0-word transcripts (rescues bad not_relevant)')
     parser.add_argument('--base-delay', type=float, default=3.0,
                         help='Base delay in seconds (default: 3, escalates per request)')
     args = parser.parse_args()
@@ -224,7 +238,8 @@ def main():
     logger.info(f"Batch size: {args.limit}, base delay: {args.base_delay}s (escalating)")
 
     # Get pending YouTube episodes
-    episodes = get_pending_youtube_episodes(args.limit, include_failed=args.include_failed)
+    episodes = get_pending_youtube_episodes(args.limit, include_failed=args.include_failed,
+                                              include_zero_word=args.include_zero_word)
 
     if not episodes:
         logger.info("No pending YouTube episodes found.")
