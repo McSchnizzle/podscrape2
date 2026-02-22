@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.podcast.youtube-fetch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/paulbrown/Desktop/coding-projects/podcast/scripts/mac_youtube_cron.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/paulbrown/Desktop/coding-projects/podcast/data/logs/youtube_launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/paulbrown/Desktop/coding-projects/podcast/data/logs/youtube_launchd.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/paulbrown/Desktop/coding-projects/podcast</string>
+</dict>
+</plist>
