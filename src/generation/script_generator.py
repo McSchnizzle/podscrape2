@@ -213,13 +213,18 @@ class ScriptGenerator:
         """Route LLM call to the appropriate provider based on configured model."""
         if self._is_anthropic_model():
             client = self._get_anthropic_client()
-            response = client.messages.create(
+            # Use streaming to avoid Anthropic SDK's 10-minute preemptive timeout
+            # guard which triggers based on max_tokens size, not actual duration
+            output_text = ""
+            with client.messages.stream(
                 model=self.ai_model,
                 max_tokens=int(self.max_output_tokens),
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}]
-            )
-            return response.content[0].text
+            ) as stream:
+                for text in stream.text_stream:
+                    output_text += text
+            return output_text
         else:
             response = self.openai_client.responses.create(
                 model=self.ai_model,
