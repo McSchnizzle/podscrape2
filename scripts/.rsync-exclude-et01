@@ -5,6 +5,10 @@
 # Pipeline wrapper scripts (cron uses these)
 run_daily_pipeline.sh
 
+# YouTube cookies (manually uploaded, not in repo)
+cookies.txt
+.config/
+
 # Legacy one-off scripts that may still be useful on et01
 backfill_*.py
 cleanup_*.py
