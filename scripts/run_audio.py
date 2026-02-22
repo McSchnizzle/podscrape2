@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 import argparse
@@ -92,6 +93,11 @@ class AudioProcessor_Runner:
             self._transcriber_config = {
                 'chunk_duration_minutes': self.audio_config['chunk_duration_minutes']
             }
+
+        # YouTube rate limiting - serialize requests with delay to avoid flagging
+        self._youtube_lock = threading.Lock()
+        self._youtube_last_request = 0.0
+        self._youtube_delay_seconds = 5.0  # Minimum seconds between YouTube API calls
 
         # YouTube health tracking
         self.youtube_stats = {
@@ -974,6 +980,16 @@ class AudioProcessor_Runner:
             self.episode_repo.mark_failure(episode_guid, "Could not extract YouTube video ID")
             return {'success': False, 'error': 'Could not extract YouTube video ID'}
 
+        # Rate limit YouTube requests - serialize across all worker threads
+        with self._youtube_lock:
+            now = time.time()
+            elapsed = now - self._youtube_last_request
+            if elapsed < self._youtube_delay_seconds:
+                wait = self._youtube_delay_seconds - elapsed
+                self.logger.info(f"⏳ YouTube rate limit: waiting {wait:.1f}s before next request")
+                time.sleep(wait)
+            self._youtube_last_request = time.time()
+
         self.logger.info(f"📺 YouTube episode detected - fetching transcript for video: {video_id}")
         self.youtube_stats['attempted'] += 1
         transcript_source = 'transcript_api'
@@ -1110,6 +1126,9 @@ class AudioProcessor_Runner:
             from src.youtube.transcript_processor import TranscriptData, TranscriptSegment
             from datetime import datetime
 
+            # Rate limit before fallback attempt
+            time.sleep(self._youtube_delay_seconds)
+
             fetcher = YtdlpFetcher()
             result = fetcher.fetch_subtitles(video_id)
 
@@ -1139,6 +1158,7 @@ class AudioProcessor_Runner:
             import tempfile
 
             self.logger.info(f"Attempting yt-dlp audio download for {video_id}...")
+            time.sleep(self._youtube_delay_seconds)  # Rate limit before YouTube request
             fetcher = YtdlpFetcher()
 
             with tempfile.TemporaryDirectory() as tmpdir:
