@@ -93,6 +93,15 @@ class AudioProcessor_Runner:
                 'chunk_duration_minutes': self.audio_config['chunk_duration_minutes']
             }
 
+        # YouTube health tracking
+        self.youtube_stats = {
+            'attempted': 0,
+            'transcript_api_success': 0,
+            'ytdlp_subtitle_success': 0,
+            'ytdlp_audio_success': 0,
+            'failed': 0,
+        }
+
         self.logger.info("Audio processing initialized")
         self.logger.info(f"Database settings - Chunk duration: {self.audio_config['chunk_duration_minutes']}min, "
                         f"Max chunks per episode: {self.audio_config['max_chunks_per_episode']}, "
@@ -966,6 +975,8 @@ class AudioProcessor_Runner:
             return {'success': False, 'error': 'Could not extract YouTube video ID'}
 
         self.logger.info(f"📺 YouTube episode detected - fetching transcript for video: {video_id}")
+        self.youtube_stats['attempted'] += 1
+        transcript_source = 'transcript_api'
 
         try:
             # Use the existing TranscriptProcessor
@@ -974,25 +985,50 @@ class AudioProcessor_Runner:
             processor = TranscriptProcessor()
             transcript_data = processor.fetch_transcript(video_id)
 
+            if transcript_data:
+                self.youtube_stats['transcript_api_success'] += 1
+            else:
+                self.logger.warning(f"YouTube transcript API failed for {video_id} - trying yt-dlp fallback...")
+                transcript_data = self._ytdlp_subtitle_fallback(video_id)
+                if transcript_data:
+                    self.youtube_stats['ytdlp_subtitle_success'] += 1
+                    transcript_source = 'ytdlp_subtitles'
+
             if not transcript_data:
-                self.logger.warning(f"No transcript available for YouTube video {video_id}")
-                self.episode_repo.update_status(episode_guid, 'not_relevant')
+                self.logger.warning(f"All transcript methods failed for YouTube video {video_id} - trying audio download...")
+                audio_result = self._ytdlp_audio_fallback(video_id, episode_guid, db_episode, episode_data)
+                if audio_result:
+                    self.youtube_stats['ytdlp_audio_success'] += 1
+                    return audio_result
+                # All fallbacks exhausted - mark as failed (NOT not_relevant)
+                self.youtube_stats['failed'] += 1
+                self.logger.error(f"All YouTube transcript/audio methods failed for {video_id}")
+                self.episode_repo.mark_failure(episode_guid, f"All YouTube transcript methods failed for {video_id}")
                 return {
-                    'success': True, 'guid': episode_guid, 'title': db_episode.title,
-                    'status': 'not_relevant', 'skipped': True,
-                    'message': f'No YouTube transcript available for video {video_id}'
+                    'success': False, 'guid': episode_guid, 'title': db_episode.title,
+                    'error': f'All YouTube transcript methods failed for video {video_id}'
                 }
 
             # Validate transcript quality
             is_valid, reason = processor.validate_transcript_quality(transcript_data)
             if not is_valid:
-                self.logger.warning(f"YouTube transcript quality check failed: {reason}")
-                self.episode_repo.update_status(episode_guid, 'not_relevant')
-                return {
-                    'success': True, 'guid': episode_guid, 'title': db_episode.title,
-                    'status': 'not_relevant', 'skipped': True,
-                    'message': f'YouTube transcript quality insufficient: {reason}'
-                }
+                self.logger.warning(f"YouTube transcript quality check failed: {reason} - trying yt-dlp fallback...")
+                ytdlp_data = self._ytdlp_subtitle_fallback(video_id)
+                if ytdlp_data:
+                    is_valid_2, reason_2 = processor.validate_transcript_quality(ytdlp_data)
+                    if is_valid_2:
+                        transcript_data = ytdlp_data
+                        is_valid = True
+                        self.logger.info(f"yt-dlp subtitle fallback passed quality check for {video_id}")
+
+                if not is_valid:
+                    self.youtube_stats['failed'] += 1
+                    self.logger.warning(f"YouTube transcript quality insufficient after all attempts: {reason}")
+                    self.episode_repo.mark_failure(episode_guid, f"YouTube transcript quality insufficient: {reason}")
+                    return {
+                        'success': False, 'guid': episode_guid, 'title': db_episode.title,
+                        'error': f'YouTube transcript quality insufficient: {reason}'
+                    }
 
             # Extract plain text and build transcript with metadata header
             transcript_text = processor.get_transcript_text(transcript_data)
@@ -1061,9 +1097,106 @@ class AudioProcessor_Runner:
 
         except Exception as e:
             error_str = str(e)
+            self.youtube_stats['failed'] += 1
             self.logger.error(f"YouTube transcript fetch failed: {error_str}")
             self.episode_repo.mark_failure(episode_guid, f"YouTube transcript error: {error_str}")
             return {'success': False, 'error': error_str}
+
+    def _ytdlp_subtitle_fallback(self, video_id):
+        """Fallback: fetch subtitles via yt-dlp when transcript API fails.
+        Returns a TranscriptData-like object or None."""
+        try:
+            from src.youtube.ytdlp_fetcher import YtdlpFetcher
+            from src.youtube.transcript_processor import TranscriptData, TranscriptSegment
+            from datetime import datetime
+
+            fetcher = YtdlpFetcher()
+            result = fetcher.fetch_subtitles(video_id)
+
+            if result.success and result.word_count > 0:
+                self.logger.info(f"yt-dlp subtitle fallback succeeded for {video_id}: {result.word_count} words")
+                return TranscriptData(
+                    video_id=video_id,
+                    language=result.language or 'en',
+                    segments=[TranscriptSegment(text=result.transcript_text, start=0.0, duration=0.0)],
+                    total_duration=0.0,
+                    word_count=result.word_count,
+                    is_auto_generated=result.is_generated,
+                    fetch_timestamp=datetime.now()
+                )
+            else:
+                self.logger.warning(f"yt-dlp subtitle fallback failed for {video_id}: {result.error_message}")
+                return None
+        except Exception as e:
+            self.logger.warning(f"yt-dlp subtitle fallback error for {video_id}: {e}")
+            return None
+
+    def _ytdlp_audio_fallback(self, video_id, episode_guid, db_episode, episode_data):
+        """Fallback: download audio via yt-dlp and transcribe with Whisper.
+        Returns an audio_result dict or None if it fails."""
+        try:
+            from src.youtube.ytdlp_fetcher import YtdlpFetcher
+            import tempfile
+
+            self.logger.info(f"Attempting yt-dlp audio download for {video_id}...")
+            fetcher = YtdlpFetcher()
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = fetcher.download_audio(video_id, tmpdir)
+
+                if not result.success:
+                    self.logger.warning(f"yt-dlp audio download failed for {video_id}: {result.error_message}")
+                    return None
+
+                self.logger.info(f"yt-dlp audio downloaded for {video_id}, processing through Whisper...")
+
+                # Chunk and transcribe through the regular audio pipeline
+                chunk_paths = self.audio_processor.chunk_audio(result.audio_path, episode_guid)
+                self.logger.info(f"Chunked into {len(chunk_paths)} pieces")
+
+                # Transcribe all chunks
+                full_transcript = ""
+                for i, chunk_path in enumerate(chunk_paths):
+                    self.logger.info(f"  Transcribing chunk {i+1}/{len(chunk_paths)}...")
+                    chunk_transcript = self.audio_processor.transcribe_chunk(chunk_path)
+                    if chunk_transcript:
+                        full_transcript += " " + chunk_transcript
+
+                total_words = len(full_transcript.split())
+                if total_words < 50:
+                    self.logger.warning(f"yt-dlp audio transcript too short ({total_words} words)")
+                    return None
+
+                # Store transcript in database
+                feed_name = episode_data.get('feed_name', 'Unknown')
+                transcript_with_metadata = (
+                    f"# Complete Transcript\n"
+                    f"# Episode: {db_episode.title}\n"
+                    f"# Feed: {feed_name}\n"
+                    f"# Source: YouTube audio via yt-dlp ({video_id})\n"
+                    f"# GUID: {episode_guid}\n"
+                    f"# Processed: {datetime.now().isoformat()}\n"
+                    f"# Words: {total_words:,}\n\n"
+                    + full_transcript.strip()
+                )
+
+                self.episode_repo.update_transcript(episode_guid, None, total_words, transcript_with_metadata)
+                self.logger.info(f"yt-dlp audio fallback succeeded for {video_id}: {total_words:,} words")
+
+                return {
+                    'success': True,
+                    'guid': episode_guid,
+                    'title': db_episode.title,
+                    'status': 'transcribed',
+                    'transcript_path': None,
+                    'transcript_words': total_words,
+                    'chunks_processed': len(chunk_paths),
+                    'source': 'youtube_audio_fallback'
+                }
+
+        except Exception as e:
+            self.logger.warning(f"yt-dlp audio fallback error for {video_id}: {e}")
+            return None
 
     def _cleanup_audio_files(self, episode_guid, chunk_paths):
         """Clean up temporary audio files"""
@@ -1245,10 +1378,19 @@ class AudioProcessor_Runner:
                     scores_str = f" - Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in ep['scores'].items()])}"
                 self.logger.info(f"      ✅ {ep['title'][:50]}{'...' if len(ep['title']) > 50 else ''}{scores_str}")
 
-        self.logger.info(f"   🔧 P2 Optimization Benefits:")
-        self.logger.info(f"      • Always gets full quota of relevant episodes")
-        self.logger.info(f"      • Doesn't waste processing on not_relevant episodes")
-        self.logger.info(f"      • Improves content quality in final digest")
+        # YouTube feed health summary
+        yt = self.youtube_stats
+        if yt['attempted'] > 0:
+            yt_success = yt['transcript_api_success'] + yt['ytdlp_subtitle_success'] + yt['ytdlp_audio_success']
+            self.logger.info(f"\n   📺 YOUTUBE FEED HEALTH:")
+            self.logger.info(f"      Attempted: {yt['attempted']}")
+            self.logger.info(f"      Succeeded: {yt_success} ({100*yt_success//yt['attempted']}%)")
+            self.logger.info(f"        - Transcript API: {yt['transcript_api_success']}")
+            self.logger.info(f"        - yt-dlp subtitles: {yt['ytdlp_subtitle_success']}")
+            self.logger.info(f"        - yt-dlp audio: {yt['ytdlp_audio_success']}")
+            self.logger.info(f"      Failed: {yt['failed']}")
+            if yt['failed'] > yt['attempted'] * 0.5:
+                self.logger.warning(f"      ⚠️ HIGH YOUTUBE FAILURE RATE ({100*yt['failed']//yt['attempted']}%) - possible IP blocking or API issues")
 
 def main():
     parser = argparse.ArgumentParser(description='Audio Processing Phase')

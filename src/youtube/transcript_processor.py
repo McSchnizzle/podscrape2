@@ -51,7 +51,7 @@ class TranscriptProcessor:
     Handles various transcript availability scenarios and errors gracefully.
     """
     
-    def __init__(self, transcript_dir: str = None, max_retries: int = 3, 
+    def __init__(self, transcript_dir: str = None, max_retries: int = 2,
                  proxy_config: Dict[str, str] = None, request_delay: float = 1.0):
         """
         Initialize transcript processor.
@@ -239,7 +239,13 @@ class TranscriptProcessor:
             
             # Calculate word count
             word_count = len(total_text.split())
-            
+
+            # Fail fast on empty transcripts - don't return a TranscriptData with 0 words
+            # This ensures the caller sees a failure, not a valid-looking empty object
+            if word_count == 0:
+                logger.warning(f"Transcript for {video_id} has 0 words despite {len(segments)} segments - treating as failure")
+                raise CouldNotRetrieveTranscript(video_id)
+
             transcript_obj = TranscriptData(
                 video_id=video_id,
                 language=selected_language,
