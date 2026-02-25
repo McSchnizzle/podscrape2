@@ -1,16 +1,25 @@
 """
 Metadata Generator for RSS Podcast Transcript Digest System.
-Generates episode titles and summaries from digest scripts using GPT-5.
+Generates episode titles and summaries from digest scripts using claude -p.
 """
 
 import os
 import json
 import logging
-import openai
+import subprocess
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ PREVIOUS IMPLEMENTATION: OpenAI API (gpt-5-mini)                    │
+# │ To revert: uncomment 'import openai' below and restore              │
+# │ self.client = openai.OpenAI(...) in __init__,                       │
+# │ then restore generate_metadata_from_content() to use                │
+# │ self.client.responses.create() and remove claude -p path.           │
+# │                                                                     │
+# │ import openai                                                        │
+# └─────────────────────────────────────────────────────────────────────┘
 from datetime import datetime, date
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..config.web_config import WebConfigManager, SettingsKeys
 
@@ -24,6 +33,7 @@ class EpisodeMetadata:
     duration_estimate: Optional[str] = None
     keywords: Optional[str] = None
     category: Optional[str] = None
+    episode_links: Optional[List[dict]] = field(default_factory=list)  # NEW: [{feed_name, title, audio_url}]
 
 class MetadataGenerationError(Exception):
     """Raised when metadata generation fails"""
@@ -37,28 +47,28 @@ class MetadataGenerator:
     
     def __init__(self, web_config: WebConfigManager = None):
         self.web_config = web_config or self._safe_create_web_config()
-        self.client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        if not os.getenv('OPENAI_API_KEY'):
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        # ┌─────────────────────────────────────────────────────────────────────┐
+        # │ PREVIOUS IMPLEMENTATION: OpenAI client initialization               │
+        # │ To revert: uncomment below and restore OPENAI_API_KEY check          │
+        # │                                                                     │
+        # │ self.client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))    │
+        # │ if not os.getenv('OPENAI_API_KEY'):                                 │
+        # │     raise ValueError("OPENAI_API_KEY environment variable required") │
+        # └─────────────────────────────────────────────────────────────────────┘
 
-        # Load AI configuration for metadata generation
+        # Load AI configuration for metadata generation (kept for legacy OpenAI path)
         if self.web_config:
             self.ai_model = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL, "gpt-5-mini")
             self.max_title_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_TITLE_TOKENS, 50)
             self.max_summary_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_SUMMARY_TOKENS, 200)
             self.max_description_tokens = self.web_config.get_setting(SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_DESCRIPTION_TOKENS, 500)
-
-            # Validate token limits against model capabilities
-            self.max_title_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_title_tokens)
-            self.max_summary_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_summary_tokens)
-            self.max_description_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_description_tokens)
         else:
             self.ai_model = "gpt-5-mini"
             self.max_title_tokens = 50
             self.max_summary_tokens = 200
             self.max_description_tokens = 500
 
-        logger.info(f"MetadataGenerator initialized with model: {self.ai_model}, title: {self.max_title_tokens}, summary: {self.max_summary_tokens}, description: {self.max_description_tokens} tokens")
+        logger.info(f"MetadataGenerator initialized (claude -p mode)")
 
     def _safe_create_web_config(self) -> Optional[WebConfigManager]:
         """Safely create web config, return None if not available"""
@@ -90,6 +100,120 @@ class MetadataGenerator:
         if model.startswith("gpt-5.2"):
             return "medium"
         return "minimal"
+
+    @staticmethod
+    def _call_claude_p(prompt: str, timeout: int = 120) -> str:
+        """Call claude -p with prompt via stdin."""
+        claude_path = os.path.expanduser("~/.local/bin/claude")
+        if not os.path.exists(claude_path):
+            claude_path = "claude"
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
+        result = subprocess.run(
+            [claude_path, "-p", "-"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        if result.returncode != 0:
+            raise MetadataGenerationError(f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}")
+        return result.stdout.strip()
+
+    def _load_metadata_skill(self) -> str:
+        """Load the metadata generation skill from .claude/commands/."""
+        skill_path = Path(__file__).parent.parent.parent / '.claude' / 'commands' / 'generate-metadata.md'
+        if skill_path.exists():
+            return skill_path.read_text()
+        return ""
+
+    def _build_claude_p_metadata_prompt(self, script_content: str, topic: str,
+                                        digest_date: date, episodes: list = None) -> str:
+        """Build prompt for claude -p metadata generation."""
+        skill_content = self._load_metadata_skill()
+
+        episodes_section = ""
+        if episodes:
+            episodes_section = "\n## Source Episodes\n"
+            for ep in episodes:
+                feed_name = ep.get('feed_name', 'Unknown Feed')
+                title = ep.get('title', 'Unknown Episode')
+                audio_url = ep.get('audio_url', '') or ''
+                episodes_section += f"- Feed: {feed_name}\n  Title: {title}\n  URL: {audio_url}\n"
+
+        return (
+            f"{skill_content}\n\n"
+            f"## Input\n\n"
+            f"Topic: {topic}\n"
+            f"Date: {digest_date.strftime('%B %d, %Y')}\n"
+            f"{episodes_section}\n"
+            f"## Script Content\n\n"
+            f"{script_content[:12000]}"
+        )
+
+    def _generate_metadata_with_claude_p(self, script_content: str, topic: str,
+                                         digest_date: date, episodes: list = None) -> EpisodeMetadata:
+        """Generate metadata via claude -p and parse JSON response."""
+        prompt = self._build_claude_p_metadata_prompt(script_content, topic, digest_date, episodes)
+        try:
+            logger.info("Calling claude -p for metadata generation...")
+            raw = self._call_claude_p(prompt)
+
+            # Strip markdown code fences if present
+            if raw.startswith('```json'):
+                raw = raw.replace('```json', '').replace('```', '').strip()
+            elif raw.startswith('```'):
+                raw = raw.replace('```', '').strip()
+
+            metadata_dict = json.loads(raw)
+
+            # Validate required fields
+            for field_name in ['title', 'summary', 'keywords', 'category']:
+                if field_name not in metadata_dict:
+                    logger.warning(f"Missing field '{field_name}' in claude -p response, using default")
+                    metadata_dict[field_name] = self._get_default_value(field_name, topic, digest_date)
+
+            metadata = EpisodeMetadata(
+                title=metadata_dict['title'][:80],
+                summary=metadata_dict['summary'][:250],
+                keywords=metadata_dict.get('keywords', '')[:100],
+                category=metadata_dict.get('category', 'Technology')[:50],
+                episode_links=metadata_dict.get('episode_links', []) or [],
+            )
+            logger.info(f"Generated metadata via claude -p — Title: '{metadata.title}', "
+                        f"episode_links: {len(metadata.episode_links or [])}")
+            return metadata
+
+        except Exception as e:
+            logger.error(f"claude -p metadata generation failed: {e}")
+            return self._generate_fallback_metadata_from_content(script_content, topic, digest_date)
+
+    def _fetch_digest_episodes(self, digest_id: int) -> list:
+        """Fetch episodes linked to a digest for episode_links metadata."""
+        try:
+            from ..database.models import get_database_manager
+            from sqlalchemy import text as sa_text
+            db = get_database_manager()
+            session = db.get_session()
+            try:
+                result = session.execute(
+                    sa_text("""
+                        SELECT e.title, e.audio_url, f.title as feed_name
+                        FROM digest_episode_links del
+                        JOIN episodes e ON del.episode_id = e.id
+                        JOIN feeds f ON e.feed_id = f.id
+                        WHERE del.digest_id = :did
+                    """),
+                    {"did": digest_id}
+                )
+                rows = result.fetchall()
+                return [{"title": r[0], "audio_url": r[1] or '', "feed_name": r[2]} for r in rows]
+            finally:
+                session.close()
+        except Exception as e:
+            logger.warning(f"Could not fetch episodes for digest {digest_id}: {e}")
+            return []
 
     def _extract_script_content(self, script_path: str) -> str:
         """Extract clean content from script file for analysis"""
@@ -159,9 +283,16 @@ class MetadataGenerator:
 
         return ' '.join(content_lines)
 
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ LEGACY IMPLEMENTATION: generate_metadata_from_content (OpenAI API) │
+    # │ This method is no longer called by generate_metadata_for_digest.   │
+    # │ Kept for reference/revert. To restore: re-enable openai import,    │
+    # │ restore self.client in __init__, and call this method instead of    │
+    # │ _generate_metadata_with_claude_p() in generate_metadata_for_digest. │
+    # └─────────────────────────────────────────────────────────────────────┘
     def generate_metadata_from_content(self, script_content: str, topic: str,
                                       digest_date: date) -> EpisodeMetadata:
-        """Generate episode metadata from script content (database-first)"""
+        """[LEGACY] Generate episode metadata via OpenAI API (superseded by claude -p path)"""
         logger.info(f"Generating metadata for {topic} digest")
 
         # Clean script content (remove markdown headers, metadata blocks)
@@ -339,19 +470,44 @@ Generate metadata that accurately reflects the content and would attract the tar
             category="Technology" if "tech" in topic.lower() or "ai" in topic.lower() else "Society"
         )
     
-    def generate_metadata_for_digest(self, digest, script_path: str = None) -> EpisodeMetadata:
-        """Generate metadata for a digest object using database content"""
+    def generate_metadata_for_digest(self, digest, episodes=None, script_path: str = None) -> EpisodeMetadata:
+        """Generate metadata for a digest object using database content and claude -p.
 
-        # Use script content from database (database-first architecture)
+        Args:
+            digest: Digest ORM object with script_content, topic, digest_date, id
+            episodes: Optional list of dicts [{feed_name, title, audio_url}].
+                      If None, fetched automatically from digest_episode_links table.
+            script_path: Ignored (legacy parameter, kept for backward compatibility)
+        """
         if not digest.script_content:
             raise MetadataGenerationError(f"No script content in database for digest {digest.id}")
 
-        # Call the new method that accepts content directly
-        return self.generate_metadata_from_content(
-            script_content=digest.script_content,
+        # Fetch linked episodes if not provided
+        if episodes is None:
+            episodes = self._fetch_digest_episodes(digest.id)
+            logger.info(f"Fetched {len(episodes)} linked episodes for digest {digest.id}")
+
+        cleaned = self._clean_script_content(digest.script_content)
+        return self._generate_metadata_with_claude_p(
+            script_content=cleaned,
             topic=digest.topic,
-            digest_date=digest.digest_date
+            digest_date=digest.digest_date,
+            episodes=episodes,
         )
+
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ PREVIOUS IMPLEMENTATION: generate_metadata_for_digest (OpenAI path) │
+    # │ To revert: restore this body:                                       │
+    # │                                                                     │
+    # │ def generate_metadata_for_digest(self, digest, script_path=None):   │
+    # │     if not digest.script_content:                                   │
+    # │         raise MetadataGenerationError(...)                          │
+    # │     return self.generate_metadata_from_content(                     │
+    # │         script_content=digest.script_content,                       │
+    # │         topic=digest.topic,                                         │
+    # │         digest_date=digest.digest_date                              │
+    # │     )                                                               │
+    # └─────────────────────────────────────────────────────────────────────┘
     
     def update_digest_metadata(self, digest_repo, digest_id: int, metadata: EpisodeMetadata) -> None:
         """Update digest record with generated metadata"""
