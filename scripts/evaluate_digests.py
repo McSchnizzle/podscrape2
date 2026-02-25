@@ -143,16 +143,68 @@ def load_summary(comparison_dir: Path) -> Optional[Dict]:
     return None
 
 
+def call_claude_p(prompt: str, timeout: int = 300) -> str:
+    """Call Claude via claude -p (programmatic mode) instead of direct API.
+
+    Uses the Claude Code CLI's programmatic mode, which runs on the existing
+    Claude subscription instead of per-token API billing.
+
+    Args:
+        prompt: The full prompt text to send
+        timeout: Subprocess timeout in seconds (default 5 min)
+
+    Returns:
+        The text response from Claude
+    """
+    import subprocess
+
+    claude_path = os.path.expanduser("~/.local/bin/claude")
+    if not os.path.exists(claude_path):
+        claude_path = "claude"  # Fall back to system PATH
+
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
+
+    result = subprocess.run(
+        [claude_path, "-p", "-"],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}")
+
+    return result.stdout.strip()
+
+
 def evaluate_digest(
     digest_content: str,
     model_name: str,
     episode_info: List[Dict],
     evaluator_model: str = "claude-sonnet-4-20250514"
 ) -> Dict:
-    """Evaluate a single digest using Claude as the evaluator."""
-    import anthropic
+    """Evaluate a single digest using Claude as the evaluator.
 
-    client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    Uses claude -p (programmatic mode) instead of direct Anthropic API.
+    """
+
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ PREVIOUS IMPLEMENTATION: Direct Anthropic API call                  │
+    # │ To revert: uncomment this block, remove the call_claude_p() call   │
+    # │ below, and restore 'import anthropic' at line 153.                 │
+    # │                                                                     │
+    # │ import anthropic                                                    │
+    # │ client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))│
+    # │ response = client.messages.create(                                  │
+    # │     model=evaluator_model,                                          │
+    # │     max_tokens=2000,                                                │
+    # │     messages=[{"role": "user", "content": evaluation_prompt}]       │
+    # │ )                                                                   │
+    # │ result_text = response.content[0].text.strip()                      │
+    # └─────────────────────────────────────────────────────────────────────┘
 
     # Build evaluation prompt
     episodes_desc = "\n".join([
@@ -225,15 +277,9 @@ Return ONLY the JSON, no other text.
 """
 
     try:
-        response = client.messages.create(
-            model=evaluator_model,
-            max_tokens=2000,
-            messages=[{"role": "user", "content": evaluation_prompt}]
-        )
+        result_text = call_claude_p(evaluation_prompt, timeout=300)
 
-        result_text = response.content[0].text.strip()
-
-        # Parse JSON from response
+        # Parse JSON from response (handle markdown fences if present)
         if result_text.startswith("```"):
             result_text = result_text.split("```")[1]
             if result_text.startswith("json"):

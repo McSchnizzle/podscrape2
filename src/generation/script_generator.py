@@ -11,7 +11,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 from openai import OpenAI
 from dataclasses import dataclass
-import anthropic
+# import anthropic  # Removed: now using claude -p instead of direct API
 
 from ..database.models import (
     Episode,
@@ -95,7 +95,6 @@ class ScriptGenerator:
             self.ad_filter = None
 
         self.openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        self.anthropic_client = None  # Lazy init when needed
         # Per-digest episode cap (from web config if available)
         self.max_episodes_per_digest = 5
         if self.web_config:
@@ -200,31 +199,83 @@ class ScriptGenerator:
             return 'anthropic'
         return 'openai'
 
-    def _get_anthropic_client(self):
-        """Lazy-initialize and return the Anthropic client."""
-        if self.anthropic_client is None:
-            api_key = os.getenv('ANTHROPIC_API_KEY')
-            if not api_key:
-                raise ScriptGenerationError("ANTHROPIC_API_KEY environment variable is required for Claude models")
-            self.anthropic_client = anthropic.Anthropic(api_key=api_key)
-        return self.anthropic_client
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ PREVIOUS IMPLEMENTATION: Direct Anthropic API client                │
+    # │ To revert: uncomment _get_anthropic_client(), restore the          │
+    # │ Anthropic streaming block in _call_llm(), and restore              │
+    # │ 'import anthropic' at file top + self.anthropic_client in __init__.│
+    # │                                                                     │
+    # │ def _get_anthropic_client(self):                                    │
+    # │     if self.anthropic_client is None:                               │
+    # │         api_key = os.getenv('ANTHROPIC_API_KEY')                    │
+    # │         if not api_key:                                             │
+    # │             raise ScriptGenerationError("ANTHROPIC_API_KEY ...")    │
+    # │         self.anthropic_client = anthropic.Anthropic(api_key=api_key)│
+    # │     return self.anthropic_client                                    │
+    # │                                                                     │
+    # │ # In _call_llm, the Anthropic branch was:                           │
+    # │ client = self._get_anthropic_client()                               │
+    # │ output_text = ""                                                    │
+    # │ with client.messages.stream(                                        │
+    # │     model=self.ai_model,                                            │
+    # │     max_tokens=int(self.max_output_tokens),                         │
+    # │     system=system_prompt,                                           │
+    # │     messages=[{"role": "user", "content": user_prompt}]             │
+    # │ ) as stream:                                                        │
+    # │     for text in stream.text_stream: output_text += text             │
+    # │ return output_text                                                  │
+    # └─────────────────────────────────────────────────────────────────────┘
+
+    @staticmethod
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
+        """Call Claude via claude -p (programmatic mode) instead of direct API.
+
+        Uses the Claude Code CLI's programmatic mode, which runs on the existing
+        Claude subscription instead of per-token API billing.
+
+        Prompt is passed via stdin to avoid OS argument length limits (ARG_MAX)
+        since transcript content can be very large.
+
+        Args:
+            system_prompt: System-level instructions
+            user_prompt: The user prompt to send
+            timeout: Subprocess timeout in seconds (default 10 min for long scripts)
+
+        Returns:
+            The text response from Claude
+        """
+        import subprocess
+
+        claude_path = os.path.expanduser("~/.local/bin/claude")
+        if not os.path.exists(claude_path):
+            claude_path = "claude"  # Fall back to system PATH
+
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
+
+        result = subprocess.run(
+            [claude_path, "-p", "-"],
+            input=full_prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+
+        if result.returncode != 0:
+            raise ScriptGenerationError(
+                f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
+            )
+
+        return result.stdout.strip()
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """Route LLM call to the appropriate provider based on configured model."""
         if self._is_anthropic_model():
-            client = self._get_anthropic_client()
-            # Use streaming to avoid Anthropic SDK's 10-minute preemptive timeout
-            # guard which triggers based on max_tokens size, not actual duration
-            output_text = ""
-            with client.messages.stream(
-                model=self.ai_model,
-                max_tokens=int(self.max_output_tokens),
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}]
-            ) as stream:
-                for text in stream.text_stream:
-                    output_text += text
-            return output_text
+            logger.info("Using claude -p for Anthropic model call (no API key)")
+            return self._call_claude_p(system_prompt, user_prompt)
         else:
             response = self.openai_client.responses.create(
                 model=self.ai_model,
@@ -845,6 +896,49 @@ The following story arcs were covered in digests within the last 3 days:
 If an arc is on this list AND has no new developments, it must be skipped.
 """
 
+    def _build_claude_p_dialogue_prompt(
+        self,
+        system_prompt: str,
+        topic: str,
+        topic_instructions: str,
+        story_arc_context: str,
+        repetition_instructions: str,
+        digest_date: date,
+        speaker_1_name: str,
+        speaker_2_name: str,
+        num_episodes: int,
+    ) -> str:
+        """Build the system prompt for claude -p dialogue generation.
+
+        Loads the tuned skill file (.claude/commands/generate-digest.md) as the
+        base, then injects the dynamic parts: topic instructions, story arc
+        context, and repetition avoidance. This separates prompt engineering
+        (the skill file) from pipeline logic (this method).
+
+        Falls back to the hardcoded system_prompt if the skill file is not found.
+        """
+        skill_path = Path(__file__).parent.parent.parent / '.claude' / 'commands' / 'generate-digest.md'
+
+        if skill_path.exists():
+            skill_content = skill_path.read_text()
+            logger.info(f"Loaded dialogue skill from {skill_path.name} ({len(skill_content)} chars)")
+        else:
+            logger.warning(f"Skill file not found at {skill_path}, falling back to hardcoded prompt")
+            return system_prompt
+
+        return (
+            f"{skill_content}\n\n"
+            f"## Topic-Specific Instructions\n{topic_instructions}\n"
+            f"{story_arc_context}\n"
+            f"{repetition_instructions}\n\n"
+            f"Date: {digest_date.strftime('%B %d, %Y')}\n"
+            f"Topic: {topic}\n"
+            f"Episodes: {num_episodes}\n\n"
+            f"CHARACTER ROLES:\n"
+            f"- SPEAKER_1 ({speaker_1_name}): Primary host, introduces topics, asks questions\n"
+            f"- SPEAKER_2 ({speaker_2_name}): Expert analyst, provides insights and analysis"
+        )
+
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
                                   digest_date: date, instruction: TopicInstruction,
                                   recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
@@ -1000,7 +1094,26 @@ The colon MUST come immediately after the speaker number, BEFORE the audio tag.
 Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
 
         try:
-            script_content = self._call_llm(system_prompt, user_prompt)
+            if self._is_anthropic_model():
+                # For claude -p path: replace the hardcoded system prompt with the
+                # skill file (.claude/commands/generate-digest.md), which contains
+                # tuned format/tag/length rules. Inject dynamic parts (topic
+                # instructions, arcs, repetition) after the skill base.
+                skill_based_prompt = self._build_claude_p_dialogue_prompt(
+                    system_prompt=system_prompt,
+                    topic=topic,
+                    topic_instructions=instruction.content,
+                    story_arc_context=story_arc_context,
+                    repetition_instructions=repetition_instructions,
+                    digest_date=digest_date,
+                    speaker_1_name=speaker_1_name,
+                    speaker_2_name=speaker_2_name,
+                    num_episodes=len(transcripts),
+                )
+                script_content = self._call_claude_p(skill_based_prompt, user_prompt)
+            else:
+                script_content = self._call_llm(system_prompt, user_prompt)
+
             char_count = len(script_content)
 
             # Validate and fix dialogue format (v1.96 - enforce SPEAKER_1: format)
@@ -1009,11 +1122,17 @@ Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [c
                 logger.warning(f"Auto-corrected dialogue format issues in generated script")
                 char_count = len(script_content)  # Update char count after fixes
 
-            # Validate character count
-            if char_count < 25000:
-                logger.warning(f"Dialogue script is shorter than target: {char_count} < 25,000 characters")
-            elif char_count > 30000:
-                logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
+            # Validate character count (targets differ by path)
+            if self._is_anthropic_model():
+                if char_count < 16000:
+                    logger.warning(f"Dialogue script is shorter than target: {char_count} < 16,000 characters")
+                elif char_count > 24000:
+                    logger.warning(f"Dialogue script exceeds target: {char_count} > 24,000 characters")
+            else:
+                if char_count < 25000:
+                    logger.warning(f"Dialogue script is shorter than target: {char_count} < 25,000 characters")
+                elif char_count > 30000:
+                    logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
 
             logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes")
             return script_content, char_count

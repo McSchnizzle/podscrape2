@@ -22,61 +22,63 @@ FAIL = "FAIL"
 SKIP = "SKIP"
 
 
-def test_anthropic_streaming():
-    """Test that Anthropic streaming API works with our code pattern."""
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        return SKIP, "ANTHROPIC_API_KEY not set"
+def test_claude_p():
+    """Test that claude -p (programmatic mode) works for LLM calls.
+
+    This replaces the previous Anthropic API streaming tests. claude -p runs
+    on the Claude subscription instead of per-token API billing.
+    """
+
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ PREVIOUS IMPLEMENTATION: Two Anthropic API streaming tests          │
+    # │ To revert: restore test_anthropic_streaming() and                   │
+    # │ test_anthropic_large_max_tokens(), update main() test list,         │
+    # │ and restore 'import anthropic' in each function.                    │
+    # │                                                                     │
+    # │ def test_anthropic_streaming():                                     │
+    # │     client = anthropic.Anthropic(api_key=os.environ['...'])         │
+    # │     with client.messages.stream(model="claude-sonnet-4-6",          │
+    # │         max_tokens=100, system="...", messages=[...]) as stream:    │
+    # │         for text in stream.text_stream: output_text += text         │
+    # │                                                                     │
+    # │ def test_anthropic_large_max_tokens():                              │
+    # │     # Same pattern with max_tokens=25000 to test timeout guard      │
+    # └─────────────────────────────────────────────────────────────────────┘
+
+    import subprocess
+
+    claude_path = os.path.expanduser("~/.local/bin/claude")
+    if not os.path.exists(claude_path):
+        claude_path = "claude"
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
 
-        # Use the exact same pattern as script_generator._call_llm()
-        output_text = ""
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=100,
-            system="You are a test assistant. Respond with exactly: SMOKE_TEST_OK",
-            messages=[{"role": "user", "content": "Please respond."}]
-        ) as stream:
-            for text in stream.text_stream:
-                output_text += text
+        result = subprocess.run(
+            [claude_path, "-p", "-"],
+            input="Respond with exactly: SMOKE_TEST_OK",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
 
+        if result.returncode != 0:
+            return FAIL, f"claude -p exited {result.returncode}: {result.stderr[:200]}"
+
+        output_text = result.stdout.strip()
         if "SMOKE_TEST_OK" in output_text:
-            return PASS, f"Streaming works, got {len(output_text)} chars"
+            return PASS, f"claude -p works, got expected response ({len(output_text)} chars)"
         else:
-            return PASS, f"Streaming works, got response: {output_text[:50]}"
+            return PASS, f"claude -p works, got: {output_text[:50]}"
 
+    except FileNotFoundError:
+        return FAIL, f"claude CLI not found at {claude_path}"
+    except subprocess.TimeoutExpired:
+        return FAIL, "claude -p timed out after 60s"
     except Exception as e:
-        return FAIL, f"Anthropic streaming failed: {e}"
-
-
-def test_anthropic_large_max_tokens():
-    """Test that large max_tokens doesn't trigger the 10-min guard."""
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        return SKIP, "ANTHROPIC_API_KEY not set"
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-
-        # Use the same max_tokens as production (25000) to verify no timeout guard
-        output_text = ""
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=25000,
-            system="Respond with exactly one word: OK",
-            messages=[{"role": "user", "content": "Test."}]
-        ) as stream:
-            for text in stream.text_stream:
-                output_text += text
-
-        return PASS, f"Large max_tokens (25000) works with streaming"
-
-    except Exception as e:
-        return FAIL, f"Large max_tokens streaming failed: {e}"
+        return FAIL, f"claude -p failed: {e}"
 
 
 def test_ytdlp_available():
@@ -131,8 +133,7 @@ def test_audio_phase_import():
 
 def main():
     tests = [
-        ("Anthropic streaming", test_anthropic_streaming),
-        ("Anthropic large max_tokens", test_anthropic_large_max_tokens),
+        ("claude -p (LLM calls)", test_claude_p),
         ("yt-dlp available", test_ytdlp_available),
         ("Script generator import", test_script_generator_import),
         ("YouTube modules import", test_youtube_modules_import),
