@@ -1,13 +1,13 @@
 """
-Content Scoring System using GPT-5-mini for podcast transcript relevancy analysis.
+Content Scoring System using claude -p for podcast transcript relevancy analysis.
 
-This module provides GPT-5-mini powered content scoring that evaluates podcast transcripts 
-against topic relevancy using structured JSON output with 0.0-1.0 scoring scale.
+This module provides claude -p powered content scoring that evaluates podcast transcripts
+against topic relevancy using JSON output with 0.0-1.0 scoring scale.
 
 Key Features:
-- GPT-5-mini Responses API integration with structured JSON output
+- claude -p integration via subprocess stdin
 - Batch processing for efficiency
-- Topic-based scoring against config/topics.json
+- Topic-based scoring against database topics
 - Database storage with automatic status tracking
 - Threshold-based filtering (≥0.65 for digest inclusion)
 """
@@ -15,12 +15,20 @@ Key Features:
 import json
 import logging
 import os
+import subprocess
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ PREVIOUS IMPLEMENTATION: OpenAI API (gpt-5-mini Responses API)      │
+# │ To revert: uncomment 'from openai import OpenAI' below, restore     │
+# │ self.client = OpenAI(...) in __init__, and restore the              │
+# │ client.responses.create() block in score_transcript().             │
+# │                                                                     │
+# │ from openai import OpenAI                                           │
+# └─────────────────────────────────────────────────────────────────────┘
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
-from openai import OpenAI
 from src.config.config_manager import ConfigManager
 from src.config.web_config import WebConfigManager, SettingsKeys
 
@@ -48,27 +56,23 @@ class ContentScorer:
     
     def __init__(self, config_path: str = None, config_manager: ConfigManager = None, web_config: Any = None):
         """
-        Initialize content scorer with OpenAI API and topic configuration.
+        Initialize content scorer with topic configuration.
 
         Args:
-            config_path: Path to topics.json config file
+            config_path: Path to topics.json config file (legacy; topics now loaded from DB)
         """
-        # Initialize WebConfig and ConfigManager first to get timeout settings
         self.web_config = web_config or self._safe_create_web_config()
 
-        # Get OpenAI timeout from settings
-        if self.web_config:
-            openai_timeout = self.web_config.get_setting(
-                SettingsKeys.ApiTimeouts.CATEGORY, SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT, 120
-            )
-        else:
-            openai_timeout = 120
-
-        # Load OpenAI API key with configurable timeout
-        self.client = OpenAI(
-            api_key=os.getenv('OPENAI_API_KEY'),
-            timeout=float(openai_timeout)
-        )
+        # ┌─────────────────────────────────────────────────────────────────────┐
+        # │ PREVIOUS IMPLEMENTATION: OpenAI client initialization               │
+        # │ To revert: uncomment below                                          │
+        # │                                                                     │
+        # │ openai_timeout = self.web_config.get_setting(                       │
+        # │     SettingsKeys.ApiTimeouts.CATEGORY,                              │
+        # │     SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT, 120) if ...           │
+        # │ self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'),           │
+        # │                      timeout=float(openai_timeout))                 │
+        # └─────────────────────────────────────────────────────────────────────┘
 
         # Determine config directory
         config_dir = None
@@ -77,24 +81,21 @@ class ContentScorer:
 
         self.config_manager = config_manager or ConfigManager(config_dir=config_dir or 'config', web_config=self.web_config)
 
-        # Load topics and score threshold via ConfigManager (Web UI settings override JSON where applicable)
+        # Load topics and score threshold via ConfigManager
         self.topics = self.config_manager.get_topics()
         self.score_threshold = self.config_manager.get_score_threshold()
 
-        # Load AI configuration for content scoring
+        # Kept for legacy reference (not used by claude -p path)
         if self.web_config:
             self.ai_model = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL, "gpt-5-mini")
             self.max_tokens = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS, 1000)
             self.max_episodes_per_batch = self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH, 10)
-
-            # Validate token limit against model capabilities
-            self.max_tokens = self._validate_and_adjust_token_limit(self.ai_model, self.max_tokens)
         else:
             self.ai_model = "gpt-5-mini"
             self.max_tokens = 1000
             self.max_episodes_per_batch = 10
 
-        logger.info(f"ContentScorer initialized with {len(self.topics)} active topics, model: {self.ai_model}, max_tokens: {self.max_tokens}")
+        logger.info(f"ContentScorer initialized (claude -p mode) with {len(self.topics)} active topics")
     
     def _safe_create_web_config(self) -> Optional[WebConfigManager]:
         try:
@@ -126,6 +127,86 @@ class ContentScorer:
             return "medium"
         return "minimal"
 
+    @staticmethod
+    def _call_claude_p(prompt: str, timeout: int = 90) -> str:
+        """Call claude -p with prompt via stdin."""
+        claude_path = os.path.expanduser("~/.local/bin/claude")
+        if not os.path.exists(claude_path):
+            claude_path = "claude"
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
+        result = subprocess.run(
+            [claude_path, "-p", "-"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}")
+        return result.stdout.strip()
+
+    def _load_scoring_skill(self) -> str:
+        """Load the topic scoring skill from .claude/commands/."""
+        skill_path = Path(__file__).parent.parent.parent / '.claude' / 'commands' / 'score-topic.md'
+        if skill_path.exists():
+            return skill_path.read_text()
+        # Embedded fallback so et01 works even if skill file isn't present
+        return """You are an expert content analyst. Score the podcast transcript's relevance to each topic on a 0.0-1.0 scale.
+Return ONLY a valid JSON object with one key per topic and a float score. No markdown, no explanation.
+Rubric: 0.0-0.3 not relevant, 0.4-0.6 somewhat relevant, 0.7-0.8 highly relevant, 0.9-1.0 central topic."""
+
+    def _build_claude_p_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
+        """Build prompt for claude -p scoring."""
+        skill_content = self._load_scoring_skill()
+
+        topic_lines = "\n".join(
+            f"- {t['name']}: {t['description']}" for t in topics
+        )
+
+        # Use more transcript than the old OpenAI path (was 4000, now 6000)
+        excerpt = transcript[:6000]
+        if len(transcript) > 6000:
+            excerpt += "..."
+
+        return (
+            f"{skill_content}\n\n"
+            f"## Topics to Score\n\n"
+            f"{topic_lines}\n\n"
+            f"## Transcript\n\n"
+            f"{excerpt}"
+        )
+
+    def _score_with_claude_p(self, transcript: str, topics: List[dict]) -> Dict[str, float]:
+        """Score transcript via claude -p, returns {topic_name: score} dict."""
+        prompt = self._build_claude_p_scoring_prompt(transcript, topics)
+        raw = self._call_claude_p(prompt)
+
+        # Strip markdown code fences if present
+        if raw.startswith('```json'):
+            raw = raw.replace('```json', '').replace('```', '').strip()
+        elif raw.startswith('```'):
+            raw = raw.replace('```', '').strip()
+
+        scores = json.loads(raw)
+
+        # Validate and clamp all scores; fill missing topics with 0.0
+        result = {}
+        for t in topics:
+            name = t['name']
+            score = float(scores.get(name, 0.0))
+            if not (0.0 <= score <= 1.0):
+                logger.warning(f"Score {score} for '{name}' outside [0,1], clamping")
+                score = max(0.0, min(1.0, score))
+            result[name] = score
+
+        return result
+
+    # ┌─────────────────────────────────────────────────────────────────────┐
+    # │ LEGACY: _create_scoring_prompt and _create_json_schema (OpenAI)    │
+    # │ Kept for reference. Not called by the claude -p path.               │
+    # └─────────────────────────────────────────────────────────────────────┘
     def _create_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
         """
         Create AI model prompt for transcript scoring.
@@ -224,72 +305,30 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
             ScoringResult with scores and metadata
         """
         start_time = datetime.now()
-        
+
         # Clean transcript to remove advertisements and sponsor content
         cleaned_transcript = self._clean_transcript(transcript)
-        
+
         try:
-            # Create prompt and schema
-            prompt = self._create_scoring_prompt(cleaned_transcript, self.topics)
-            schema = self._create_json_schema(self.topics)
-            
-            # Call configured AI model using Responses API (correct format from gpt5-implementation-learnings.md)
-            reasoning_effort = self._get_reasoning_effort(self.ai_model)
-            response = self.client.responses.create(
-                model=self.ai_model,
-                input=[
-                    {"role": "user", "content": prompt}
-                ],
-                reasoning={"effort": reasoning_effort},  # Model-aware reasoning effort
-                max_output_tokens=self.max_tokens,
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "content_scores",
-                        "schema": schema,
-                        "strict": True
-                    }
-                }
-            )
-            
-            # Parse response using Responses API format
-            scores_json = response.output_text
-            scores = json.loads(scores_json)
-
-            # Log token usage information
-            if hasattr(response, 'usage'):
-                usage = response.usage
-                logger.info(f"OpenAI API usage - Model: {self.ai_model}, "
-                           f"Input tokens: {getattr(usage, 'input_tokens', 'unknown')}, "
-                           f"Output tokens: {getattr(usage, 'output_tokens', 'unknown')}, "
-                           f"Total tokens: {getattr(usage, 'total_tokens', 'unknown')}")
-            else:
-                logger.info(f"OpenAI API call completed - Model: {self.ai_model}, "
-                           f"Max tokens: {self.max_tokens}")
-
-            # Validate scores are within expected range
-            for topic_name, score in scores.items():
-                if not (0.0 <= score <= 1.0):
-                    logger.warning(f"Score {score} for topic {topic_name} outside valid range [0.0, 1.0]")
-                    scores[topic_name] = max(0.0, min(1.0, score))  # Clamp to valid range
+            scores = self._score_with_claude_p(cleaned_transcript, self.topics)
 
             processing_time = (datetime.now() - start_time).total_seconds()
+            label = f"episode {episode_id}" if episode_id else "transcript"
+            logger.info(f"Scored {label} via claude -p in {processing_time:.2f}s: "
+                        f"{', '.join(f'{k}={v:.2f}' for k, v in scores.items())}")
 
-            logger.info(f"Successfully scored {'episode ' + episode_id if episode_id else 'transcript'} with GPT-5-mini "
-                       f"in {processing_time:.2f}s")
-            
             return ScoringResult(
                 episode_id=episode_id or "unknown",
                 scores=scores,
                 processing_time=processing_time,
                 success=True
             )
-            
+
         except Exception as e:
             processing_time = (datetime.now() - start_time).total_seconds()
             error_msg = f"Failed to score transcript: {e}"
             logger.error(error_msg)
-            
+
             return ScoringResult(
                 episode_id=episode_id or "unknown",
                 scores={},
@@ -297,6 +336,23 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
                 success=False,
                 error_message=error_msg
             )
+
+        # ┌─────────────────────────────────────────────────────────────────────┐
+        # │ PREVIOUS IMPLEMENTATION: OpenAI Responses API scoring               │
+        # │ To revert: replace the try block above with:                        │
+        # │                                                                     │
+        # │     prompt = self._create_scoring_prompt(cleaned_transcript, ...)   │
+        # │     schema = self._create_json_schema(self.topics)                  │
+        # │     reasoning_effort = self._get_reasoning_effort(self.ai_model)    │
+        # │     response = self.client.responses.create(                        │
+        # │         model=self.ai_model,                                        │
+        # │         input=[{"role": "user", "content": prompt}],               │
+        # │         reasoning={"effort": reasoning_effort},                     │
+        # │         max_output_tokens=self.max_tokens,                          │
+        # │         text={"format": {"type": "json_schema", ...}}               │
+        # │     )                                                               │
+        # │     scores = json.loads(response.output_text)                       │
+        # └─────────────────────────────────────────────────────────────────────┘
     
     def score_transcript_file(self, transcript_path: Path, episode_id: str = None) -> ScoringResult:
         """
