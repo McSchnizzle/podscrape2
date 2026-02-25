@@ -3,7 +3,8 @@
 # Usage: ./scripts/deploy_to_et01.sh
 #
 # Excludes:
-#   - Standard: .venv, node_modules, .git, data/, .env, __pycache__, .next, .claude, .agents, ui-tests
+#   - Standard: .venv, node_modules, .git, data/, .env, __pycache__, .next, .agents, ui-tests
+#   - .claude: excluded except .claude/commands/ (skill prompts needed by claude -p on et01)
 #   - et01-specific: Files in .rsync-exclude-et01 (edit to add/remove protected files)
 
 set -e
@@ -19,7 +20,10 @@ echo "Deploying podcast-pipeline to et01..."
 rsync -avz --delete \
   --exclude '.venv' --exclude 'node_modules' --exclude '.git' \
   --exclude 'data/' --exclude 'logs/' --exclude '.env' \
-  --exclude '__pycache__' --exclude '.next' --exclude '.claude' \
+  --exclude '__pycache__' --exclude '.next' \
+  --exclude '.claude/settings.json' --exclude '.claude/hooks/' \
+  --exclude '.claude/agents/' --exclude '.claude/logs/' \
+  --exclude '.claude/todos/' --exclude '.claude/memory/' \
   --exclude 'ui-tests/' --exclude '.agents/' \
   --exclude-from="$EXCLUDE_FILE" \
   ./ et01:/srv/projects/podcast-pipeline/
