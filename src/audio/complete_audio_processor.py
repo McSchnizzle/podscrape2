@@ -157,12 +157,28 @@ class CompleteAudioProcessor:
             # Only update database after MP3 is validated and finalized
             logger.info(f"Updating database for digest {digest.id}")
             try:
+                # Build full summary with episode links appended
+                full_summary = episode_metadata.summary or ''
+                if episode_metadata.episode_links:
+                    links_section = "\n\nSource episodes:"
+                    for link in episode_metadata.episode_links:
+                        feed = link.get('feed_name', '')
+                        title = link.get('title', '')
+                        url = link.get('audio_url', '')
+                        if title:
+                            if url:
+                                links_section += f"\n- {title} ({feed}) {url}"
+                            else:
+                                links_section += f"\n- {title} ({feed})"
+                    full_summary += links_section
+                    logger.info(f"Appended {len(episode_metadata.episode_links)} episode links to summary")
+
                 self.digest_repo.update_audio(
                     digest_id=digest.id,
                     mp3_path=audio_metadata.file_path,
                     duration_seconds=int(audio_metadata.duration_seconds or 0),
                     title=episode_metadata.title,
-                    summary=episode_metadata.summary
+                    summary=full_summary
                 )
                 results['database_updated'] = True
                 logger.info(f"Database updated for digest {digest.id}")

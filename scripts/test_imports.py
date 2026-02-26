@@ -67,9 +67,12 @@ def import_script_generator():
 
 
 def import_audio_modules():
-    from src.audio.audio_generator import AudioGenerator
+    from src.audio.audio_generator import AudioGenerator, ElevenLabsQuotaExceededError
     from src.audio.complete_audio_processor import CompleteAudioProcessor
     from src.audio.audio_manager import AudioManager
+    assert issubclass(ElevenLabsQuotaExceededError, Exception), "ElevenLabsQuotaExceededError must be an Exception"
+    assert hasattr(AudioGenerator, '_generate_dialogue_audio_openai'), "Missing OpenAI TTS dialogue fallback"
+    assert hasattr(AudioGenerator, '_generate_narrative_audio_openai'), "Missing OpenAI TTS narrative fallback"
 
 
 def import_pipeline_modules():

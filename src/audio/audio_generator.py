@@ -38,6 +38,10 @@ class AudioGenerationError(Exception):
     """Raised when audio generation fails"""
     pass
 
+class ElevenLabsQuotaExceededError(AudioGenerationError):
+    """Raised when ElevenLabs quota is exhausted - triggers fallback to OpenAI TTS"""
+    pass
+
 class AudioGenerator:
     """
     Generates high-quality audio from digest scripts using ElevenLabs TTS.
@@ -210,56 +214,74 @@ class AudioGenerator:
             filename = f"{safe_topic}_{timestamp}.mp3"
         output_path = self.audio_dir / filename
 
-        # CRITICAL FIX: Check use_dialogue_api to route to correct TTS method
+        # Route to dialogue or single-voice, with OpenAI TTS fallback on quota exceeded
         if topic_config and topic_config.use_dialogue_api and topic_config.voice_config:
             logger.info(f"🎭 DIALOGUE MODE for '{topic}' - using Text-to-Dialogue API with chunking")
-            # Call existing chunked dialogue method with correct signature
-            return self._generate_chunked_dialogue_audio(
-                script_content=script_content,  # DON'T clean - preserves SPEAKER_1/SPEAKER_2 and audio tags
-                topic=topic,
-                voice_config=topic_config.voice_config,
-                dialogue_model=topic_config.dialogue_model,
-                timestamp=timestamp,
-                episode_id=episode_id
-            )
+            try:
+                return self._generate_chunked_dialogue_audio(
+                    script_content=script_content,  # DON'T clean - preserves SPEAKER_1/SPEAKER_2 and audio tags
+                    topic=topic,
+                    voice_config=topic_config.voice_config,
+                    dialogue_model=topic_config.dialogue_model,
+                    timestamp=timestamp,
+                    episode_id=episode_id
+                )
+            except ElevenLabsQuotaExceededError:
+                logger.warning(f"ElevenLabs quota exceeded for dialogue - falling back to OpenAI TTS")
+                return self._generate_dialogue_audio_openai(
+                    script_content=script_content,
+                    voice_config=topic_config.voice_config,
+                    topic=topic,
+                    timestamp=timestamp,
+                    episode_id=episode_id
+                )
         else:
             logger.info(f"📢 SINGLE-VOICE MODE for '{topic}' - using standard TTS API")
             # Clean script for single-voice TTS
             tts_text = self._clean_script_for_tts(script_content)
             logger.info(f"Cleaned script: {len(tts_text)} characters for TTS")
 
-            # Get voice configuration for topic
-            voice_id = self._get_voice_id_for_topic(topic)
-            voice_settings = self.voice_manager.get_voice_settings_for_topic(topic)
+            try:
+                # Get voice configuration for topic
+                voice_id = self._get_voice_id_for_topic(topic)
+                voice_settings = self.voice_manager.get_voice_settings_for_topic(topic)
 
-            logger.info(f"Using voice {voice_id} for topic '{topic}'")
+                logger.info(f"Using voice {voice_id} for topic '{topic}'")
 
-            # Check if we need to chunk for v3 model (3000 char limit)
-            needs_chunking = (
-                topic_config and
-                topic_config.dialogue_model == 'eleven_v3' and
-                len(tts_text) > 3000
-            )
-
-            if needs_chunking:
-                logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for {topic_config.dialogue_model} model")
-                audio_data = self._generate_chunked_narrative_audio(
-                    tts_text,
-                    voice_id,
-                    voice_settings,
-                    output_path,
-                    model_id=topic_config.dialogue_model  # Pass per-topic model
+                # Check if we need to chunk for v3 model (3000 char limit)
+                needs_chunking = (
+                    topic_config and
+                    topic_config.dialogue_model == 'eleven_v3' and
+                    len(tts_text) > 3000
                 )
-                file_size = output_path.stat().st_size
-            else:
-                # Generate audio via ElevenLabs API (single request)
-                audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
 
-                # Save audio file
-                with open(output_path, 'wb') as f:
-                    f.write(audio_data)
+                if needs_chunking:
+                    logger.info(f"Script exceeds 3000 chars ({len(tts_text)}), chunking for {topic_config.dialogue_model} model")
+                    audio_data = self._generate_chunked_narrative_audio(
+                        tts_text,
+                        voice_id,
+                        voice_settings,
+                        output_path,
+                        model_id=topic_config.dialogue_model  # Pass per-topic model
+                    )
+                    file_size = output_path.stat().st_size
+                else:
+                    # Generate audio via ElevenLabs API (single request)
+                    audio_data = self._generate_tts_audio(tts_text, voice_id, voice_settings)
 
-                file_size = output_path.stat().st_size
+                    # Save audio file
+                    with open(output_path, 'wb') as f:
+                        f.write(audio_data)
+
+                    file_size = output_path.stat().st_size
+            except ElevenLabsQuotaExceededError:
+                logger.warning(f"ElevenLabs quota exceeded for narrative - falling back to OpenAI TTS")
+                return self._generate_narrative_audio_openai(
+                    script_content=script_content,
+                    topic=topic,
+                    timestamp=timestamp,
+                    episode_id=episode_id
+                )
 
             # Estimate duration (rough approximation: ~150 words per minute, ~5 chars per word)
             estimated_duration = (len(tts_text) / 5) / 150 * 60  # seconds
@@ -493,6 +515,17 @@ class AudioGenerator:
                     raise AudioGenerationError(f"TTS generation timed out after {max_retries + 1} attempts")
                     
             except requests.RequestException as e:
+                # Check for quota exceeded - no point retrying
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        error_status = error_detail.get('detail', {}).get('status', '')
+                        if error_status == 'quota_exceeded' or 'quota' in str(error_detail).lower():
+                            logger.warning(f"ElevenLabs quota exceeded - will attempt OpenAI TTS fallback")
+                            raise ElevenLabsQuotaExceededError(f"ElevenLabs quota exceeded: {error_detail}")
+                    except (ValueError, KeyError):
+                        pass
+
                 if attempt < max_retries:
                     logger.warning(f"TTS request failed (attempt {attempt + 1}/{max_retries + 1}), retrying...")
                     continue
@@ -638,6 +671,17 @@ class AudioGenerator:
                     raise AudioGenerationError(f"Text-to-Dialogue generation timed out after {max_retries + 1} attempts")
 
             except requests.RequestException as e:
+                # Check for quota exceeded - no point retrying
+                if hasattr(e, 'response') and e.response is not None:
+                    try:
+                        error_detail = e.response.json()
+                        error_status = error_detail.get('detail', {}).get('status', '')
+                        if error_status == 'quota_exceeded' or 'quota' in str(error_detail).lower():
+                            logger.warning(f"ElevenLabs quota exceeded - will attempt OpenAI TTS fallback")
+                            raise ElevenLabsQuotaExceededError(f"ElevenLabs quota exceeded: {error_detail}")
+                    except (ValueError, KeyError):
+                        pass
+
                 if attempt < max_retries:
                     logger.warning(f"Text-to-Dialogue request failed (attempt {attempt + 1}/{max_retries + 1}), retrying...")
                     continue
@@ -707,6 +751,7 @@ class AudioGenerator:
 
             result = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,  # CRITICAL: Prevents hang in non-interactive mode
                 capture_output=True,
                 text=True,
                 timeout=self.ffmpeg_timeout
@@ -883,6 +928,225 @@ class AudioGenerator:
             except Exception as e:
                 logger.warning(f"Failed to clean up temp directory {temp_dir}: {e}")
 
+    # ── OpenAI TTS Fallback Methods ──────────────────────────────────────
+
+    # Default voice mapping for OpenAI TTS dialogue fallback
+    OPENAI_DIALOGUE_VOICES = {
+        "SPEAKER_1": "shimmer",
+        "SPEAKER_2": "onyx",
+    }
+
+    def _ensure_openai_client(self):
+        """Lazily create OpenAI client for TTS fallback."""
+        if not hasattr(self, '_openai_client'):
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                raise AudioGenerationError("OPENAI_API_KEY required for TTS fallback but not set")
+            from openai import OpenAI
+            self._openai_client = OpenAI(api_key=api_key)
+        return self._openai_client
+
+    def _strip_audio_tags(self, text: str) -> str:
+        """Strip ElevenLabs audio tags like [excited], [laughs] that OpenAI doesn't support."""
+        import re
+        return re.sub(r'\[(?:excited|thoughtful|serious|concerned|hopeful|laughs|sighs|chuckles|pause|quickly|slowly)\]\s*', '', text)
+
+    def _generate_openai_tts_chunk(self, text: str, voice: str = "nova", model: str = "tts-1") -> bytes:
+        """
+        Generate a single audio chunk via OpenAI TTS API.
+
+        Args:
+            text: Text to synthesize (max 4096 chars)
+            voice: OpenAI voice name (alloy, echo, fable, onyx, nova, shimmer)
+            model: OpenAI TTS model (tts-1 or tts-1-hd)
+
+        Returns:
+            Audio bytes (MP3)
+        """
+        client = self._ensure_openai_client()
+
+        # OpenAI TTS has a 4096 char limit per request
+        if len(text) > 4096:
+            logger.warning(f"OpenAI TTS chunk too long ({len(text)} chars), truncating to 4096")
+            text = text[:4096]
+
+        logger.info(f"OpenAI TTS: {len(text)} chars, voice={voice}, model={model}")
+
+        response = client.audio.speech.create(
+            model=model,
+            voice=voice,
+            input=text,
+            response_format="mp3"
+        )
+
+        audio_bytes = response.content
+        logger.info(f"OpenAI TTS chunk generated: {len(audio_bytes)} bytes")
+        return audio_bytes
+
+    def _generate_dialogue_audio_openai(
+        self,
+        script_content: str,
+        voice_config: dict,
+        topic: str,
+        timestamp: str = None,
+        episode_id: int = None
+    ) -> AudioMetadata:
+        """
+        Fallback: Generate dialogue audio using OpenAI TTS (per-turn with different voices).
+
+        Maps ElevenLabs voice_config speakers to OpenAI voices, strips audio tags,
+        generates audio per speaker turn, and concatenates with ffmpeg.
+        """
+        import re
+        import tempfile
+        import shutil
+
+        logger.info(f"FALLBACK: Generating dialogue audio via OpenAI TTS for {topic}")
+
+        # Parse speaker turns from script
+        dialogue_turns = []
+        pattern = re.compile(
+            r'^(SPEAKER_[12])(?:\s*\([^)]+\))?:\s*(.+?)(?=^SPEAKER_[12](?:\s*\([^)]+\))?:|\Z)',
+            re.MULTILINE | re.DOTALL
+        )
+        for match in pattern.finditer(script_content):
+            speaker = match.group(1)
+            text = self._strip_audio_tags(match.group(2).strip())
+            if text:
+                dialogue_turns.append({"speaker": speaker, "text": text})
+
+        if not dialogue_turns:
+            raise AudioGenerationError("No dialogue turns found in script for OpenAI TTS fallback")
+
+        logger.info(f"Parsed {len(dialogue_turns)} dialogue turns for OpenAI TTS")
+
+        # Create temp directory for per-turn audio files
+        temp_dir = Path(tempfile.mkdtemp(prefix='openai_dialogue_'))
+        chunk_files = []
+
+        try:
+            for i, turn in enumerate(dialogue_turns):
+                voice = self.OPENAI_DIALOGUE_VOICES.get(turn["speaker"], "nova")
+                text = turn["text"]
+
+                # Split long turns into 4096-char chunks
+                text_chunks = [text[j:j+4096] for j in range(0, len(text), 4096)]
+
+                for ci, chunk_text in enumerate(text_chunks):
+                    chunk_file = temp_dir / f"turn_{i:04d}_{ci:02d}.mp3"
+                    audio_bytes = self._generate_openai_tts_chunk(chunk_text, voice=voice)
+                    with open(chunk_file, 'wb') as f:
+                        f.write(audio_bytes)
+                    chunk_files.append(chunk_file)
+
+                    # Brief delay to respect rate limits
+                    time.sleep(0.25)
+
+            # Generate output filename
+            if not timestamp:
+                timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
+            safe_topic = topic.replace(' ', '_').replace('&', 'and')
+            if episode_id:
+                filename = f"{safe_topic}_ep{episode_id}_{timestamp}.mp3"
+            else:
+                filename = f"{safe_topic}_{timestamp}.mp3"
+            output_path = self.audio_dir / filename
+
+            # Concatenate all turn audio files
+            self._concatenate_audio_chunks(chunk_files, output_path)
+
+            file_size = output_path.stat().st_size
+            total_chars = sum(len(t["text"]) for t in dialogue_turns)
+            estimated_duration = (total_chars / 5) / 150 * 60
+
+            logger.info(f"OpenAI TTS dialogue audio generated: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
+
+            return AudioMetadata(
+                file_path=str(output_path),
+                duration_seconds=estimated_duration,
+                file_size_bytes=file_size,
+                voice_name="OpenAI TTS (fallback dialogue)",
+                voice_id="openai-dialogue",
+                generation_timestamp=get_pacific_now()
+            )
+
+        finally:
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up OpenAI TTS temp dir: {e}")
+
+    def _generate_narrative_audio_openai(
+        self,
+        script_content: str,
+        topic: str,
+        timestamp: str = None,
+        episode_id: int = None,
+        voice: str = "nova"
+    ) -> AudioMetadata:
+        """
+        Fallback: Generate narrative (single-voice) audio using OpenAI TTS.
+
+        Chunks text at sentence boundaries, generates audio per chunk, concatenates with ffmpeg.
+        """
+        import tempfile
+        import shutil
+
+        logger.info(f"FALLBACK: Generating narrative audio via OpenAI TTS for {topic}")
+
+        # Clean the script for TTS
+        tts_text = self._clean_script_for_tts(script_content)
+        logger.info(f"Cleaned script: {len(tts_text)} chars for OpenAI TTS")
+
+        # Chunk at 4000 chars (safety margin under 4096 limit)
+        chunks = self._chunk_narrative_text(tts_text, 4000)
+        logger.info(f"Split into {len(chunks)} chunks for OpenAI TTS")
+
+        temp_dir = Path(tempfile.mkdtemp(prefix='openai_narrative_'))
+        chunk_files = []
+
+        try:
+            for i, chunk_text in enumerate(chunks, 1):
+                chunk_file = temp_dir / f"chunk_{i:03d}.mp3"
+                logger.info(f"OpenAI TTS chunk {i}/{len(chunks)} ({len(chunk_text)} chars)")
+                audio_bytes = self._generate_openai_tts_chunk(chunk_text, voice=voice)
+                with open(chunk_file, 'wb') as f:
+                    f.write(audio_bytes)
+                chunk_files.append(chunk_file)
+                time.sleep(0.25)
+
+            # Generate output filename
+            if not timestamp:
+                timestamp = get_pacific_now().strftime('%Y%m%d_%H%M%S')
+            safe_topic = topic.replace(' ', '_').replace('&', 'and')
+            if episode_id:
+                filename = f"{safe_topic}_ep{episode_id}_{timestamp}.mp3"
+            else:
+                filename = f"{safe_topic}_{timestamp}.mp3"
+            output_path = self.audio_dir / filename
+
+            self._concatenate_audio_chunks(chunk_files, output_path)
+
+            file_size = output_path.stat().st_size
+            estimated_duration = (len(tts_text) / 5) / 150 * 60
+
+            logger.info(f"OpenAI TTS narrative audio generated: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
+
+            return AudioMetadata(
+                file_path=str(output_path),
+                duration_seconds=estimated_duration,
+                file_size_bytes=file_size,
+                voice_name=f"OpenAI TTS (fallback: {voice})",
+                voice_id=f"openai-{voice}",
+                generation_timestamp=get_pacific_now()
+            )
+
+        finally:
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up OpenAI TTS temp dir: {e}")
+
     def generate_audio_for_digest(self, digest: Digest) -> AudioMetadata:
         """
         Generate audio for a digest record.
@@ -929,35 +1193,50 @@ class AudioGenerator:
             logger.warning(f"Failed to get topic configuration for '{digest.topic}': {e}, using narrative mode")
             use_dialogue_api = False
 
-        # Route to appropriate generation method
+        # Ensure we have script content
+        if not digest.script_content:
+            raise AudioGenerationError(f"Digest {digest.id} has no script_content")
+
+        # Route to appropriate generation method, with OpenAI TTS fallback on quota exceeded
         if use_dialogue_api:
             logger.info(f"Using DIALOGUE MODE for {digest.topic}")
 
-            # Ensure we have script content
-            if not digest.script_content:
-                raise AudioGenerationError(f"Digest {digest.id} has no script_content")
-
-            audio_metadata = self._generate_chunked_dialogue_audio(
-                script_content=digest.script_content,
-                topic=digest.topic,
-                voice_config=voice_config,
-                dialogue_model=dialogue_model,
-                timestamp=ts,
-                episode_id=digest.id
-            )
+            try:
+                audio_metadata = self._generate_chunked_dialogue_audio(
+                    script_content=digest.script_content,
+                    topic=digest.topic,
+                    voice_config=voice_config,
+                    dialogue_model=dialogue_model,
+                    timestamp=ts,
+                    episode_id=digest.id
+                )
+            except ElevenLabsQuotaExceededError:
+                logger.warning(f"ElevenLabs quota exceeded for dialogue - falling back to OpenAI TTS")
+                audio_metadata = self._generate_dialogue_audio_openai(
+                    script_content=digest.script_content,
+                    voice_config=voice_config,
+                    topic=digest.topic,
+                    timestamp=ts,
+                    episode_id=digest.id
+                )
         else:
             logger.info(f"Using NARRATIVE MODE for {digest.topic}")
 
-            # Ensure we have script content
-            if not digest.script_content:
-                raise AudioGenerationError(f"Digest {digest.id} has no script_content")
-
-            audio_metadata = self.generate_audio_for_script(
-                script_content=digest.script_content,
-                topic=digest.topic,
-                timestamp=ts,
-                episode_id=digest.id
-            )
+            try:
+                audio_metadata = self.generate_audio_for_script(
+                    script_content=digest.script_content,
+                    topic=digest.topic,
+                    timestamp=ts,
+                    episode_id=digest.id
+                )
+            except ElevenLabsQuotaExceededError:
+                logger.warning(f"ElevenLabs quota exceeded for narrative - falling back to OpenAI TTS")
+                audio_metadata = self._generate_narrative_audio_openai(
+                    script_content=digest.script_content,
+                    topic=digest.topic,
+                    timestamp=ts,
+                    episode_id=digest.id
+                )
 
         # Update digest record with audio information
         self.digest_repo.update_audio(

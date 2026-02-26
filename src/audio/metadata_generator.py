@@ -176,7 +176,7 @@ class MetadataGenerator:
 
             metadata = EpisodeMetadata(
                 title=metadata_dict['title'][:80],
-                summary=metadata_dict['summary'][:250],
+                summary=metadata_dict['summary'],
                 keywords=metadata_dict.get('keywords', '')[:100],
                 category=metadata_dict.get('category', 'Technology')[:50],
                 episode_links=metadata_dict.get('episode_links', []) or [],
@@ -394,7 +394,7 @@ Generate metadata that accurately reflects the content and would attract the tar
             # Create metadata object
             metadata = EpisodeMetadata(
                 title=metadata_dict['title'][:80],  # Ensure max length
-                summary=metadata_dict['summary'][:250],  # Ensure max length
+                summary=metadata_dict['summary'],  # Ensure max length
                 keywords=metadata_dict['keywords'][:100],  # Reasonable limit
                 category=metadata_dict['category'][:50]  # Reasonable limit
             )
@@ -510,17 +510,31 @@ Generate metadata that accurately reflects the content and would attract the tar
     # └─────────────────────────────────────────────────────────────────────┘
     
     def update_digest_metadata(self, digest_repo, digest_id: int, metadata: EpisodeMetadata) -> None:
-        """Update digest record with generated metadata"""
-        
-        # Update digest with title and summary
-        # Note: This updates the existing update_audio method to include title and summary
+        """Update digest record with generated metadata, including episode links in summary."""
+
+        # Build full summary with episode links appended
+        full_summary = metadata.summary or ''
+        if metadata.episode_links:
+            links_section = "\n\nSource episodes:"
+            for link in metadata.episode_links:
+                feed = link.get('feed_name', '')
+                title = link.get('title', '')
+                url = link.get('audio_url', '')
+                if title:
+                    if url:
+                        links_section += f"\n- {title} ({feed}) {url}"
+                    else:
+                        links_section += f"\n- {title} ({feed})"
+            full_summary += links_section
+            logger.info(f"Appended {len(metadata.episode_links)} episode links to summary")
+
         try:
             digest_repo.update_audio(
                 digest_id=digest_id,
                 mp3_path=None,  # Don't update MP3 path
                 duration_seconds=0,  # Don't update duration
                 title=metadata.title,
-                summary=metadata.summary
+                summary=full_summary
             )
             logger.info(f"Updated digest {digest_id} with metadata")
         except Exception as e:
