@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200, max_retries: int = 2) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -239,7 +239,8 @@ class ScriptGenerator:
         Args:
             system_prompt: System-level instructions
             user_prompt: The user prompt to send
-            timeout: Subprocess timeout in seconds (default 10 min for long scripts)
+            timeout: Subprocess timeout in seconds (default 20 min for long scripts)
+            max_retries: Number of attempts before giving up (default 2)
 
         Returns:
             The text response from Claude
@@ -255,21 +256,34 @@ class ScriptGenerator:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
 
-        result = subprocess.run(
-            [claude_path, "-p", "-"],
-            input=full_prompt,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"claude -p attempt {attempt}/{max_retries} (timeout: {timeout}s)")
+                result = subprocess.run(
+                    [claude_path, "-p", "-"],
+                    input=full_prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    env=env,
+                )
 
-        if result.returncode != 0:
-            raise ScriptGenerationError(
-                f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
-            )
+                if result.returncode != 0:
+                    raise ScriptGenerationError(
+                        f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
+                    )
 
-        return result.stdout.strip()
+                return result.stdout.strip()
+
+            except subprocess.TimeoutExpired:
+                last_error = f"claude -p timed out after {timeout}s (attempt {attempt}/{max_retries})"
+                logger.warning(last_error)
+                if attempt < max_retries:
+                    logger.info("Retrying claude -p after timeout...")
+                    continue
+
+        raise ScriptGenerationError(last_error)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """Route LLM call to the appropriate provider based on configured model."""
