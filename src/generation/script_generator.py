@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200, max_retries: int = 2) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -239,8 +239,7 @@ class ScriptGenerator:
         Args:
             system_prompt: System-level instructions
             user_prompt: The user prompt to send
-            timeout: Subprocess timeout in seconds (default 20 min for long scripts)
-            max_retries: Number of attempts before giving up (default 2)
+            timeout: Subprocess timeout in seconds (default 10 min)
 
         Returns:
             The text response from Claude
@@ -256,40 +255,48 @@ class ScriptGenerator:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
 
-        last_error = None
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(f"claude -p attempt {attempt}/{max_retries} (timeout: {timeout}s)")
-                result = subprocess.run(
-                    [claude_path, "-p", "-"],
-                    input=full_prompt,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    env=env,
-                )
+        result = subprocess.run(
+            [claude_path, "-p", "--tools", "", "-"],
+            input=full_prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
 
-                if result.returncode != 0:
-                    raise ScriptGenerationError(
-                        f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
-                    )
+        if result.returncode != 0:
+            raise ScriptGenerationError(
+                f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
+            )
 
-                return result.stdout.strip()
+        return result.stdout.strip()
 
-            except subprocess.TimeoutExpired:
-                last_error = f"claude -p timed out after {timeout}s (attempt {attempt}/{max_retries})"
-                logger.warning(last_error)
-                if attempt < max_retries:
-                    logger.info("Retrying claude -p after timeout...")
-                    continue
+    OPENAI_FALLBACK_MODEL = "gpt-5"
 
-        raise ScriptGenerationError(last_error)
+    def _call_openai_fallback(self, system_prompt: str, user_prompt: str) -> str:
+        """Fallback to OpenAI API when claude -p fails or times out."""
+        logger.info(f"Using OpenAI fallback model: {self.OPENAI_FALLBACK_MODEL}")
+        response = self.openai_client.responses.create(
+            model=self.OPENAI_FALLBACK_MODEL,
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            reasoning={"effort": "medium"},
+            max_output_tokens=25000
+        )
+        return response.output_text
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """Route LLM call to the appropriate provider based on configured model."""
+        """Route LLM call to the appropriate provider based on configured model.
+        Falls back to OpenAI API if claude -p fails."""
         if self._is_anthropic_model():
             logger.info("Using claude -p for Anthropic model call (no API key)")
-            return self._call_claude_p(system_prompt, user_prompt)
+            try:
+                return self._call_claude_p(system_prompt, user_prompt)
+            except (ScriptGenerationError, Exception) as e:
+                logger.warning(f"claude -p failed in _call_llm, falling back to OpenAI: {e}")
+                return self._call_openai_fallback(system_prompt, user_prompt)
         else:
             response = self.openai_client.responses.create(
                 model=self.ai_model,
@@ -1108,6 +1115,7 @@ The colon MUST come immediately after the speaker number, BEFORE the audio tag.
 Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
 
         try:
+            used_fallback = False
             if self._is_anthropic_model():
                 # For claude -p path: replace the hardcoded system prompt with the
                 # skill file (.claude/commands/generate-digest.md), which contains
@@ -1124,7 +1132,12 @@ Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [c
                     speaker_2_name=speaker_2_name,
                     num_episodes=len(transcripts),
                 )
-                script_content = self._call_claude_p(skill_based_prompt, user_prompt)
+                try:
+                    script_content = self._call_claude_p(skill_based_prompt, user_prompt)
+                except (ScriptGenerationError, Exception) as claude_err:
+                    logger.warning(f"claude -p failed, falling back to OpenAI API: {claude_err}")
+                    script_content = self._call_openai_fallback(system_prompt, user_prompt)
+                    used_fallback = True
             else:
                 script_content = self._call_llm(system_prompt, user_prompt)
 
@@ -1136,19 +1149,14 @@ Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [c
                 logger.warning(f"Auto-corrected dialogue format issues in generated script")
                 char_count = len(script_content)  # Update char count after fixes
 
-            # Validate character count (targets differ by path)
-            if self._is_anthropic_model():
-                if char_count < 16000:
-                    logger.warning(f"Dialogue script is shorter than target: {char_count} < 16,000 characters")
-                elif char_count > 24000:
-                    logger.warning(f"Dialogue script exceeds target: {char_count} > 24,000 characters")
-            else:
-                if char_count < 25000:
-                    logger.warning(f"Dialogue script is shorter than target: {char_count} < 25,000 characters")
-                elif char_count > 30000:
-                    logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
+            # Validate character count
+            if char_count < 16000:
+                logger.warning(f"Dialogue script is shorter than target: {char_count} < 16,000 characters")
+            elif char_count > 30000:
+                logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
 
-            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes")
+            provider = f"OpenAI fallback ({self.OPENAI_FALLBACK_MODEL})" if used_fallback else self.ai_model
+            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via {provider})")
             return script_content, char_count
 
         except Exception as e:
