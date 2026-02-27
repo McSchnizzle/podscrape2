@@ -102,7 +102,7 @@ class MetadataGenerator:
         return "minimal"
 
     @staticmethod
-    def _call_claude_p(prompt: str, timeout: int = 120) -> str:
+    def _call_claude_p(prompt: str, timeout: int = 300) -> str:
         """Call claude -p with prompt via stdin."""
         claude_path = os.path.expanduser("~/.local/bin/claude")
         if not os.path.exists(claude_path):
@@ -110,7 +110,7 @@ class MetadataGenerator:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+            [claude_path, "-p", "--model", "sonnet",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,
             capture_output=True,

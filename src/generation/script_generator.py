@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -239,7 +239,7 @@ class ScriptGenerator:
         Args:
             system_prompt: System-level instructions
             user_prompt: The user prompt to send
-            timeout: Subprocess timeout in seconds (default 10 min)
+            timeout: Subprocess timeout in seconds (default 20 min for extended thinking)
 
         Returns:
             The text response from Claude
@@ -256,7 +256,7 @@ class ScriptGenerator:
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
 
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+            [claude_path, "-p", "--model", "sonnet",
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,
