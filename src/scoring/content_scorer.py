@@ -136,7 +136,8 @@ class ContentScorer:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
         result = subprocess.run(
-            [claude_path, "-p", "--tools", "", "-"],
+            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+             "--tools", "", "--no-session-persistence", "-"],
             input=prompt,
             capture_output=True,
             text=True,

@@ -256,7 +256,8 @@ class ScriptGenerator:
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
 
         result = subprocess.run(
-            [claude_path, "-p", "--tools", "", "-"],
+            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+             "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,
             text=True,
