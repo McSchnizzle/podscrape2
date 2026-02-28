@@ -254,9 +254,10 @@ class ScriptGenerator:
 
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
+        env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
 
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet",
+            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,
@@ -357,7 +358,7 @@ class ScriptGenerator:
         Classify arcs into 'hot' and 'developing' categories based on prominence.
 
         Classification thresholds:
-        - Hot: 5+ events OR 3+ sources (priority framing)
+        - Hot: is_hot flag set, OR 5+ events, OR 3+ sources (priority framing)
         - Developing: 2-4 events with 1-2 sources (standard tracking)
 
         Args:
@@ -372,9 +373,10 @@ class ScriptGenerator:
         for arc in arcs:
             event_count = arc.get('event_count', 0)
             source_count = arc.get('source_count', 0)
+            is_hot = arc.get('is_hot', False)
 
-            # Hot: 5+ events OR 3+ sources
-            if event_count >= 5 or source_count >= 3:
+            # Hot: manually flagged, OR 5+ events, OR 3+ sources
+            if is_hot or event_count >= 5 or source_count >= 3:
                 hot.append(arc)
             # Developing: 2-4 events (already filtered by min_events=2 in query)
             elif event_count >= 2:
@@ -625,13 +627,35 @@ class ScriptGenerator:
                 exclude_included=False  # Include all for context (mark after generation)
             )
 
+            # Query hot arcs separately (no min_events filter -- always include)
+            hot_flag_arcs = self.story_arc_repo.get_story_arcs_for_digest(
+                digest_topic=digest_topic,
+                min_events=0,
+                exclude_included=False
+            )
+            hot_flag_arcs = [a for a in hot_flag_arcs if a.get('is_hot', False)]
+
+            # Merge hot arcs into the main list, deduplicating by arc ID
+            existing_ids = {a.get('id') for a in arcs}
+            for ha in hot_flag_arcs:
+                if ha.get('id') not in existing_ids:
+                    arcs.append(ha)
+                    existing_ids.add(ha.get('id'))
+
             if not arcs:
                 logger.debug(f"No active story arcs found for {digest_topic}")
                 return ""
 
             # Ground arcs to episodes if provided (prevents hallucinations)
+            # Hot arcs bypass grounding -- they are always included
             if episodes:
-                arcs = self._match_arcs_to_episodes(arcs, episodes)
+                grounded_arcs = self._match_arcs_to_episodes(arcs, episodes)
+                # Re-add hot-flagged arcs that were filtered out by grounding
+                grounded_ids = {a.get('id') for a in grounded_arcs}
+                for arc in arcs:
+                    if arc.get('is_hot', False) and arc.get('id') not in grounded_ids:
+                        grounded_arcs.append(arc)
+                arcs = grounded_arcs
                 if not arcs:
                     logger.info(f"No story arcs have supporting evidence in episodes for {digest_topic}")
                     return ""
@@ -644,6 +668,30 @@ class ScriptGenerator:
             hot_arcs = classified['hot']
             developing_arcs = classified['developing']
 
+            # Build hot briefing section first (prioritized for token budget)
+            hot_briefing_section = ""
+            briefing_arcs = [
+                a for a in arcs
+                if a.get('is_hot', False) and a.get('hot_briefing')
+            ]
+            if briefing_arcs:
+                hot_briefing_section = "\n\n## HOT STORY BRIEFINGS\n\n"
+                for arc in briefing_arcs:
+                    arc_name = arc.get('arc_name', '')
+                    category = arc.get('functional_category', 'other')
+                    event_count = arc.get('event_count', 0)
+                    source_count = arc.get('source_count', 0)
+                    briefing = arc.get('hot_briefing', '')
+                    hot_briefing_section += f"### {arc_name}\n"
+                    hot_briefing_section += f"Category: {category} | Events: {event_count} | Sources: {source_count}\n"
+                    hot_briefing_section += f"BRIEFING: {briefing}\n"
+                    hot_briefing_section += (
+                        "FRAMING: This is a story we are actively tracking. "
+                        "Here is the accumulated briefing. Use this to contextualize "
+                        "any new developments. Do NOT re-introduce the story -- our "
+                        "audience knows the background. Focus on what's NEW.\n\n"
+                    )
+
             # Build context with new framing
             context = "\n\n## STORY ARC INTEGRATION\n\n"
             context += "This digest is part of an ongoing series. The following story arcs have "
@@ -654,7 +702,7 @@ class ScriptGenerator:
 
             # Hot stories section
             if hot_arcs:
-                context += "**HOT STORIES** (5+ events OR 3+ sources - PRIORITY):\n\n"
+                context += "**HOT STORIES** (flagged, 5+ events, OR 3+ sources - PRIORITY):\n\n"
                 for arc in hot_arcs[:5]:  # Limit to top 5 hot
                     context += self._format_arc_for_context(arc, for_narrative)
 
@@ -673,13 +721,32 @@ class ScriptGenerator:
 5. For previously covered arcs, focus on what's NEW - don't rehash background
 """
 
-            # Truncate if too long
-            if len(context) > MAX_CONTEXT_CHARS:
-                context = context[:MAX_CONTEXT_CHARS - 50] + "\n\n[Context truncated for length]\n"
-                logger.warning(f"Story arc context truncated from {len(context)} to {MAX_CONTEXT_CHARS} chars")
+            # Combine: hot briefings first (highest priority), then arc context
+            if hot_briefing_section:
+                full_context = hot_briefing_section + context
+            else:
+                full_context = context
 
-            logger.info(f"Arc context generated: {len(context)} chars, {len(hot_arcs)} hot, {len(developing_arcs)} developing")
-            return context
+            # Truncate if too long, prioritizing hot briefings
+            if len(full_context) > MAX_CONTEXT_CHARS:
+                if hot_briefing_section:
+                    # If briefings alone fit, truncate the arc context portion
+                    remaining = MAX_CONTEXT_CHARS - len(hot_briefing_section) - 50
+                    if remaining > 200:
+                        full_context = hot_briefing_section + context[:remaining] + "\n\n[Arc context truncated for length]\n"
+                    else:
+                        # Briefings themselves are too long, truncate them
+                        full_context = hot_briefing_section[:MAX_CONTEXT_CHARS - 50] + "\n\n[Context truncated for length]\n"
+                else:
+                    full_context = full_context[:MAX_CONTEXT_CHARS - 50] + "\n\n[Context truncated for length]\n"
+                logger.warning(f"Story arc context truncated to {MAX_CONTEXT_CHARS} chars")
+
+            logger.info(
+                f"Arc context generated: {len(full_context)} chars, "
+                f"{len(hot_arcs)} hot, {len(developing_arcs)} developing, "
+                f"{len(briefing_arcs)} with briefings"
+            )
+            return full_context
 
         except Exception as e:
             logger.warning(f"Failed to retrieve story arc context for {digest_topic}: {e}")
@@ -834,7 +901,7 @@ class ScriptGenerator:
             arcs = self.story_arc_repo.get_story_arcs_for_digest(
                 digest_topic=digest_topic,
                 min_events=1,
-                exclude_included=True  # Only unincluded arcs
+                exclude_included=False  # Track all arcs across multiple digests
             )
 
             script_lower = script_content.lower()

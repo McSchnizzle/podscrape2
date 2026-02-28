@@ -418,10 +418,14 @@ class StoryArcRepository:
 
         with self.db_manager.get_session() as session:
             # Events are cascade deleted
-            # Delete arcs that are either too old OR inactive
+            # Skip hot arcs and arcs with retain_until in the future
             result = session.query(StoryArc).filter(
                 (StoryArc.started_at < max_age_cutoff) |
                 (StoryArc.last_updated_at < inactivity_cutoff)
+            ).filter(
+                StoryArc.is_hot == False  # noqa: E712 — SQLAlchemy requires ==
+            ).filter(
+                (StoryArc.retain_until == None) | (StoryArc.retain_until <= now)  # noqa: E711
             ).delete()
             session.commit()
             logger.info(
@@ -588,6 +592,9 @@ class StoryArcRepository:
             'included_in_digest_id': arc.included_in_digest_id,
             'included_at': arc.included_at,
             'saturation_score': arc.saturation_score or 0.0,
+            'is_hot': arc.is_hot if hasattr(arc, 'is_hot') else False,
+            'hot_briefing': arc.hot_briefing if hasattr(arc, 'hot_briefing') else None,
+            'retain_until': arc.retain_until if hasattr(arc, 'retain_until') else None,
             'created_at': arc.created_at,
             'updated_at': arc.updated_at,
         }

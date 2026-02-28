@@ -135,8 +135,9 @@ class ContentScorer:
             claude_path = "claude"
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
+        env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet",
+            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,
             capture_output=True,

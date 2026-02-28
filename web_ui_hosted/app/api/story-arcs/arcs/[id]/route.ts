@@ -88,7 +88,10 @@ export async function PUT(
       arc_name,
       functional_category,
       digest_topic,
-      summary
+      summary,
+      is_hot,
+      hot_briefing,
+      retain_until
     } = body
 
     // Build update object with only provided fields
@@ -106,6 +109,9 @@ export async function PUT(
     if (functional_category !== undefined) updateData.functional_category = functional_category
     if (digest_topic !== undefined) updateData.digest_topic = digest_topic
     if (summary !== undefined) updateData.summary = summary
+    if (is_hot !== undefined) updateData.is_hot = is_hot
+    if (hot_briefing !== undefined) updateData.hot_briefing = hot_briefing
+    if (retain_until !== undefined) updateData.retain_until = retain_until
 
     const { data, error } = await supabase
       .from('story_arcs')

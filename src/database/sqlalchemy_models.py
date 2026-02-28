@@ -474,6 +474,9 @@ class StoryArc(Base):
     included_in_digest_id = Column(Integer)
     included_at = Column(DateTime(timezone=True))
     saturation_score = Column(Float, nullable=False, default=0.0)
+    is_hot = Column(Boolean, nullable=False, default=False)
+    hot_briefing = Column(Text)
+    retain_until = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
