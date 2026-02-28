@@ -93,7 +93,7 @@ function generateRSSXML(digests: Digest[]): string {
       <pubDate>${pubDate}</pubDate>
       <guid isPermaLink="false">${escapeXML(guid)}</guid>
       <itunes:episode>${digest.id}</itunes:episode>
-      <enclosure url="${escapeXML(mp3Url)}" length="0" type="audio/mpeg"/>
+      <enclosure url="${escapeXML(mp3Url)}" length="${digest.mp3_duration_seconds ? Math.round(digest.mp3_duration_seconds * 16000) : 10000000}" type="audio/mpeg"/>
     </item>`;
   }
 
