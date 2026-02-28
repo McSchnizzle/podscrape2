@@ -417,6 +417,16 @@ class StoryArcRepository:
         inactivity_cutoff = now - timedelta(days=inactivity_days)
 
         with self.db_manager.get_session() as session:
+            # First: clean up orphan arcs (0 events, older than 3 days)
+            orphan_cutoff = now - timedelta(days=3)
+            orphans_deleted = session.query(StoryArc).filter(
+                StoryArc.event_count == 0,
+                StoryArc.created_at < orphan_cutoff,
+                StoryArc.is_hot == False  # noqa: E712
+            ).delete()
+            if orphans_deleted > 0:
+                logger.info(f"Cleaned up {orphans_deleted} orphan arcs (0 events, >3 days old)")
+
             # Events are cascade deleted
             # Skip hot arcs and arcs with retain_until in the future
             result = session.query(StoryArc).filter(
@@ -432,7 +442,7 @@ class StoryArcRepository:
                 f"Cleaned up {result} old story arcs "
                 f"(max_age={max_age_days}d, inactivity={inactivity_days}d)"
             )
-            return result
+            return result + orphans_deleted
 
     def get_story_arc_by_id(self, arc_id: int) -> Optional[Dict]:
         """
