@@ -1358,10 +1358,8 @@ Follow ALL rules in the system prompt exactly, especially:
         - Formulaic transitions and reactions
         - Banned AI-tell phrases that need sentence-level rewriting, not word substitution
 
-        Uses gpt-5-mini for cost efficiency (~$0.01 per call).
+        Uses claude -p (free via Max subscription) for the rewrite pass.
         """
-        cleanup_model = "gpt-5-mini"
-
         system_prompt = """You are a script editor for a two-host podcast. Your job is to improve how the script SOUNDS when read aloud by fixing structural monotony and AI-tell patterns.
 
 RULES:
@@ -1393,16 +1391,8 @@ DO NOT INTRODUCE:
 {script}"""
 
         try:
-            logger.info(f"Running structural variety pass with {cleanup_model} ({len(script)} chars)")
-            response = self.openai_client.responses.create(
-                model=cleanup_model,
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_output_tokens=16000
-            )
-            revised = response.output_text.strip()
+            logger.info(f"Running structural variety pass via claude -p ({len(script)} chars)")
+            revised = self._call_claude_p(system_prompt, user_prompt, timeout=600).strip()
 
             # Validate the result
             if not revised or len(revised) < len(script) * 0.5:
