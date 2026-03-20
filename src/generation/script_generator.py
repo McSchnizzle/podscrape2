@@ -1141,13 +1141,13 @@ Do not invent or assume developments not present in the transcript content.
 If a story arc is listed above but has no supporting content in today's episodes, do not mention it.
 
 REQUIREMENTS:
-- Target 25,000-30,000 characters (this is measured in characters, not words)
+- Target 18,000-22,000 characters (this is measured in characters, not words)
 - Create engaging dialogue between {speaker_1_name} and {speaker_2_name}
-- Use audio tags liberally to add emotional warmth and expression
-- Follow the structure outlined in the topic instructions
+- Use audio tags sparingly — MAX 25 total, MAX 35% of turns tagged
+- Follow the structure and anti-AI rules outlined in the topic instructions
 - Include episode titles and dates when relevant
 - Focus on the most important insights and developments
-- Maintain natural conversational flow with appropriate turn-taking
+- Include at least 2 genuine disagreements between speakers
 
 Date: {digest_date.strftime('%B %d, %Y')}
 Topic: {topic}
@@ -1174,13 +1174,18 @@ Transcript:
 
 REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable.
 
-CRITICAL: Use EXACT format for EVERY turn:
+CRITICAL FORMAT: Use EXACT format for EVERY turn:
 SPEAKER_1: [audio_tag] dialogue text...
 SPEAKER_2: [audio_tag] dialogue text...
-
 The colon MUST come immediately after the speaker number, BEFORE the audio tag.
 
-Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [concerned], [hopeful], [curious] to add emotional expression."""
+Follow ALL rules in the system prompt exactly, especially:
+- Target 18,000-22,000 characters (NOT more)
+- MAX 25 audio tags total, MAX 35% of turns tagged
+- MAX 15 em dashes in the entire script — use commas, colons, semicolons, parentheses instead
+- At least 2 genuine disagreements between speakers where neither fully concedes
+- NEVER use these phrases: "genuinely" (as intensifier), "throughline," "connect the threads," "what surprised you/us"
+- Vary the episode structure — do NOT follow the same template every time"""
 
         try:
             used_fallback = False
@@ -1216,6 +1221,10 @@ Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [c
             if fixed:
                 logger.warning(f"Auto-corrected dialogue format issues in generated script")
                 char_count = len(script_content)  # Update char count after fixes
+
+            # Apply anti-AI writing cleanup (v3.22 - mechanical fixes for patterns LLMs resist)
+            script_content = self._apply_anti_ai_cleanup(script_content)
+            char_count = len(script_content)
 
             # Validate character count
             if char_count < 16000:
@@ -1297,6 +1306,84 @@ Target 25,000-30,000 characters. Use audio tags like [excited], [thoughtful], [c
             logger.error(f"Dialogue script still missing proper SPEAKER labels after fixes. Contains SPEAKER_1: {('SPEAKER_1:' in script)}, SPEAKER_2: {('SPEAKER_2:' in script)}")
 
         return script, fixed
+
+    def _apply_anti_ai_cleanup(self, script: str) -> str:
+        """Apply mechanical anti-AI-writing fixes that LLMs struggle to follow via prompt alone.
+
+        Enforces:
+        - Em dash reduction (replace excess with commas/colons)
+        - Contraction enforcement (is not -> isn't, etc.)
+        - Banned word substitution (genuinely, throughline, etc.)
+
+        Does NOT change meaning, structure, or content — only surface-level text patterns.
+        """
+        import re
+        import random
+
+        original_len = len(script)
+        fixes_applied = 0
+
+        # 1. Contraction enforcement
+        contractions = [
+            (r'\bis not\b', "isn't"),
+            (r'\bare not\b', "aren't"),
+            (r'\bdo not\b', "don't"),
+            (r'\bdoes not\b', "doesn't"),
+            (r'\bdid not\b', "didn't"),
+            (r'\bcannot\b', "can't"),
+            (r'\bwill not\b', "won't"),
+            (r'\bwould not\b', "wouldn't"),
+            (r'\bcould not\b', "couldn't"),
+            (r'\bshould not\b', "shouldn't"),
+        ]
+        for pattern, replacement in contractions:
+            count = len(re.findall(pattern, script, re.IGNORECASE))
+            if count > 0:
+                script = re.sub(pattern, replacement, script, flags=re.IGNORECASE)
+                fixes_applied += count
+
+        # 2. Banned word substitution (rotate replacements to avoid repetition)
+        banned_subs = [
+            (r'\bgenuinely\s+', ['really ', 'actually ', '', '']),  # often just remove
+            (r'\bthroughline\b', ['connection', 'thread', 'pattern']),
+            (r'\bthrough-line\b', ['connection', 'thread', 'pattern']),
+            (r'\bmultifaceted\b', ['complex', 'layered']),
+            (r'\btapestry\b', ['fabric', 'web']),
+            (r'\bplethora\b', ['many', 'plenty of']),
+            (r'\bmyriad\b', ['many', 'numerous']),
+            (r'\bdelves?\b', ['examines', 'explores']),
+            (r'\bmoreover\b', ['and', 'also']),
+        ]
+        for pattern, replacements in banned_subs:
+            matches = list(re.finditer(pattern, script, re.IGNORECASE))
+            if matches:
+                for i, match in enumerate(reversed(matches)):
+                    replacement = replacements[i % len(replacements)]
+                    script = script[:match.start()] + replacement + script[match.end():]
+                    fixes_applied += 1
+
+        # 3. Em dash reduction — replace excess em dashes with commas
+        # Keep up to 15, convert the rest to commas or colons
+        em_dash_positions = [m.start() for m in re.finditer('—', script)]
+        if len(em_dash_positions) > 15:
+            # Keep first 15, replace the rest
+            to_replace = em_dash_positions[15:]
+            for pos in reversed(to_replace):
+                # Replace em dash with comma (unless preceded by space, then just comma-space)
+                before = script[pos-1] if pos > 0 else ''
+                after = script[pos+1] if pos + 1 < len(script) else ''
+                if before == ' ' and after == ' ':
+                    script = script[:pos-1] + ', ' + script[pos+2:]
+                elif before == ' ':
+                    script = script[:pos] + ',' + script[pos+1:]
+                else:
+                    script = script[:pos] + ',' + script[pos+1:]
+                fixes_applied += 1
+
+        if fixes_applied > 0:
+            logger.info(f"Anti-AI cleanup: {fixes_applied} fixes applied ({original_len} -> {len(script)} chars)")
+
+        return script
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
                                    digest_date: date, instruction: TopicInstruction,

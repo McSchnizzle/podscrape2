@@ -949,7 +949,7 @@ class AudioGenerator:
     def _strip_audio_tags(self, text: str) -> str:
         """Strip ElevenLabs audio tags like [excited], [laughs] that OpenAI doesn't support."""
         import re
-        return re.sub(r'\[(?:excited|thoughtful|serious|concerned|hopeful|laughs|sighs|chuckles|pause|quickly|slowly)\]\s*', '', text)
+        return re.sub(r'\[(?:excited|thoughtful|serious|concerned|hopeful|enthusiastic|contemplative|surprised|curious|skeptical|laughs|amused|sighs|chuckles|pause|quickly|slowly)\]\s*', '', text)
 
     def _generate_openai_tts_chunk(self, text: str, voice: str = "nova", model: str = "tts-1") -> bytes:
         """
