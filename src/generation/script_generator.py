@@ -1308,22 +1308,22 @@ Follow ALL rules in the system prompt exactly, especially:
         return script, fixed
 
     def _apply_anti_ai_cleanup(self, script: str) -> str:
-        """Apply mechanical anti-AI-writing fixes that LLMs struggle to follow via prompt alone.
+        """Post-generation cleanup: mechanical contraction fixes + LLM structural variety pass.
 
-        Enforces:
-        - Em dash reduction (replace excess with commas/colons)
-        - Contraction enforcement (is not -> isn't, etc.)
-        - Banned word substitution (genuinely, throughline, etc.)
-
-        Does NOT change meaning, structure, or content — only surface-level text patterns.
+        Two phases:
+        1. Mechanical: contraction enforcement (always safe, always correct)
+        2. LLM pass: rewrite sentences with repetitive structure, monotonous rhythm,
+           or AI-tell patterns. Focuses on how the script SOUNDS, not visual punctuation.
         """
         import re
-        import random
 
         original_len = len(script)
-        fixes_applied = 0
 
-        # 1. Contraction enforcement
+        # Phase 1: LLM structural variety pass (rewrites sentences for varied rhythm)
+        script = self._run_structural_variety_pass(script)
+
+        # Phase 2: Mechanical contraction enforcement AFTER LLM pass
+        # (LLM may re-introduce formal forms during rewriting)
         contractions = [
             (r'\bis not\b', "isn't"),
             (r'\bare not\b', "aren't"),
@@ -1336,54 +1336,94 @@ Follow ALL rules in the system prompt exactly, especially:
             (r'\bcould not\b', "couldn't"),
             (r'\bshould not\b', "shouldn't"),
         ]
+        contraction_fixes = 0
         for pattern, replacement in contractions:
             count = len(re.findall(pattern, script, re.IGNORECASE))
             if count > 0:
                 script = re.sub(pattern, replacement, script, flags=re.IGNORECASE)
-                fixes_applied += count
+                contraction_fixes += count
 
-        # 2. Banned word substitution (rotate replacements to avoid repetition)
-        banned_subs = [
-            (r'\bgenuinely\s+', ['really ', 'actually ', '', '']),  # often just remove
-            (r'\bthroughline\b', ['connection', 'thread', 'pattern']),
-            (r'\bthrough-line\b', ['connection', 'thread', 'pattern']),
-            (r'\bmultifaceted\b', ['complex', 'layered']),
-            (r'\btapestry\b', ['fabric', 'web']),
-            (r'\bplethora\b', ['many', 'plenty of']),
-            (r'\bmyriad\b', ['many', 'numerous']),
-            (r'\bdelves?\b', ['examines', 'explores']),
-            (r'\bmoreover\b', ['and', 'also']),
-        ]
-        for pattern, replacements in banned_subs:
-            matches = list(re.finditer(pattern, script, re.IGNORECASE))
-            if matches:
-                for i, match in enumerate(reversed(matches)):
-                    replacement = replacements[i % len(replacements)]
-                    script = script[:match.start()] + replacement + script[match.end():]
-                    fixes_applied += 1
+        if contraction_fixes > 0:
+            logger.info(f"Anti-AI cleanup: fixed {contraction_fixes} missing contractions")
 
-        # 3. Em dash reduction — replace excess em dashes with commas
-        # Keep up to 15, convert the rest to commas or colons
-        em_dash_positions = [m.start() for m in re.finditer('—', script)]
-        if len(em_dash_positions) > 15:
-            # Keep first 15, replace the rest
-            to_replace = em_dash_positions[15:]
-            for pos in reversed(to_replace):
-                # Replace em dash with comma (unless preceded by space, then just comma-space)
-                before = script[pos-1] if pos > 0 else ''
-                after = script[pos+1] if pos + 1 < len(script) else ''
-                if before == ' ' and after == ' ':
-                    script = script[:pos-1] + ', ' + script[pos+2:]
-                elif before == ' ':
-                    script = script[:pos] + ',' + script[pos+1:]
-                else:
-                    script = script[:pos] + ',' + script[pos+1:]
-                fixes_applied += 1
-
-        if fixes_applied > 0:
-            logger.info(f"Anti-AI cleanup: {fixes_applied} fixes applied ({original_len} -> {len(script)} chars)")
-
+        logger.info(f"Anti-AI cleanup complete: {original_len} -> {len(script)} chars")
         return script
+
+    def _run_structural_variety_pass(self, script: str) -> str:
+        """Use a fast, cheap LLM to rewrite sentences with repetitive structure.
+
+        Focuses on what matters for audio:
+        - Sentence structure monotony (same clause patterns repeated)
+        - Both speakers sounding identical in rhythm and construction
+        - Formulaic transitions and reactions
+        - Banned AI-tell phrases that need sentence-level rewriting, not word substitution
+
+        Uses gpt-5-mini for cost efficiency (~$0.01 per call).
+        """
+        cleanup_model = "gpt-5-mini"
+
+        system_prompt = """You are a script editor for a two-host podcast. Your job is to improve how the script SOUNDS when read aloud by fixing structural monotony and AI-tell patterns.
+
+RULES:
+1. Preserve ALL facts, names, numbers, dates, speaker labels (SPEAKER_1:/SPEAKER_2:), and audio tags ([excited], [thoughtful], etc.) EXACTLY.
+2. Preserve the overall structure — same number of speaker turns, same topic order, same meaning.
+3. DO NOT add new content, remove content, or change who says what.
+4. DO NOT add commentary, headers, or notes — output ONLY the revised script.
+
+WHAT TO FIX:
+- Sentences that all follow the same structure (subject-verb-parenthetical-clause, repeated). Vary the construction: some simple, some compound, some starting with a dependent clause, some very short.
+- Both speakers using identical sentence patterns. SPEAKER_1 should use shorter, punchier constructions. SPEAKER_2 should use longer, more technical ones. They should NOT sound interchangeable.
+- Formulaic phrases: rewrite (don't just delete) sentences containing "genuinely" (as intensifier), "the framing," "throughline/through-line," "connect the threads," "what surprised you/us," "worth noting/watching/flagging," "deep dive," "break that down."
+- "That's a [adjective] [noun]" as standalone summary sentences — rewrite as natural reactions.
+- Sentences that all use em dashes for subordinate clauses — restructure some to use different constructions (appositives, parentheticals, separate sentences, semicolons).
+
+WHAT NOT TO TOUCH:
+- Sentences that already sound natural and varied — leave them alone.
+- Technical terms, proper nouns, data points, quotes.
+- Audio tags and speaker labels — preserve exactly.
+- The overall length — stay within 5% of the original character count.
+
+DO NOT INTRODUCE:
+- Do NOT add em dashes that weren't there. If you're restructuring a sentence, use commas, semicolons, colons, or separate sentences — not em dashes.
+- Do NOT use these phrases in your rewrites: "genuinely," "the framing," "throughline," "deep dive," "break that down," "worth noting."
+- Do NOT expand contractions. Keep "isn't," "don't," "can't" as contractions."""
+
+        user_prompt = f"""Revise this podcast script for structural variety. Fix monotonous sentence patterns and AI-tell phrases. Preserve all content, speaker labels, and audio tags exactly.
+
+{script}"""
+
+        try:
+            logger.info(f"Running structural variety pass with {cleanup_model} ({len(script)} chars)")
+            response = self.openai_client.responses.create(
+                model=cleanup_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_output_tokens=16000
+            )
+            revised = response.output_text.strip()
+
+            # Validate the result
+            if not revised or len(revised) < len(script) * 0.5:
+                logger.warning(f"Structural variety pass returned too-short result ({len(revised)} chars), keeping original")
+                return script
+
+            if 'SPEAKER_1:' not in revised or 'SPEAKER_2:' not in revised:
+                logger.warning("Structural variety pass broke speaker labels, keeping original")
+                return script
+
+            # Check it didn't explode in length
+            if len(revised) > len(script) * 1.15:
+                logger.warning(f"Structural variety pass expanded script too much ({len(revised)} vs {len(script)}), keeping original")
+                return script
+
+            logger.info(f"Structural variety pass complete: {len(script)} -> {len(revised)} chars ({len(revised) - len(script):+d})")
+            return revised
+
+        except Exception as e:
+            logger.warning(f"Structural variety pass failed ({e}), keeping original script")
+            return script
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
                                    digest_date: date, instruction: TopicInstruction,
