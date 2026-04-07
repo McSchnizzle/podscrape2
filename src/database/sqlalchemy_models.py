@@ -51,6 +51,7 @@ class Feed(Base):
     title = Column(String(512), nullable=False)
     description = Column(Text)
     active = Column(Boolean, nullable=False, default=True)
+    priority = Column(Integer, nullable=False, default=100)  # Lower = higher priority
     consecutive_failures = Column(Integer, nullable=False, default=0)
     last_checked = Column(DateTime(timezone=False))
     last_episode_date = Column(DateTime(timezone=False))
@@ -61,6 +62,7 @@ class Feed(Base):
 
     __table_args__ = (
         Index("ix_feeds_active", "active"),
+        Index("ix_feeds_priority", "priority"),
     )
 
 
@@ -166,6 +168,7 @@ class Digest(Base):
     digest_timestamp = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
     script_path = Column(String(4096))
     script_content = Column(Text)
+    script_content_predupe = Column(Text)  # Pre-dedupe draft for audit/rollback
     script_word_count = Column(Integer)
     mp3_path = Column(String(4096))
     mp3_duration_seconds = Column(Integer)

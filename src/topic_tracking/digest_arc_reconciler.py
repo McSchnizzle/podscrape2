@@ -179,12 +179,27 @@ class DigestArcReconciler:
                 arcs_created += 1
             else:
                 try:
+                    # v3.27: seed the arc with a synthetic "reconciler" event so
+                    # it has event_count>=1 and is eligible for classification.
+                    # Prior behavior created empty arc shells that never got
+                    # populated and sat with event_count=0 forever.
+                    from datetime import datetime as _dt, timezone as _tz
+                    seed_event = {
+                        "event_date": _dt.now(_tz.utc),
+                        "event_summary": summary or f"Recurring story: {story_name}",
+                        "key_points": [f"Detected in {occurrences} recent digests"],
+                        "source_feed_id": None,
+                        "source_episode_id": None,
+                        "source_episode_guid": None,
+                        "source_name": "digest_arc_reconciler",
+                        "perspective": "neutral",
+                        "relevance_score": None,
+                    }
                     arc = self.repo.create_story_arc(
                         arc_name=story_name,
                         digest_topic=digest_topic,
                         functional_category=category,
-                        # No initial_event - reconciler creates arc shells only.
-                        # Real events are added when episodes mention the arc.
+                        initial_event=seed_event,
                     )
                     logger.info(
                         f"Created arc: '{story_name}' (id={arc['id']}, "

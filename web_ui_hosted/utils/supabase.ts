@@ -106,6 +106,7 @@ export interface Feed {
   title: string
   description?: string
   active: boolean   // matches database field name
+  priority: number  // Lower = higher priority (sort ascending)
   consecutive_failures: number
   last_checked?: string
   last_episode_date?: string
@@ -556,12 +557,21 @@ export class DatabaseClient {
 
   // Feed CRUD operations
   async createFeed(feed_url: string, title: string) {
+    // New feeds land at the end of the priority list (lowest priority).
+    const { data: maxRow } = await supabase
+      .from('feeds')
+      .select('priority')
+      .order('priority', { ascending: false })
+      .limit(1)
+    const nextPriority = maxRow && maxRow.length > 0 ? (maxRow[0].priority || 0) + 100 : 100
+
     const { data, error } = await supabase
       .from('feeds')
       .insert({
         feed_url,
         title,
         active: true,
+        priority: nextPriority,
         consecutive_failures: 0,
         total_episodes_processed: 0,
         total_episodes_failed: 0,
@@ -572,6 +582,22 @@ export class DatabaseClient {
 
     if (error) throw error
     return data?.[0] as Feed
+  }
+
+  async reorderFeeds(orderedIds: number[]) {
+    // Renumber priorities in sparse increments of 100 so future reorders
+    // rarely collide.
+    const now = new Date().toISOString()
+    const updates = orderedIds.map((id, idx) =>
+      supabase
+        .from('feeds')
+        .update({ priority: (idx + 1) * 100, updated_at: now })
+        .eq('id', id)
+    )
+    const results = await Promise.all(updates)
+    const firstError = results.find(r => r.error)
+    if (firstError?.error) throw firstError.error
+    return true
   }
 
   async updateFeed(id: number, updates: Partial<Feed>) {

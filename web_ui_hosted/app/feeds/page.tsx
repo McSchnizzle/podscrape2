@@ -2,76 +2,368 @@
 
 import { useState, useEffect } from 'react'
 import { Feed } from '@/utils/supabase'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+type Message = { type: 'success' | 'error'; text: string } | null
+
+// ---------- helpers ----------
+
+const isYouTubeUrl = (url: string) =>
+  url.includes('youtube.com') || url.includes('youtu.be')
+
+const youtubeChannelUrl = (feedUrl: string): string | null => {
+  // RSS feed URLs for YouTube channels look like:
+  //   https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxx
+  //   https://www.youtube.com/feeds/videos.xml?user=xxx
+  //   https://www.youtube.com/feeds/videos.xml?playlist_id=xxx
+  try {
+    const u = new URL(feedUrl)
+    const channelId = u.searchParams.get('channel_id')
+    if (channelId) return `https://www.youtube.com/channel/${channelId}`
+    const user = u.searchParams.get('user')
+    if (user) return `https://www.youtube.com/user/${user}`
+    const playlist = u.searchParams.get('playlist_id')
+    if (playlist) return `https://www.youtube.com/playlist?list=${playlist}`
+    return feedUrl
+  } catch {
+    return null
+  }
+}
+
+const healthBadgeClass = (failures: number) => {
+  if (failures === 0) return 'bg-green-100 text-green-800 border-green-200'
+  if (failures <= 2) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+  return 'bg-red-100 text-red-800 border-red-200'
+}
+
+// ---------- sortable row ----------
+
+interface RowProps {
+  feed: Feed
+  position: number
+  checking: boolean
+  editing: boolean
+  onEditStart: () => void
+  onEditCancel: () => void
+  onEditSave: (updates: Partial<Feed>) => void
+  onToggleActive: () => void
+  onCheck: () => void
+  onDelete: () => void
+}
+
+function SortableFeedRow(props: RowProps) {
+  const {
+    feed, position, checking, editing,
+    onEditStart, onEditCancel, onEditSave,
+    onToggleActive, onCheck, onDelete,
+  } = props
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: feed.id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  const [editTitle, setEditTitle] = useState(feed.title)
+  const [editUrl, setEditUrl] = useState(feed.feed_url)
+
+  useEffect(() => {
+    setEditTitle(feed.title)
+    setEditUrl(feed.feed_url)
+  }, [feed.id, feed.title, feed.feed_url, editing])
+
+  const yt = isYouTubeUrl(feed.feed_url)
+  const channelLink = yt ? youtubeChannelUrl(feed.feed_url) : null
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-start gap-3 bg-white border rounded-lg px-3 py-3 shadow-sm hover:shadow-md transition-shadow ${
+        isDragging ? 'ring-2 ring-blue-400' : 'border-gray-200'
+      } ${!feed.active ? 'opacity-60' : ''}`}
+    >
+      {/* Drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+        className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none p-1 text-gray-400 hover:text-gray-700 select-none"
+        title="Drag to reorder"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <circle cx="6" cy="5" r="1.5" /><circle cx="14" cy="5" r="1.5" />
+          <circle cx="6" cy="10" r="1.5" /><circle cx="14" cy="10" r="1.5" />
+          <circle cx="6" cy="15" r="1.5" /><circle cx="14" cy="15" r="1.5" />
+        </svg>
+      </button>
+
+      {/* Position number */}
+      <div className="flex-shrink-0 w-8 text-center text-sm font-mono text-gray-500 pt-1">
+        {position}
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 min-w-0">
+        {editing ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+              placeholder="Feed title"
+            />
+            <input
+              type="text"
+              value={editUrl}
+              onChange={(e) => setEditUrl(e.target.value)}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+              placeholder="Feed URL"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => onEditSave({ title: editTitle, feed_url: editUrl })}
+                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Save
+              </button>
+              <button
+                onClick={onEditCancel}
+                className="px-3 py-1 text-sm bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Type badge */}
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
+                  yt
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                }`}
+                title={yt ? 'YouTube channel feed' : 'RSS podcast feed'}
+              >
+                {yt ? 'YouTube' : 'RSS'}
+              </span>
+
+              <span className="font-medium text-gray-900 truncate">{feed.title}</span>
+
+              {yt && channelLink && (
+                <a
+                  href={channelLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-red-600 hover:text-red-800 underline"
+                  title="Open channel on YouTube"
+                >
+                  open channel ↗
+                </a>
+              )}
+
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${healthBadgeClass(
+                  feed.consecutive_failures
+                )}`}
+              >
+                {feed.consecutive_failures === 0
+                  ? 'healthy'
+                  : `${feed.consecutive_failures} fail${feed.consecutive_failures > 1 ? 's' : ''}`}
+              </span>
+
+              {!feed.active && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-700">
+                  inactive
+                </span>
+              )}
+            </div>
+
+            <div className="mt-1 text-xs text-gray-500 truncate font-mono">
+              {feed.feed_url}
+            </div>
+
+            {feed.latest_episode_title && (
+              <div className="mt-1 text-xs text-gray-600 truncate">
+                Latest: <span className="italic">{feed.latest_episode_title}</span>
+                {feed.last_episode_date && (
+                  <span className="text-gray-400">
+                    {' '}
+                    · {new Date(feed.last_episode_date).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Actions */}
+      {!editing && (
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onCheck}
+            disabled={checking}
+            className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+            title="Check feed now"
+          >
+            {checking ? '…' : 'Check'}
+          </button>
+          <button
+            onClick={onToggleActive}
+            className="px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded"
+            title={feed.active ? 'Disable feed' : 'Enable feed'}
+          >
+            {feed.active ? 'Disable' : 'Enable'}
+          </button>
+          <button
+            onClick={onEditStart}
+            className="px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded"
+          >
+            Edit
+          </button>
+          <button
+            onClick={onDelete}
+            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- page ----------
 
 export default function FeedsPage() {
   const [feeds, setFeeds] = useState<Feed[]>([])
-  const [rssFeeds, setRssFeeds] = useState<Feed[]>([])
-  const [youtubeFeeds, setYoutubeFeeds] = useState<Feed[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [checking, setChecking] = useState<number | null>(null)
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [message, setMessage] = useState<Message>(null)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [editingFeed, setEditingFeed] = useState<Feed | null>(null)
   const [newFeed, setNewFeed] = useState({ feed_url: '', title: '' })
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Small drag distance so clicks on buttons still work.
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   useEffect(() => {
     fetchFeeds()
   }, [])
 
+  const showMessage = (m: Message) => {
+    setMessage(m)
+    if (m) setTimeout(() => setMessage(null), 3000)
+  }
+
   const fetchFeeds = async () => {
+    setLoading(true)
     try {
       const response = await fetch('/api/feeds')
       const data = await response.json()
-
       if (response.ok) {
-        const allFeeds = data.feeds || []
-        setFeeds(allFeeds)
-
-        // Separate RSS and YouTube feeds
-        const rss = allFeeds.filter((feed: Feed) => !feed.feed_url.includes('youtube.com') && !feed.feed_url.includes('youtu.be'))
-        const yt = allFeeds.filter((feed: Feed) => feed.feed_url.includes('youtube.com') || feed.feed_url.includes('youtu.be'))
-
-        setRssFeeds(rss)
-        setYoutubeFeeds(yt)
+        // Sort by priority ascending (server view should already be sorted,
+        // but be defensive).
+        const sorted = [...(data.feeds || [])].sort(
+          (a: Feed, b: Feed) => (a.priority ?? 999999) - (b.priority ?? 999999)
+        )
+        setFeeds(sorted)
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to load feeds' })
+        showMessage({ type: 'error', text: data.error || 'Failed to load feeds' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to connect to feeds API' })
+    } catch {
+      showMessage({ type: 'error', text: 'Failed to connect to feeds API' })
     } finally {
       setLoading(false)
     }
   }
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = feeds.findIndex(f => f.id === active.id)
+    const newIndex = feeds.findIndex(f => f.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(feeds, oldIndex, newIndex)
+    setFeeds(reordered) // Optimistic update
+
+    try {
+      const response = await fetch('/api/feeds/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds: reordered.map(f => f.id) }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'reorder failed')
+      }
+      showMessage({ type: 'success', text: 'Priority updated' })
+    } catch (e) {
+      showMessage({
+        type: 'error',
+        text: e instanceof Error ? e.message : 'Failed to save order',
+      })
+      // Revert on failure
+      fetchFeeds()
+    }
+  }
+
   const addFeed = async () => {
     if (!newFeed.feed_url || !newFeed.title) {
-      setMessage({ type: 'error', text: 'URL and title are required' })
+      showMessage({ type: 'error', text: 'URL and title are required' })
       return
     }
-
     setSaving(true)
     try {
       const response = await fetch('/api/feeds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newFeed)
+        body: JSON.stringify(newFeed),
       })
-
       const data = await response.json()
-
       if (response.ok) {
-        await fetchFeeds() // Refresh all feeds to update categorization
         setNewFeed({ feed_url: '', title: '' })
         setShowAddForm(false)
-        setMessage({ type: 'success', text: 'Feed added successfully' })
-        setTimeout(() => setMessage(null), 3000)
+        showMessage({ type: 'success', text: 'Feed added' })
+        await fetchFeeds()
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to add feed' })
+        showMessage({ type: 'error', text: data.error || 'Failed to add feed' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to add feed' })
+    } catch {
+      showMessage({ type: 'error', text: 'Failed to add feed' })
     } finally {
       setSaving(false)
     }
@@ -83,95 +375,57 @@ export default function FeedsPage() {
       const response = await fetch(`/api/feeds/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       })
-
       const data = await response.json()
-
       if (response.ok) {
-        await fetchFeeds() // Refresh all feeds to update categorization
-        setEditingFeed(null)
-        setMessage({ type: 'success', text: 'Feed updated successfully' })
-        setTimeout(() => setMessage(null), 3000)
+        setEditingId(null)
+        showMessage({ type: 'success', text: 'Feed updated' })
+        await fetchFeeds()
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to update feed' })
+        showMessage({ type: 'error', text: data.error || 'Failed to update feed' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to update feed' })
+    } catch {
+      showMessage({ type: 'error', text: 'Failed to update feed' })
     } finally {
       setSaving(false)
     }
   }
 
   const deleteFeed = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this feed? This action cannot be undone.')) {
-      return
-    }
-
+    if (!confirm('Delete this feed? This cannot be undone.')) return
     setSaving(true)
     try {
-      const response = await fetch(`/api/feeds/${id}`, {
-        method: 'DELETE'
-      })
-
+      const response = await fetch(`/api/feeds/${id}`, { method: 'DELETE' })
       if (response.ok) {
-        await fetchFeeds() // Refresh all feeds to update categorization
-        setMessage({ type: 'success', text: 'Feed deleted successfully' })
-        setTimeout(() => setMessage(null), 3000)
+        showMessage({ type: 'success', text: 'Feed deleted' })
+        await fetchFeeds()
       } else {
         const data = await response.json()
-        setMessage({ type: 'error', text: data.error || 'Failed to delete feed' })
+        showMessage({ type: 'error', text: data.error || 'Failed to delete feed' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to delete feed' })
+    } catch {
+      showMessage({ type: 'error', text: 'Failed to delete feed' })
     } finally {
       setSaving(false)
     }
   }
 
-  const toggleFeedActive = async (id: number, active: boolean) => {
-    await updateFeed(id, { active })
-  }
-
-  const checkFeed = async (id: number) => {
+  const checkFeedNow = async (id: number) => {
     setChecking(id)
     try {
-      const response = await fetch(`/api/feeds/${id}/check`, {
-        method: 'POST'
-      })
-
+      const response = await fetch(`/api/feeds/${id}/check`, { method: 'POST' })
       if (response.ok) {
-        await fetchFeeds() // Refresh feeds to show updated last_checked time
-        setMessage({ type: 'success', text: 'Feed checked successfully' })
-        setTimeout(() => setMessage(null), 3000)
+        showMessage({ type: 'success', text: 'Feed checked' })
+        await fetchFeeds()
       } else {
         const data = await response.json()
-        setMessage({ type: 'error', text: data.error || 'Failed to check feed' })
+        showMessage({ type: 'error', text: data.error || 'Check failed' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to check feed' })
+    } catch {
+      showMessage({ type: 'error', text: 'Check failed' })
     } finally {
       setChecking(null)
-    }
-  }
-
-  const getHealthStatusColor = (consecutive_failures: number) => {
-    if (consecutive_failures === 0) {
-      return 'text-success-700 bg-success-50 border-success-200'
-    } else if (consecutive_failures <= 2) {
-      return 'text-warning-700 bg-warning-50 border-warning-200'
-    } else {
-      return 'text-error-700 bg-error-50 border-error-200'
-    }
-  }
-
-  const getHealthStatusText = (consecutive_failures: number) => {
-    if (consecutive_failures === 0) {
-      return 'healthy'
-    } else if (consecutive_failures <= 2) {
-      return 'warning'
-    } else {
-      return 'error'
     }
   }
 
@@ -184,497 +438,114 @@ export default function FeedsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+    <div className="space-y-6 max-w-5xl">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">RSS Feeds</h1>
-          <p className="mt-1 text-gray-600">Manage podcast RSS feeds and monitoring status</p>
+          <h1 className="text-2xl font-bold text-gray-900">Feeds</h1>
+          <p className="mt-1 text-gray-600">
+            Drag to reorder. Higher in the list = higher priority when picking
+            episodes for a digest. RSS podcasts and YouTube channels are sorted
+            together.
+          </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex rounded-md shadow-sm">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-2 text-sm font-medium rounded-l-md border ${
-                viewMode === 'table'
-                  ? 'bg-primary-50 text-primary-700 border-primary-200'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Table
-            </button>
-            <button
-              onClick={() => setViewMode('cards')}
-              className={`px-3 py-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
-                viewMode === 'cards'
-                  ? 'bg-primary-50 text-primary-700 border-primary-200'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Cards
-            </button>
-          </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn-primary whitespace-nowrap"
-            disabled={saving}
-          >
-            Add Feed
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 whitespace-nowrap"
+          disabled={saving}
+        >
+          + Add Feed
+        </button>
       </div>
 
       {message && (
-        <div className={`p-4 rounded-md ${
-          message.type === 'success'
-            ? 'bg-success-50 text-success-700 border border-success-200'
-            : 'bg-error-50 text-error-700 border border-error-200'
-        }`}>
+        <div
+          className={`px-4 py-2 rounded-md text-sm ${
+            message.type === 'success'
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}
+        >
           {message.text}
         </div>
       )}
 
-      {/* Add Feed Form - Flask-style horizontal layout */}
-      <div className="card">
-        <h3 className="font-semibold mb-3">Add New Feed</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Feed URL
-            </label>
-            <input
-              type="url"
-              className="input w-full"
-              value={newFeed.feed_url}
-              onChange={(e) => setNewFeed({ ...newFeed, feed_url: e.target.value })}
-              placeholder="https://... or file:///"
-              disabled={saving}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Title (optional)
-            </label>
-            <input
-              type="text"
-              className="input w-full"
-              value={newFeed.title}
-              onChange={(e) => setNewFeed({ ...newFeed, title: e.target.value })}
-              placeholder="Auto-filled if possible"
-              disabled={saving}
-            />
-          </div>
-          <div>
+      {showAddForm && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+          <h2 className="font-semibold text-gray-900">Add new feed</h2>
+          <input
+            type="text"
+            value={newFeed.title}
+            onChange={(e) => setNewFeed({ ...newFeed, title: e.target.value })}
+            placeholder="Title (e.g. 'The Bridge with Peter Mansbridge')"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+          <input
+            type="text"
+            value={newFeed.feed_url}
+            onChange={(e) => setNewFeed({ ...newFeed, feed_url: e.target.value })}
+            placeholder="RSS feed URL or YouTube RSS URL"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+          />
+          <div className="flex gap-2">
             <button
               onClick={addFeed}
-              className="btn-secondary w-full"
-              disabled={saving || !newFeed.feed_url}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-gray-400"
             >
-              {saving ? 'Adding...' : 'Add Feed'}
+              {saving ? 'Adding…' : 'Add'}
+            </button>
+            <button
+              onClick={() => {
+                setShowAddForm(false)
+                setNewFeed({ feed_url: '', title: '' })
+              }}
+              className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300"
+            >
+              Cancel
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Edit Feed Modal */}
-      {editingFeed && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Feed</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  RSS Feed URL
-                </label>
-                <input
-                  type="url"
-                  className="input"
-                  value={editingFeed.feed_url}
-                  onChange={(e) => setEditingFeed({ ...editingFeed, feed_url: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Feed Title
-                </label>
-                <input
-                  type="text"
-                  className="input"
-                  value={editingFeed.title}
-                  onChange={(e) => setEditingFeed({ ...editingFeed, title: e.target.value })}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setEditingFeed(null)}
-                className="btn-secondary"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => updateFeed(editingFeed.id, {
-                  feed_url: editingFeed.feed_url,
-                  title: editingFeed.title
-                })}
-                className="btn-primary"
-                disabled={saving || !editingFeed.feed_url || !editingFeed.title}
-              >
-                {saving ? 'Updating...' : 'Update Feed'}
-              </button>
-            </div>
-          </div>
+          <p className="text-xs text-gray-500">
+            For YouTube channels, use the channel's RSS URL:{' '}
+            <code className="bg-white px-1 rounded">
+              https://www.youtube.com/feeds/videos.xml?channel_id=...
+            </code>
+          </p>
         </div>
       )}
 
-      {/* RSS Feeds Section */}
-      <div className="space-y-6">
-        <div>
-          <h3 className="font-semibold mb-4">RSS Feeds</h3>
-          {viewMode === 'table' ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-300 rounded-lg">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="text-left p-3 border-b font-medium text-gray-700">Title</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700 hidden sm:table-cell">URL</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700 hidden lg:table-cell">Latest Episode</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700 hidden lg:table-cell">Published</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700">Active</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700 hidden md:table-cell">Last Checked</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700 hidden md:table-cell">Failures</th>
-                    <th className="text-left p-3 border-b font-medium text-gray-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rssFeeds.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="p-6 text-center text-gray-500">No RSS feeds</td>
-                    </tr>
-                  ) : (
-                    rssFeeds.map((feed) => (
-                      <tr key={feed.id} className="border-t hover:bg-gray-50">
-                        <td className="p-3 align-top">
-                          <div>
-                            <div className="font-medium text-gray-900">{feed.title}</div>
-                            <div className="sm:hidden text-xs text-gray-500 mt-1 break-all">{feed.feed_url}</div>
-                          </div>
-                        </td>
-                        <td className="p-3 align-top text-sm text-blue-700 break-all hidden sm:table-cell max-w-xs truncate">
-                          {feed.feed_url}
-                        </td>
-                        <td className="p-3 align-top text-sm hidden lg:table-cell max-w-xs truncate">
-                          {feed.latest_episode_title || '-'}
-                        </td>
-                        <td className="p-3 align-top text-sm hidden lg:table-cell">
-                          {feed.last_episode_date ? new Date(feed.last_episode_date).toLocaleDateString() : '-'}
-                        </td>
-                        <td className="p-3 align-top">
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                            feed.active
-                              ? 'text-success-700 bg-success-50 border-success-200'
-                              : 'text-gray-700 bg-gray-50 border-gray-200'
-                          }`}>
-                            {feed.active ? 'Yes' : 'No'}
-                          </span>
-                        </td>
-                        <td className="p-3 align-top text-sm hidden md:table-cell">
-                          {feed.last_checked ? new Date(feed.last_checked).toLocaleString() : '-'}
-                        </td>
-                        <td className="p-3 align-top hidden md:table-cell">
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.consecutive_failures)}`}>
-                            {feed.consecutive_failures}
-                          </span>
-                        </td>
-                        <td className="p-3 align-top">
-                          <div className="flex flex-wrap gap-1">
-                            <button
-                              onClick={() => toggleFeedActive(feed.id, !feed.active)}
-                              className="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300"
-                              disabled={saving}
-                            >
-                              {feed.active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => checkFeed(feed.id)}
-                              className="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300"
-                              disabled={checking === feed.id}
-                            >
-                              {checking === feed.id ? 'Checking...' : 'Check'}
-                            </button>
-                            <button
-                              onClick={() => setEditingFeed(feed)}
-                              className="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300"
-                              disabled={saving}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deleteFeed(feed.id)}
-                              className="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300"
-                              disabled={saving}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {rssFeeds.length === 0 ? (
-                <div className="card text-center py-12">
-                  <p className="text-gray-500 text-lg">No RSS feeds configured</p>
-                  <p className="text-gray-400 text-sm mt-2">Add your first podcast RSS feed to get started</p>
-                </div>
-              ) : (
-                rssFeeds.map((feed) => (
-                  <div key={feed.id} className="card">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <h3 className="text-lg font-medium text-gray-900 truncate">
-                            {feed.title}
-                          </h3>
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.consecutive_failures)}`}>
-                            {getHealthStatusText(feed.consecutive_failures)}
-                          </span>
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                            feed.active
-                              ? 'text-success-700 bg-success-50 border-success-200'
-                              : 'text-gray-700 bg-gray-50 border-gray-200'
-                          }`}>
-                            {feed.active ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2 break-all">
-                          {feed.feed_url}
-                        </p>
-                        {feed.latest_episode_title && (
-                          <p className="text-sm text-gray-600 mb-1">
-                            Latest: {feed.latest_episode_title}
-                          </p>
-                        )}
-                        {feed.last_checked && (
-                          <p className="text-xs text-gray-400">
-                            Last checked: {new Date(feed.last_checked).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => toggleFeedActive(feed.id, !feed.active)}
-                          className={`btn-sm ${
-                            feed.active
-                              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              : 'bg-success-100 text-success-700 hover:bg-success-200'
-                          }`}
-                          disabled={saving}
-                        >
-                          {feed.active ? 'Disable' : 'Enable'}
-                        </button>
-                        <button
-                          onClick={() => checkFeed(feed.id)}
-                          className="btn-sm bg-primary-100 text-primary-700 hover:bg-primary-200"
-                          disabled={checking === feed.id}
-                        >
-                          {checking === feed.id ? 'Checking...' : 'Check'}
-                        </button>
-                        <button
-                          onClick={() => setEditingFeed(feed)}
-                          className="btn-sm btn-secondary"
-                          disabled={saving}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteFeed(feed.id)}
-                          className="btn-sm bg-error-100 text-error-700 hover:bg-error-200"
-                          disabled={saving}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* YouTube Feeds Section */}
-        {youtubeFeeds.length > 0 && (
-          <div>
-            <h3 className="font-semibold mb-4">YouTube Feeds</h3>
-            {viewMode === 'table' ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border border-gray-300 rounded-lg">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="text-left p-3 border-b font-medium text-gray-700">Title</th>
-                      <th className="text-left p-3 border-b font-medium text-gray-700 hidden sm:table-cell">URL</th>
-                      <th className="text-left p-3 border-b font-medium text-gray-700">Active</th>
-                      <th className="text-left p-3 border-b font-medium text-gray-700 hidden md:table-cell">Last Checked</th>
-                      <th className="text-left p-3 border-b font-medium text-gray-700 hidden md:table-cell">Failures</th>
-                      <th className="text-left p-3 border-b font-medium text-gray-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {youtubeFeeds.map((feed) => (
-                      <tr key={feed.id} className="border-t hover:bg-gray-50">
-                        <td className="p-3 align-top">
-                          <div>
-                            <div className="font-medium text-gray-900">{feed.title}</div>
-                            <div className="sm:hidden text-xs text-gray-500 mt-1 break-all">{feed.feed_url}</div>
-                          </div>
-                        </td>
-                        <td className="p-3 align-top text-sm text-blue-700 break-all hidden sm:table-cell max-w-xs truncate">
-                          {feed.feed_url}
-                        </td>
-                        <td className="p-3 align-top">
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                            feed.active
-                              ? 'text-success-700 bg-success-50 border-success-200'
-                              : 'text-gray-700 bg-gray-50 border-gray-200'
-                          }`}>
-                            {feed.active ? 'Yes' : 'No'}
-                          </span>
-                        </td>
-                        <td className="p-3 align-top text-sm hidden md:table-cell">
-                          {feed.last_checked ? new Date(feed.last_checked).toLocaleString() : '-'}
-                        </td>
-                        <td className="p-3 align-top hidden md:table-cell">
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.consecutive_failures)}`}>
-                            {feed.consecutive_failures}
-                          </span>
-                        </td>
-                        <td className="p-3 align-top">
-                          <div className="flex flex-wrap gap-1">
-                            <button
-                              onClick={() => toggleFeedActive(feed.id, !feed.active)}
-                              className={`px-2 py-1 text-xs rounded ${
-                                feed.active
-                                  ? 'bg-yellow-600 text-white hover:bg-yellow-700'
-                                  : 'bg-green-600 text-white hover:bg-green-700'
-                              }`}
-                              disabled={saving}
-                            >
-                              {feed.active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => checkFeed(feed.id)}
-                              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
-                              disabled={checking === feed.id}
-                            >
-                              {checking === feed.id ? 'Checking...' : 'Check'}
-                            </button>
-                            <button
-                              onClick={() => setEditingFeed(feed)}
-                              className="px-2 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700"
-                              disabled={saving}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deleteFeed(feed.id)}
-                              className="px-2 py-1 text-xs rounded bg-gray-600 text-white hover:bg-gray-700"
-                              disabled={saving}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {youtubeFeeds.map((feed) => (
-                  <div key={feed.id} className="card">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <h3 className="text-lg font-medium text-gray-900 truncate">
-                            {feed.title}
-                          </h3>
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-700 border border-red-200">
-                            YouTube
-                          </span>
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${getHealthStatusColor(feed.consecutive_failures)}`}>
-                            {getHealthStatusText(feed.consecutive_failures)}
-                          </span>
-                          <span className={`px-2 py-1 text-xs font-medium rounded border ${
-                            feed.active
-                              ? 'text-success-700 bg-success-50 border-success-200'
-                              : 'text-gray-700 bg-gray-50 border-gray-200'
-                          }`}>
-                            {feed.active ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2 break-all">
-                          {feed.feed_url}
-                        </p>
-                        {feed.last_checked && (
-                          <p className="text-xs text-gray-400">
-                            Last checked: {new Date(feed.last_checked).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => toggleFeedActive(feed.id, !feed.active)}
-                          className={`btn-sm ${
-                            feed.active
-                              ? 'bg-yellow-600 text-white hover:bg-yellow-700'
-                              : 'bg-green-600 text-white hover:bg-green-700'
-                          }`}
-                          disabled={saving}
-                        >
-                          {feed.active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => checkFeed(feed.id)}
-                          className="btn-sm bg-blue-600 text-white hover:bg-blue-700"
-                          disabled={checking === feed.id}
-                        >
-                          {checking === feed.id ? 'Checking...' : 'Check'}
-                        </button>
-                        <button
-                          onClick={() => setEditingFeed(feed)}
-                          className="btn-sm bg-gray-600 text-white hover:bg-gray-700"
-                          disabled={saving}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteFeed(feed.id)}
-                          className="btn-sm bg-gray-600 text-white hover:bg-gray-700"
-                          disabled={saving}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+      <div className="text-sm text-gray-600">
+        {feeds.length} feed{feeds.length !== 1 ? 's' : ''} · {feeds.filter(f => f.active).length} active
       </div>
 
-      {saving && (
-        <div className="fixed bottom-4 right-4 bg-primary-600 text-white px-4 py-2 rounded-md shadow-lg">
-          Processing...
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={feeds.map(f => f.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {feeds.map((feed, idx) => (
+              <SortableFeedRow
+                key={feed.id}
+                feed={feed}
+                position={idx + 1}
+                checking={checking === feed.id}
+                editing={editingId === feed.id}
+                onEditStart={() => setEditingId(feed.id)}
+                onEditCancel={() => setEditingId(null)}
+                onEditSave={(updates) => updateFeed(feed.id, updates)}
+                onToggleActive={() => updateFeed(feed.id, { active: !feed.active })}
+                onCheck={() => checkFeedNow(feed.id)}
+                onDelete={() => deleteFeed(feed.id)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+
+      {feeds.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          No feeds yet. Click "+ Add Feed" to get started.
         </div>
       )}
     </div>

@@ -133,6 +133,17 @@ class SettingsKeys:
         MAX_ENTRIES_PER_FEED = "max_entries_per_feed"
         MAX_STORY_ARCS_CONTEXT = "max_story_arcs_context"
 
+    class Dedup:
+        CATEGORY = "dedup"
+        ENABLED = "enabled"
+        LOOKBACK_DIGESTS = "lookback_digests"
+        MIN_CHARS_FLOOR = "min_chars_floor"
+        EXTRA_EPISODES_MAX = "extra_episodes_max"
+
+    class FeedPriority:
+        CATEGORY = "feed_priority"
+        ENABLED = "enabled"
+
 
 # AI Model Definitions and Limits
 AI_MODELS = {
@@ -214,6 +225,15 @@ DEFAULTS = {
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MODEL): {"type": "string", "default": "gpt-5-mini"},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_LOOKBACK): {"type": "int", "default": 7, "min": 3, "max": 15},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MIN_OCCURRENCES): {"type": "int", "default": 2, "min": 2, "max": 5},
+
+    # Dedup Pass Configuration (v3.26+)
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.ENABLED): {"type": "bool", "default": True},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.LOOKBACK_DIGESTS): {"type": "int", "default": 8, "min": 1, "max": 30},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.MIN_CHARS_FLOOR): {"type": "int", "default": 10000, "min": 1000, "max": 50000},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.EXTRA_EPISODES_MAX): {"type": "int", "default": 2, "min": 0, "max": 5},
+
+    # Feed Priority Configuration (v3.28+)
+    (SettingsKeys.FeedPriority.CATEGORY, SettingsKeys.FeedPriority.ENABLED): {"type": "bool", "default": True},
 
     # Ad Filtering Configuration
     (SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.ENABLED): {"type": "bool", "default": True},

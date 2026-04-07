@@ -216,6 +216,18 @@ class StoryArcExtractor:
                         relevance_score=relevance_score
                     )
 
+                    # Auto-generate hot briefing if arc just crossed thresholds (v3.27+)
+                    try:
+                        from src.topic_tracking.hot_briefing_generator import maybe_generate_hot_briefing
+                        refreshed = self.repo.get_story_arc_by_id(arc['id']) or {}
+                        maybe_generate_hot_briefing(
+                            arc_id=arc['id'],
+                            event_count=refreshed.get('event_count') or 0,
+                            source_count=refreshed.get('source_count') or 0,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Hot briefing auto-gen skipped: {e}")
+
                     results.append({
                         "arc_name": arc_name,
                         "arc_id": arc['id'],

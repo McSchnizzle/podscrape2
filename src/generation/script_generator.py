@@ -663,6 +663,13 @@ class ScriptGenerator:
             # Deprioritize saturated arcs (covered 3+ times) by sorting them lower
             arcs.sort(key=lambda a: a.get('saturation_score', 0.0))
 
+            # v3.27: explicitly identify saturated arcs so the prompt can warn
+            # the model away from re-introducing them. saturation_score >= 0.9
+            # means the arc has been covered ~3+ times.
+            saturated_arcs = [
+                a for a in arcs if (a.get('saturation_score') or 0.0) >= 0.9
+            ]
+
             # Classify into hot/developing
             classified = self._classify_story_arcs(arcs)
             hot_arcs = classified['hot']
@@ -712,8 +719,29 @@ class ScriptGenerator:
                 for arc in developing_arcs[:5]:  # Limit to top 5 developing
                     context += self._format_arc_for_context(arc, for_narrative)
 
+            # v3.27: SATURATED arcs get a stronger directive — these were
+            # already covered 3+ times and are the primary source of listener
+            # fatigue. The dedup pass will clean up what leaks through, but the
+            # prompt-side warning reduces how much leaks in the first place.
+            if saturated_arcs:
+                context += "\n**SATURATED STORIES** (already covered 3+ times — DO NOT re-introduce):\n\n"
+                for arc in saturated_arcs[:8]:
+                    arc_name = arc.get('arc_name', '')
+                    if for_narrative:
+                        arc_name = self._normalize_arc_name_for_tts(arc_name)
+                    context += f"- {arc_name}\n"
+                context += (
+                    "\nFor SATURATED stories: our audience already knows the background. "
+                    "Mention a saturated story ONLY if today's episodes contain a genuinely "
+                    "NEW development (reversal, new data, new party, consequence). When you "
+                    "do, skip the background entirely and deliver the new fact in 2-4 "
+                    "sentences max, explicitly framed as an update (e.g., 'Quick update on "
+                    "the story we've been tracking about X...'). If there is no new "
+                    "development today, do NOT mention the saturated story at all.\n"
+                )
+
             # Add framing instructions
-            context += """**FRAMING INSTRUCTIONS:**
+            context += """\n**FRAMING INSTRUCTIONS:**
 1. When covering content related to a story arc, reference it naturally
 2. Use phrases like "In the ongoing [topic] story..." or "Building on recent coverage..."
 3. ONLY reference arcs that have supporting evidence in the transcripts above
@@ -1575,6 +1603,176 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
             logger.error(f"{self.ai_model} error for narrative script {topic}: {e}")
             raise ScriptGenerationError(f"Failed to generate narrative script with {self.ai_model}: {e}")
 
+    def _run_dedup_pass_with_retry(
+        self,
+        topic: str,
+        draft_script: str,
+        episodes: List[Episode],
+        digest_date: date,
+        recently_covered_arcs: Optional[List[str]],
+    ) -> Optional[Dict]:
+        """Run the dedup pass, optionally regenerating with more episodes if too short.
+
+        Returns a dict with {script_content, word_count, episodes, predupe_content}
+        or None if the dedup pass was skipped/disabled.
+        """
+        # Check if dedup is enabled
+        if not self.web_config:
+            return None
+
+        try:
+            from src.config.web_config import SettingsKeys
+            enabled = self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.ENABLED,
+                True,
+            )
+            if not enabled:
+                logger.info("Dedup pass disabled via web_settings")
+                return None
+
+            lookback = int(self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.LOOKBACK_DIGESTS,
+                8,
+            ))
+            min_chars_floor = int(self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.MIN_CHARS_FLOOR,
+                10000,
+            ))
+            extra_max = int(self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.EXTRA_EPISODES_MAX,
+                2,
+            ))
+        except Exception as e:
+            logger.warning(f"Dedup pass config read failed, skipping: {e}")
+            return None
+
+        try:
+            from src.generation.dedup_pass import run_dedup_pass
+        except Exception as e:
+            logger.warning(f"Dedup pass module import failed, skipping: {e}")
+            return None
+
+        predupe_content = draft_script
+
+        # First pass
+        result = run_dedup_pass(
+            draft_script=draft_script,
+            topic=topic,
+            lookback=lookback,
+        )
+
+        if result.skipped:
+            logger.info(f"Dedup pass skipped: {result.skip_reason}")
+            return {
+                "script_content": draft_script,
+                "word_count": len(draft_script.split()),
+                "episodes": episodes,
+                "predupe_content": predupe_content,
+            }
+
+        current_script = result.rewritten_script
+        current_episodes = episodes
+
+        # If the deduped script is below the floor, try pulling extra episodes and regenerating
+        if result.chars_after < min_chars_floor and extra_max > 0:
+            logger.info(
+                f"Dedup pass result ({result.chars_after} chars) below floor "
+                f"({min_chars_floor}); attempting to pull extra scored episodes"
+            )
+            existing_ids = {ep.id for ep in episodes if ep.id is not None}
+            extra_episodes = self._get_extra_scored_episodes(
+                topic=topic,
+                exclude_ids=existing_ids,
+                limit=extra_max,
+            )
+
+            if extra_episodes:
+                logger.info(
+                    f"Pulled {len(extra_episodes)} extra scored episode(s) for '{topic}', "
+                    f"regenerating and re-running dedup"
+                )
+                expanded_episodes = list(episodes) + list(extra_episodes)
+                # Regenerate the script with the expanded episode set
+                try:
+                    new_script, new_word_count = self.generate_script(
+                        topic,
+                        expanded_episodes,
+                        digest_date,
+                        recently_covered_arcs=recently_covered_arcs,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Expanded regeneration failed, keeping deduped version: {e}"
+                    )
+                    return {
+                        "script_content": current_script,
+                        "word_count": len(current_script.split()),
+                        "episodes": current_episodes,
+                        "predupe_content": predupe_content,
+                    }
+
+                # Re-run dedup on the expanded draft ONCE (no recursion)
+                predupe_content = new_script
+                second_result = run_dedup_pass(
+                    draft_script=new_script,
+                    topic=topic,
+                    lookback=lookback,
+                )
+                if second_result.skipped:
+                    current_script = new_script
+                else:
+                    current_script = second_result.rewritten_script
+                current_episodes = expanded_episodes
+            else:
+                logger.info(
+                    f"No extra scored episodes available for '{topic}'; "
+                    f"accepting shorter deduped script ({result.chars_after} chars)"
+                )
+
+        return {
+            "script_content": current_script,
+            "word_count": len(current_script.split()),
+            "episodes": current_episodes,
+            "predupe_content": predupe_content,
+        }
+
+    def _get_extra_scored_episodes(
+        self,
+        topic: str,
+        exclude_ids: set,
+        limit: int,
+    ) -> List[Episode]:
+        """Greedy by score: pull up to `limit` scored-but-undigested episodes
+        for this topic that aren't already in the current digest.
+        """
+        try:
+            pool = self.episode_repo.get_scored_episodes_for_topic(
+                topic=topic,
+                min_score=self.score_threshold,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to fetch extra scored episodes: {e}")
+            return []
+
+        # Exclude already-included and ensure transcript is present
+        MIN_TRANSCRIPT_CHARS = 1000
+        candidates = [
+            ep for ep in pool
+            if ep.id not in exclude_ids
+            and ep.transcript_content
+            and len(ep.transcript_content) >= MIN_TRANSCRIPT_CHARS
+        ]
+        # Sort by score desc
+        candidates.sort(
+            key=lambda ep: ep.scores.get(topic, 0.0) if ep.scores else 0.0,
+            reverse=True,
+        )
+        return candidates[:limit]
+
     def get_qualifying_episodes(self, topic: str, start_date: date = None,
                               end_date: date = None, max_episodes: int = None) -> List[Episode]:
         """
@@ -1603,20 +1801,62 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
         if filtered_count > 0:
             logger.warning(f"Filtered out {filtered_count} episodes with transcripts shorter than {MIN_DIGEST_TRANSCRIPT_CHARS} chars")
 
+        # v3.28: Apply feed priority ordering when enabled. Feeds the user
+        # ranked higher in the Feeds UI get first pick when selecting the
+        # episodes to include in a digest. Ties broken by topic score desc.
+        feed_priorities = self._get_feed_priorities_if_enabled()
+        if feed_priorities is not None:
+            def sort_key(ep: Episode):
+                prio = feed_priorities.get(ep.feed_id, 999999)
+                score = ep.scores.get(topic, 0.0) if ep.scores else 0.0
+                # priority ASC (lower=better), score DESC (higher=better)
+                return (prio, -score)
+            all_qualifying = sorted(all_qualifying, key=sort_key)
+        else:
+            # Default: sort by score descending (original behavior)
+            all_qualifying = sorted(
+                all_qualifying,
+                key=lambda ep: ep.scores.get(topic, 0.0) if ep.scores else 0.0,
+                reverse=True,
+            )
+
         # Determine cap
         cap = max_episodes if isinstance(max_episodes, int) and max_episodes > 0 else self.max_episodes_per_digest
-        # If we have more than cap, take the highest scoring ones
         if cap and len(all_qualifying) > cap:
-            # Sort by score (highest first) and take top max_episodes
-            sorted_episodes = sorted(
-                all_qualifying, 
-                key=lambda ep: ep.scores.get(topic, 0.0), 
-                reverse=True
-            )
             logger.info(f"Limiting {topic} episodes from {len(all_qualifying)} to {cap} (saving {len(all_qualifying) - cap} for future digests)")
-            return sorted_episodes[:cap]
-        
+            return all_qualifying[:cap]
+
         return all_qualifying
+
+    def _get_feed_priorities_if_enabled(self) -> Optional[Dict[int, int]]:
+        """Return {feed_id: priority} if feed priority ordering is enabled, else None.
+
+        v3.28+: Gated on web_settings.feed_priority.enabled (default True).
+        """
+        if not self.web_config:
+            return None
+        try:
+            from src.config.web_config import SettingsKeys
+            enabled = self.web_config.get_setting(
+                SettingsKeys.FeedPriority.CATEGORY,
+                SettingsKeys.FeedPriority.ENABLED,
+                True,
+            )
+            if not enabled:
+                return None
+        except Exception:
+            return None
+
+        try:
+            from src.database.models import get_database_manager
+            from src.database.sqlalchemy_models import Feed as FeedModel
+            db = get_database_manager()
+            with db.get_session() as session:
+                rows = session.query(FeedModel.id, FeedModel.priority).all()
+                return {fid: (p if p is not None else 999999) for fid, p in rows}
+        except Exception as e:
+            logger.debug(f"Feed priority lookup failed, falling back to score-only sort: {e}")
+            return None
 
     def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str, List[str]]:
         """
@@ -1817,6 +2057,23 @@ Thank you for your understanding, and we'll see you tomorrow!
             recently_covered_arcs=recently_covered_arcs if has_overlap else None
         )
 
+        # Run post-generation dedup pass (v3.26+)
+        # Compares draft to last N digests, rewrites saturated beats as quick updates.
+        # If result is below min-chars floor, pull extra scored episodes and retry once.
+        predupe_content = script_content
+        dedup_result = self._run_dedup_pass_with_retry(
+            topic=topic,
+            draft_script=script_content,
+            episodes=episodes,
+            digest_date=digest_date,
+            recently_covered_arcs=recently_covered_arcs if has_overlap else None,
+        )
+        if dedup_result is not None:
+            script_content = dedup_result["script_content"]
+            word_count = dedup_result["word_count"]
+            episodes = dedup_result["episodes"]
+            predupe_content = dedup_result["predupe_content"]
+
         # Save script to file with timestamp for uniqueness
         digest_timestamp = datetime.now(UTC)
         script_path = self.save_script(topic, digest_date, script_content, word_count, digest_timestamp)
@@ -1830,6 +2087,7 @@ Thank you for your understanding, and we'll see you tomorrow!
             episode_count=len(episodes),
             script_path=script_path,
             script_content=script_content,
+            script_content_predupe=predupe_content if predupe_content != script_content else None,
             script_word_count=word_count,
             average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
         )
