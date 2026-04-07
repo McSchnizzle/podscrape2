@@ -31,6 +31,7 @@ interface SettingsMeta {
 
 const SECTIONS: Section[] = [
   { id: 'content', label: 'Content Filtering', categories: ['content_filtering'] },
+  { id: 'dedup', label: 'Dedup Pass', categories: ['dedup'] },
   { id: 'pipeline', label: 'Pipeline', categories: ['pipeline'] },
   { id: 'audio', label: 'Audio Processing', categories: ['audio_processing'] },
   { id: 'ai-scoring', label: 'AI Content Scoring', categories: ['ai_content_scoring'] },
@@ -449,7 +450,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Episodes per Digest
+                  Starting Episode Pool Size
                 </label>
                 <input
                   type="number"
@@ -460,6 +461,11 @@ export default function SettingsPage() {
                   onChange={(e) => updateLocalSetting('content_filtering', 'max_episodes_per_digest', parseInt(e.target.value))}
                   disabled={saving}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Number of highest-scoring episodes used to generate the initial draft.
+                  If the post-dedup script is below the target floor (see Dedup Pass settings),
+                  the pipeline will pull additional scored episodes and regenerate.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -478,6 +484,129 @@ export default function SettingsPage() {
                   Minimum episodes required to generate a digest (0 = always generate)
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dedup Pass Settings (v3.27+) */}
+        <div id="dedup" className="scroll-mt-24">
+          <div className="card">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Dedup Pass</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              After the script is generated, a <code>claude -p</code> pass compares
+              the draft against the last N digests and rewrites repeated story beats
+              as one-line "quick updates." If the post-dedup script is below the
+              target floor, the pipeline pulls more scored episodes and regenerates.
+            </p>
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="dedup_enabled"
+                  checked={getSettingBoolean('dedup', 'enabled')}
+                  onChange={(e) => updateLocalSetting('dedup', 'enabled', e.target.checked)}
+                  disabled={saving}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                />
+                <label htmlFor="dedup_enabled" className="ml-2 text-sm text-gray-700">
+                  Enable post-generation dedup pass
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lookback Digests
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  className="input"
+                  value={getSettingNumber('dedup', 'lookback_digests')}
+                  onChange={(e) => updateLocalSetting('dedup', 'lookback_digests', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Number of prior digests the dedup pass compares against (default 8).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target Character Floor
+                </label>
+                <input
+                  type="number"
+                  min="5000"
+                  max="60000"
+                  step="1000"
+                  className="input"
+                  value={getSettingNumber('dedup', 'target_chars_floor')}
+                  onChange={(e) => updateLocalSetting('dedup', 'target_chars_floor', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum character count for the <em>final</em> (post-dedup) script.
+                  If the deduped draft falls below this, the pipeline adds one more
+                  scored episode and regenerates. Default 20,000.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Expansion Episodes
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="15"
+                  className="input"
+                  value={getSettingNumber('dedup', 'max_expansion_episodes')}
+                  onChange={(e) => updateLocalSetting('dedup', 'max_expansion_episodes', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Hard cap on how many <em>extra</em> episodes the expansion loop may
+                  add beyond the Starting Episode Pool Size. Default 5.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Iterations
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  className="input"
+                  value={getSettingNumber('dedup', 'max_iterations')}
+                  onChange={(e) => updateLocalSetting('dedup', 'max_iterations', parseInt(e.target.value))}
+                  disabled={saving}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Safety cap on the dedup-and-expand loop. Default 5.
+                </p>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="dedup_scrub"
+                  checked={getSettingBoolean('dedup', 'scrub_transcripts_on_regen')}
+                  onChange={(e) => updateLocalSetting('dedup', 'scrub_transcripts_on_regen', e.target.checked)}
+                  disabled={saving}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                />
+                <label htmlFor="dedup_scrub" className="ml-2 text-sm text-gray-700">
+                  Scrub saturated-topic content from transcripts before each regeneration
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 -mt-2 ml-6">
+                Before regenerating with expanded episodes, run a <code>claude -p</code>{' '}
+                pass over each transcript to remove sentences discussing already-saturated
+                stories. Prevents the new draft from re-introducing content dedup just cut.
+              </p>
             </div>
           </div>
         </div>

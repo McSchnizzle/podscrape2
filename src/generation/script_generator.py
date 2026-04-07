@@ -1611,12 +1611,19 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
         digest_date: date,
         recently_covered_arcs: Optional[List[str]],
     ) -> Optional[Dict]:
-        """Run the dedup pass, optionally regenerating with more episodes if too short.
+        """Dynamic dedup + episode expansion loop (v3.27+).
+
+        1. Run dedup on the initial draft.
+        2. If the result is at or above `target_chars_floor`, done.
+        3. Otherwise, pull ONE more scored-but-unused episode, scrub
+           saturated-topic content from all episode transcripts, regenerate
+           the draft from scratch, and re-run dedup.
+        4. Repeat until the floor is hit, no more episodes remain, or
+           `max_iterations` exceeded.
 
         Returns a dict with {script_content, word_count, episodes, predupe_content}
-        or None if the dedup pass was skipped/disabled.
+        or None if the dedup pass is disabled.
         """
-        # Check if dedup is enabled
         if not self.web_config:
             return None
 
@@ -1636,15 +1643,25 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
                 SettingsKeys.Dedup.LOOKBACK_DIGESTS,
                 8,
             ))
-            min_chars_floor = int(self.web_config.get_setting(
+            target_floor = int(self.web_config.get_setting(
                 SettingsKeys.Dedup.CATEGORY,
-                SettingsKeys.Dedup.MIN_CHARS_FLOOR,
-                10000,
+                SettingsKeys.Dedup.TARGET_CHARS_FLOOR,
+                20000,
             ))
-            extra_max = int(self.web_config.get_setting(
+            max_expansion = int(self.web_config.get_setting(
                 SettingsKeys.Dedup.CATEGORY,
-                SettingsKeys.Dedup.EXTRA_EPISODES_MAX,
-                2,
+                SettingsKeys.Dedup.MAX_EXPANSION_EPISODES,
+                5,
+            ))
+            max_iterations = int(self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.MAX_ITERATIONS,
+                5,
+            ))
+            scrub_on_regen = bool(self.web_config.get_setting(
+                SettingsKeys.Dedup.CATEGORY,
+                SettingsKeys.Dedup.SCRUB_TRANSCRIPTS_ON_REGEN,
+                True,
             ))
         except Exception as e:
             logger.warning(f"Dedup pass config read failed, skipping: {e}")
@@ -1656,86 +1673,152 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
             logger.warning(f"Dedup pass module import failed, skipping: {e}")
             return None
 
+        # Iteration 0 state
         predupe_content = draft_script
+        current_script = draft_script
+        current_episodes = list(episodes)
+        starting_count = len(episodes)
 
-        # First pass
-        result = run_dedup_pass(
-            draft_script=draft_script,
-            topic=topic,
-            lookback=lookback,
-        )
+        # Collect saturated topic names once for scrub + potentially log
+        saturated_topic_names = list(recently_covered_arcs or [])
 
-        if result.skipped:
-            logger.info(f"Dedup pass skipped: {result.skip_reason}")
-            return {
-                "script_content": draft_script,
-                "word_count": len(draft_script.split()),
-                "episodes": episodes,
-                "predupe_content": predupe_content,
-            }
-
-        current_script = result.rewritten_script
-        current_episodes = episodes
-
-        # If the deduped script is below the floor, try pulling extra episodes and regenerating
-        if result.chars_after < min_chars_floor and extra_max > 0:
-            logger.info(
-                f"Dedup pass result ({result.chars_after} chars) below floor "
-                f"({min_chars_floor}); attempting to pull extra scored episodes"
+        for iteration in range(max_iterations):
+            # Run dedup against the current draft
+            result = run_dedup_pass(
+                draft_script=current_script,
+                topic=topic,
+                lookback=lookback,
             )
-            existing_ids = {ep.id for ep in episodes if ep.id is not None}
+
+            if result.skipped:
+                logger.info(
+                    f"Dedup iteration {iteration}: skipped ({result.skip_reason}); "
+                    f"accepting current draft"
+                )
+                return {
+                    "script_content": current_script,
+                    "word_count": len(current_script.split()),
+                    "episodes": current_episodes,
+                    "predupe_content": predupe_content,
+                }
+
+            deduped_script = result.rewritten_script
+            chars_after = result.chars_after
+
+            logger.info(
+                f"Dedup iteration {iteration}: "
+                f"{result.chars_before} -> {chars_after} chars, "
+                f"floor={target_floor}, episodes={len(current_episodes)}"
+            )
+
+            # Did we hit the floor?
+            if chars_after >= target_floor:
+                logger.info(f"Dedup iteration {iteration}: target floor reached")
+                return {
+                    "script_content": deduped_script,
+                    "word_count": len(deduped_script.split()),
+                    "episodes": current_episodes,
+                    "predupe_content": predupe_content,
+                }
+
+            # Can we expand further?
+            expansions_used = len(current_episodes) - starting_count
+            if expansions_used >= max_expansion:
+                logger.info(
+                    f"Dedup iteration {iteration}: expansion cap reached "
+                    f"({expansions_used}/{max_expansion}); accepting shorter script"
+                )
+                return {
+                    "script_content": deduped_script,
+                    "word_count": len(deduped_script.split()),
+                    "episodes": current_episodes,
+                    "predupe_content": predupe_content,
+                }
+
+            existing_ids = {ep.id for ep in current_episodes if ep.id is not None}
             extra_episodes = self._get_extra_scored_episodes(
                 topic=topic,
                 exclude_ids=existing_ids,
-                limit=extra_max,
+                limit=1,
+            )
+            if not extra_episodes:
+                logger.info(
+                    f"Dedup iteration {iteration}: no more scored episodes available "
+                    f"for '{topic}'; accepting shorter script ({chars_after} chars)"
+                )
+                return {
+                    "script_content": deduped_script,
+                    "word_count": len(deduped_script.split()),
+                    "episodes": current_episodes,
+                    "predupe_content": predupe_content,
+                }
+
+            expanded = list(current_episodes) + list(extra_episodes)
+            logger.info(
+                f"Dedup iteration {iteration}: pulled 1 extra episode "
+                f"('{extra_episodes[0].title[:60]}'), total now {len(expanded)}"
             )
 
-            if extra_episodes:
-                logger.info(
-                    f"Pulled {len(extra_episodes)} extra scored episode(s) for '{topic}', "
-                    f"regenerating and re-running dedup"
-                )
-                expanded_episodes = list(episodes) + list(extra_episodes)
-                # Regenerate the script with the expanded episode set
+            # Scrub saturated content from ALL transcripts so the next
+            # generation pass doesn't reintroduce what we already cut.
+            gen_episodes = expanded
+            if scrub_on_regen and saturated_topic_names:
                 try:
-                    new_script, new_word_count = self.generate_script(
-                        topic,
-                        expanded_episodes,
-                        digest_date,
-                        recently_covered_arcs=recently_covered_arcs,
+                    from src.generation.transcript_scrubber import scrub_episodes
+                    gen_episodes = scrub_episodes(
+                        expanded,
+                        saturated_topic_names,
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Expanded regeneration failed, keeping deduped version: {e}"
+                        f"Transcript scrub failed ({e}); regenerating with original transcripts"
                     )
-                    return {
-                        "script_content": current_script,
-                        "word_count": len(current_script.split()),
-                        "episodes": current_episodes,
-                        "predupe_content": predupe_content,
-                    }
+                    gen_episodes = expanded
 
-                # Re-run dedup on the expanded draft ONCE (no recursion)
-                predupe_content = new_script
-                second_result = run_dedup_pass(
-                    draft_script=new_script,
-                    topic=topic,
-                    lookback=lookback,
+            # Regenerate from scratch with the expanded (and possibly scrubbed) set
+            try:
+                new_script, _new_word_count = self.generate_script(
+                    topic,
+                    gen_episodes,
+                    digest_date,
+                    recently_covered_arcs=saturated_topic_names,
                 )
-                if second_result.skipped:
-                    current_script = new_script
-                else:
-                    current_script = second_result.rewritten_script
-                current_episodes = expanded_episodes
-            else:
-                logger.info(
-                    f"No extra scored episodes available for '{topic}'; "
-                    f"accepting shorter deduped script ({result.chars_after} chars)"
+            except Exception as e:
+                logger.warning(
+                    f"Dedup iteration {iteration}: regeneration failed ({e}); "
+                    f"accepting current deduped draft"
                 )
+                return {
+                    "script_content": deduped_script,
+                    "word_count": len(deduped_script.split()),
+                    "episodes": current_episodes,
+                    "predupe_content": predupe_content,
+                }
 
+            # Advance loop state. Note: current_episodes uses the UNSCRUBBED
+            # episode list for DB linking — we only scrub the copies we feed
+            # to the generator.
+            predupe_content = new_script
+            current_script = new_script
+            current_episodes = expanded
+
+        # Fell out of the loop at max_iterations — run one final dedup and return
+        logger.info(
+            f"Dedup: hit max_iterations ({max_iterations}); finalizing"
+        )
+        final_result = run_dedup_pass(
+            draft_script=current_script,
+            topic=topic,
+            lookback=lookback,
+        )
+        final_script = (
+            final_result.rewritten_script
+            if not final_result.skipped
+            else current_script
+        )
         return {
-            "script_content": current_script,
-            "word_count": len(current_script.split()),
+            "script_content": final_script,
+            "word_count": len(final_script.split()),
             "episodes": current_episodes,
             "predupe_content": predupe_content,
         }

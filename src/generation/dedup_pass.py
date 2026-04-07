@@ -277,10 +277,14 @@ def run_dedup_pass(
 
     # --- Safety validations ---
 
-    # 1. If result is implausibly small (<30% of original), something went wrong.
-    if chars_after < chars_before * 0.3:
+    # 1. If result is implausibly small (<10% of original), something went wrong.
+    # v3.27: lowered from 0.3 to 0.1 because aggressive dedup against 8 saturated
+    # priors can legitimately cut ~85% when a day's transcripts are almost
+    # entirely rehashed content. The dynamic-expansion retry loop will pull
+    # more episodes if the result is below the target floor but above 10%.
+    if chars_after < chars_before * 0.1:
         logger.warning(
-            f"Dedup pass result suspiciously short "
+            f"Dedup pass result catastrophically short "
             f"({chars_after} vs {chars_before}); keeping original"
         )
         return DedupResult(

@@ -109,6 +109,19 @@ const SETTINGS_SCHEMA: Record<string, Record<string, {
   discovery: {
     max_entries_per_feed: { type: 'int', default: 50, min: 10, max: 200 },
     max_story_arcs_context: { type: 'int', default: 20, min: 5, max: 50 }
+  },
+  dedup: {
+    enabled: { type: 'bool', default: true, min: null, max: null },
+    lookback_digests: { type: 'int', default: 8, min: 1, max: 30 },
+    target_chars_floor: { type: 'int', default: 20000, min: 5000, max: 60000 },
+    max_expansion_episodes: { type: 'int', default: 5, min: 0, max: 15 },
+    max_iterations: { type: 'int', default: 5, min: 1, max: 10 },
+    scrub_transcripts_on_regen: { type: 'bool', default: true, min: null, max: null },
+    min_chars_floor: { type: 'int', default: 10000, min: 1000, max: 50000 },
+    extra_episodes_max: { type: 'int', default: 2, min: 0, max: 5 }
+  },
+  feed_priority: {
+    enabled: { type: 'bool', default: true, min: null, max: null }
   }
 }
 

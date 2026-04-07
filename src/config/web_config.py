@@ -137,8 +137,15 @@ class SettingsKeys:
         CATEGORY = "dedup"
         ENABLED = "enabled"
         LOOKBACK_DIGESTS = "lookback_digests"
-        MIN_CHARS_FLOOR = "min_chars_floor"
-        EXTRA_EPISODES_MAX = "extra_episodes_max"
+        # v3.27+: target_chars_floor is the real driver — the dynamic expansion
+        # loop will pull more episodes until the post-dedup script hits this
+        # floor. min_chars_floor is kept as a legacy alias but deprecated.
+        TARGET_CHARS_FLOOR = "target_chars_floor"
+        MIN_CHARS_FLOOR = "min_chars_floor"  # deprecated — use target_chars_floor
+        MAX_EXPANSION_EPISODES = "max_expansion_episodes"
+        MAX_ITERATIONS = "max_iterations"
+        SCRUB_TRANSCRIPTS_ON_REGEN = "scrub_transcripts_on_regen"
+        EXTRA_EPISODES_MAX = "extra_episodes_max"  # deprecated — use max_expansion_episodes
 
     class FeedPriority:
         CATEGORY = "feed_priority"
@@ -229,6 +236,13 @@ DEFAULTS = {
     # Dedup Pass Configuration (v3.26+)
     (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.ENABLED): {"type": "bool", "default": True},
     (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.LOOKBACK_DIGESTS): {"type": "int", "default": 8, "min": 1, "max": 30},
+    # v3.27: target floor for post-dedup script length. Dynamic expansion loop
+    # pulls extra scored episodes until the final deduped script hits this.
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.TARGET_CHARS_FLOOR): {"type": "int", "default": 20000, "min": 5000, "max": 60000},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.MAX_EXPANSION_EPISODES): {"type": "int", "default": 5, "min": 0, "max": 15},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.MAX_ITERATIONS): {"type": "int", "default": 5, "min": 1, "max": 10},
+    (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.SCRUB_TRANSCRIPTS_ON_REGEN): {"type": "bool", "default": True},
+    # Legacy keys (kept for backwards compat; not referenced by new dynamic loop)
     (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.MIN_CHARS_FLOOR): {"type": "int", "default": 10000, "min": 1000, "max": 50000},
     (SettingsKeys.Dedup.CATEGORY, SettingsKeys.Dedup.EXTRA_EPISODES_MAX): {"type": "int", "default": 2, "min": 0, "max": 5},
 
