@@ -12,10 +12,10 @@ This reconciler only creates MISSING arcs from recurring digest stories.
 import os
 import json
 import logging
+import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
-
-from openai import OpenAI
 
 from src.config.web_config import WebConfigManager, SettingsKeys
 from src.database.story_arc_repo import get_story_arc_repo, StoryArcRepository
@@ -31,17 +31,11 @@ class DigestArcReconciler:
     """
 
     def __init__(self):
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-
+        """v3.31: migrated from OpenAI gpt-5-mini json_schema mode to claude -p
+        with the .claude/commands/reconcile-recurring-stories.md skill.
+        """
         self.web_config = WebConfigManager()
 
-        self.model = self.web_config.get_setting(
-            SettingsKeys.TopicTracking.CATEGORY,
-            SettingsKeys.TopicTracking.RECONCILIATION_MODEL,
-            'gpt-5-mini'
-        )
         self.lookback = self.web_config.get_setting(
             SettingsKeys.TopicTracking.CATEGORY,
             SettingsKeys.TopicTracking.RECONCILIATION_LOOKBACK,
@@ -53,29 +47,51 @@ class DigestArcReconciler:
             2
         )
 
-        openai_timeout = self.web_config.get_setting(
-            SettingsKeys.ApiTimeouts.CATEGORY,
-            SettingsKeys.ApiTimeouts.OPENAI_TIMEOUT,
-            120
-        )
-
-        self.client = OpenAI(api_key=api_key, timeout=float(openai_timeout))
         self.repo = get_story_arc_repo()
         self.matcher = SemanticTopicMatcher()
 
         logger.info(
-            f"DigestArcReconciler initialized: model={self.model}, "
-            f"lookback={self.lookback}, min_occurrences={self.min_occurrences}"
+            f"DigestArcReconciler initialized: lookback={self.lookback}, "
+            f"min_occurrences={self.min_occurrences}"
         )
 
-    def _get_token_param_name(self) -> str:
-        """Get correct token param name for the model.
+    @staticmethod
+    def _call_claude_p(prompt: str, timeout: int = 240) -> str:
+        """Call claude -p with prompt via stdin. Returns trimmed stdout."""
+        claude_path = os.path.expanduser("~/.local/bin/claude")
+        if not os.path.exists(claude_path):
+            claude_path = "claude"
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
+        env.pop("ANTHROPIC_API_KEY", None)
+        result = subprocess.run(
+            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
+             "--tools", "", "--no-session-persistence", "-"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
+            )
+        return result.stdout.strip()
 
-        GPT-5+ models use 'max_completion_tokens' instead of 'max_tokens'.
-        """
-        if self.model.startswith("gpt-5"):
-            return "max_completion_tokens"
-        return "max_tokens"
+    def _load_reconciliation_skill(self) -> str:
+        """Load the recurring-stories skill from .claude/commands/."""
+        skill_path = (
+            Path(__file__).parent.parent.parent
+            / '.claude' / 'commands' / 'reconcile-recurring-stories.md'
+        )
+        if skill_path.exists():
+            return skill_path.read_text()
+        return (
+            "Identify recurring stories across the digest scripts and return "
+            "ONLY a JSON object with a `recurring_stories` array. Each entry "
+            "must have name, category, occurrences, summary. No markdown."
+        )
 
     def reconcile(self, digest_topic: str, dry_run: bool = False) -> Dict:
         """
@@ -276,93 +292,95 @@ class DigestArcReconciler:
         self, scripts: List[Dict], digest_topic: str
     ) -> List[Dict]:
         """
-        Use GPT to identify recurring stories across digest scripts.
+        Use claude -p to identify recurring stories across digest scripts.
+
+        v3.31: migrated from OpenAI gpt-5-mini json_schema mode to claude -p
+        with the .claude/commands/reconcile-recurring-stories.md skill.
 
         Returns list of recurring stories with name, category, occurrences, summary.
         """
-        # Build digest summaries for the prompt
+        # Skip if claude -p is broken on this host
+        try:
+            from src.utils.claude_p_health import is_claude_p_healthy
+            if not is_claude_p_healthy():
+                logger.warning(
+                    "Recurring stories extraction skipped: claude -p unhealthy"
+                )
+                return []
+        except Exception:
+            pass
+
+        # Build digest sections (same trim as before)
         digest_sections = []
         for s in scripts:
-            content = s['content'][:4000]  # Trim per digest to fit context
+            content = s['content'][:4000]
             digest_sections.append(f"--- DIGEST ({s['date']}) ---\n{content}")
-
         all_digests_text = "\n\n".join(digest_sections)
 
-        prompt = f"""Analyze these {len(scripts)} recent digest scripts for the topic "{digest_topic}".
-
-Your task: Identify RECURRING stories, products, companies, or entities that appear across MULTIPLE digests.
-
-For each recurring story, provide:
-- name: A clear, specific name (e.g., "Moltbook AI Laptop", "OpenAI Agents SDK")
-- category: One of [model_release, company_strategy, research, regulation, product_launch, partnership, controversy, industry_trend, technique, use_case, other]
-- occurrences: How many digests mention this story
-- summary: A 1-2 sentence summary of the recurring narrative
-
-CRITICAL RULES:
-- Only include stories that appear in {self.min_occurrences}+ different digests
-- Be specific: "Moltbook" not "AI hardware developments"
-- Focus on concrete entities, products, companies, events - not broad themes
-- Maximum 10 recurring stories
-
-{all_digests_text}
-
-Return ONLY recurring stories appearing in {self.min_occurrences}+ digests."""
-
-        schema = {
-            "type": "object",
-            "properties": {
-                "recurring_stories": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "category": {
-                                "type": "string",
-                                "enum": [
-                                    "model_release", "company_strategy", "research",
-                                    "regulation", "product_launch", "partnership",
-                                    "controversy", "industry_trend", "technique",
-                                    "use_case", "other"
-                                ]
-                            },
-                            "occurrences": {"type": "integer"},
-                            "summary": {"type": "string"}
-                        },
-                        "required": ["name", "category", "occurrences", "summary"],
-                        "additionalProperties": False
-                    }
-                }
-            },
-            "required": ["recurring_stories"],
-            "additionalProperties": False
-        }
+        skill_content = self._load_reconciliation_skill()
+        prompt = (
+            f"{skill_content}\n\n"
+            f"---\n\n"
+            f"# Input for this run\n\n"
+            f"## Parent Topic\n\n"
+            f"{digest_topic}\n\n"
+            f"## Minimum occurrences threshold\n\n"
+            f"{self.min_occurrences}\n\n"
+            f"## Recent digest scripts ({len(scripts)} total)\n\n"
+            f"{all_digests_text}\n\n"
+            f"---\n\n"
+            f"Now identify recurring stories appearing in {self.min_occurrences}+ "
+            f"of the digests above and return ONLY the JSON object specified in "
+            f"the Output Format section. No preamble, no questions, no markdown fences."
+        )
 
         try:
-            api_kwargs = {
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "recurring_stories_extraction",
-                        "schema": schema,
-                        "strict": True,
-                    },
-                },
-                self._get_token_param_name(): 16000,
-            }
-            response = self.client.chat.completions.create(**api_kwargs)
-            choice = response.choices[0]
-            content = choice.message.content
-            if not content:
-                logger.warning("GPT returned empty content for recurring stories extraction")
+            try:
+                raw = self._call_claude_p(prompt)
+            except subprocess.TimeoutExpired:
+                logger.warning("Recurring stories: claude -p timed out")
+                try:
+                    from src.utils.claude_p_health import mark_unhealthy
+                    mark_unhealthy("recurring stories extraction timeout")
+                except Exception:
+                    pass
                 return []
-            data = json.loads(content)
-            stories = data.get("recurring_stories", [])
 
-            # Filter by min_occurrences
-            stories = [s for s in stories if s.get('occurrences', 0) >= self.min_occurrences]
+            # Strip markdown fences defensively
+            if raw.startswith('```json'):
+                raw = raw.replace('```json', '').replace('```', '').strip()
+            elif raw.startswith('```'):
+                raw = raw.replace('```', '').strip()
+
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as je:
+                logger.error(
+                    f"Recurring stories: claude -p returned non-JSON: {je}; "
+                    f"first 300 chars: {raw[:300]!r}"
+                )
+                return []
+
+            if not isinstance(data, dict):
+                logger.error(
+                    f"Recurring stories: expected dict, got {type(data).__name__}"
+                )
+                return []
+
+            stories = data.get("recurring_stories", [])
+            if not isinstance(stories, list):
+                logger.error(
+                    f"Recurring stories: 'recurring_stories' is not a list, "
+                    f"got {type(stories).__name__}"
+                )
+                return []
+
+            # Filter by min_occurrences (defensive — the skill is told to do this
+            # but we enforce it in code as well)
+            stories = [
+                s for s in stories
+                if isinstance(s, dict) and s.get('occurrences', 0) >= self.min_occurrences
+            ]
 
             return stories
 

@@ -100,6 +100,7 @@ class Digest:
     digest_timestamp: Optional[datetime] = None
     script_path: Optional[str] = None
     script_content: Optional[str] = None
+    script_content_predupe: Optional[str] = None  # v3.26: pre-dedupe draft for audit
     script_word_count: Optional[int] = None
     mp3_path: Optional[str] = None
     mp3_duration_seconds: Optional[int] = None
@@ -919,6 +920,7 @@ class DigestRepository:
                     episode_count=digest.episode_count,
                     script_path=digest.script_path,
                     script_content=digest.script_content,
+                    script_content_predupe=digest.script_content_predupe,
                     script_word_count=digest.script_word_count,
                     mp3_path=digest.mp3_path,
                     mp3_duration_seconds=digest.mp3_duration_seconds,
@@ -1117,6 +1119,7 @@ class DigestRepository:
             digest_timestamp=model.digest_timestamp,
             script_path=model.script_path,
             script_content=model.script_content,
+            script_content_predupe=getattr(model, 'script_content_predupe', None),
             script_word_count=model.script_word_count,
             mp3_path=model.mp3_path,
             mp3_duration_seconds=model.mp3_duration_seconds,

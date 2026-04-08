@@ -2313,14 +2313,26 @@ Thank you for your understanding, and we'll see you tomorrow!
         except Exception as exc:
             logger.debug("Failed to persist digest episode links for digest %s: %s", digest.id, exc)
     
-    def get_undigested_episodes(self, start_date: date = None, 
+    def get_undigested_episodes(self, start_date: date = None,
                                end_date: date = None, limit: int = 5) -> List[Episode]:
-        """Get undigested episodes for fallback general summary"""
-        return self.episode_repo.get_undigested_episodes(
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit
-        )
+        """Get undigested episodes for fallback general summary.
+
+        v3.31: EpisodeRepository.get_undigested_episodes() does not accept
+        date filters; the date arguments are accepted here for caller
+        compatibility but applied client-side after fetching.
+        """
+        episodes = self.episode_repo.get_undigested_episodes(limit=limit * 4)
+        if start_date:
+            episodes = [
+                ep for ep in episodes
+                if ep.published_date and ep.published_date.date() >= start_date
+            ]
+        if end_date:
+            episodes = [
+                ep for ep in episodes
+                if ep.published_date and ep.published_date.date() <= end_date
+            ]
+        return episodes[:limit]
     
     def create_general_summary(self, digest_date: date, 
                               start_date: date = None, end_date: date = None) -> Optional[Digest]:
