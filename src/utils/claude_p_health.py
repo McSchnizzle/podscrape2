@@ -142,3 +142,27 @@ def reset_health_cache() -> None:
     global _cached
     with _lock:
         _cached = None
+
+
+def mark_unhealthy(reason: str = "explicit") -> None:
+    """Mark claude -p as unhealthy for the rest of this process.
+
+    v3.30: claude -p exhibits intermittent flakiness on certain payload
+    types — the initial probe can pass, the dedup pass can succeed, then
+    the transcript scrubber hangs and times out. Once we observe a real
+    timeout in production, we don't want to keep trying — flip the cached
+    state to False so all subsequent claude -p call sites short-circuit
+    immediately. The pipeline still produces a digest via OpenAI fallback,
+    just without the optional features that depend on claude -p.
+
+    Call this from any claude -p call site that observes a TimeoutExpired
+    or otherwise determines the CLI is misbehaving.
+    """
+    global _cached
+    with _lock:
+        if _cached is not False:
+            logger.warning(
+                f"claude -p marked UNHEALTHY for the rest of this process "
+                f"(reason: {reason}); all subsequent claude-p features will be skipped"
+            )
+        _cached = False

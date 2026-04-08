@@ -270,6 +270,11 @@ def run_dedup_pass(
         ).strip()
     except subprocess.TimeoutExpired:
         logger.warning("Dedup pass: claude -p timed out, keeping original draft")
+        try:
+            from src.utils.claude_p_health import mark_unhealthy
+            mark_unhealthy("dedup pass timeout")
+        except Exception:
+            pass
         return DedupResult(
             rewritten_script=draft_script,
             chars_before=chars_before,

@@ -42,7 +42,7 @@ class ScrubResult:
         return self.chars_after - self.chars_before
 
 
-def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
+def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 180) -> str:
     claude_path = os.path.expanduser("~/.local/bin/claude")
     if not os.path.exists(claude_path):
         claude_path = "claude"
@@ -160,6 +160,11 @@ def scrub_transcript(
         )
     except subprocess.TimeoutExpired:
         logger.warning("Transcript scrub: claude -p timed out")
+        try:
+            from src.utils.claude_p_health import mark_unhealthy
+            mark_unhealthy("transcript scrub timeout")
+        except Exception:
+            pass
         return transcript, ScrubResult(
             chars_before=chars_before,
             chars_after=chars_before,
@@ -220,7 +225,7 @@ def scrub_episodes(
     episodes: list,
     saturated_topics: List[str],
     *,
-    timeout: int = 600,
+    timeout: int = 180,
 ) -> list:
     """Return a NEW list of Episode copies with transcript_content scrubbed.
 

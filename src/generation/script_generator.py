@@ -308,6 +308,13 @@ class ScriptGenerator:
                 return self._call_claude_p(system_prompt, user_prompt)
             except (ScriptGenerationError, Exception) as e:
                 logger.warning(f"claude -p failed in _call_llm, falling back to OpenAI: {e}")
+                # v3.30: if the failure was a timeout, mark claude -p unhealthy
+                if "timed out" in str(e).lower() or "TimeoutExpired" in type(e).__name__:
+                    try:
+                        from src.utils.claude_p_health import mark_unhealthy
+                        mark_unhealthy("_call_llm script generation timeout")
+                    except Exception:
+                        pass
                 return self._call_openai_fallback(system_prompt, user_prompt)
         else:
             response = self.openai_client.responses.create(
@@ -1464,6 +1471,15 @@ DO NOT INTRODUCE:
 
         except Exception as e:
             logger.warning(f"Structural variety pass failed ({e}), keeping original script")
+            # v3.30: if the failure was a timeout, mark claude -p unhealthy so
+            # subsequent calls (dedup, scrubber, etc.) skip it instead of
+            # repeating the same hang.
+            if "timed out" in str(e).lower() or "TimeoutExpired" in type(e).__name__:
+                try:
+                    from src.utils.claude_p_health import mark_unhealthy
+                    mark_unhealthy("structural variety pass timeout")
+                except Exception:
+                    pass
             return script
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
