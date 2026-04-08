@@ -104,7 +104,7 @@ def should_promote_to_hot(event_count: int, source_count: int) -> bool:
     return event_count >= HOT_EVENT_THRESHOLD or source_count >= HOT_SOURCE_THRESHOLD
 
 
-def generate_hot_briefing_for_arc(arc_id: int, *, timeout: int = 300) -> Optional[str]:
+def generate_hot_briefing_for_arc(arc_id: int, *, timeout: int = 120) -> Optional[str]:
     """Generate and persist a hot briefing for an existing arc.
 
     Fetches the arc and its events from the repo, calls `claude -p`, saves the
@@ -141,6 +141,15 @@ def generate_hot_briefing_for_arc(arc_id: int, *, timeout: int = 300) -> Optiona
             f"Hot briefing: arc {arc_id} '{arc_name}' has no events, skipping"
         )
         return None
+
+    # v3.29: skip if claude -p is broken on this host
+    try:
+        from src.utils.claude_p_health import is_claude_p_healthy
+        if not is_claude_p_healthy():
+            logger.info(f"Hot briefing: skipping arc {arc_id} (claude -p unhealthy)")
+            return None
+    except Exception:
+        pass
 
     try:
         briefing = _call_claude_p(

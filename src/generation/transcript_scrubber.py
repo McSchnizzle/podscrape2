@@ -115,7 +115,7 @@ def scrub_transcript(
     transcript: str,
     saturated_topics: List[str],
     *,
-    timeout: int = 600,
+    timeout: int = 180,
 ) -> tuple[str, ScrubResult]:
     """Remove sentences discussing saturated topics from a single transcript.
 
@@ -138,6 +138,19 @@ def scrub_transcript(
             skipped=True,
             skip_reason="no saturated topics",
         )
+
+    # v3.29: skip if claude -p is broken on this host
+    try:
+        from src.utils.claude_p_health import is_claude_p_healthy
+        if not is_claude_p_healthy():
+            return transcript, ScrubResult(
+                chars_before=chars_before,
+                chars_after=chars_before,
+                skipped=True,
+                skip_reason="claude -p unhealthy (skipped via health probe)",
+            )
+    except Exception as e:
+        logger.warning(f"Transcript scrub: health check failed ({e}); attempting anyway")
 
     try:
         cleaned = _call_claude_p(

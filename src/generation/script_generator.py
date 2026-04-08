@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 360) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -293,6 +293,16 @@ class ScriptGenerator:
         """Route LLM call to the appropriate provider based on configured model.
         Falls back to OpenAI API if claude -p fails."""
         if self._is_anthropic_model():
+            # v3.29: probe claude -p health before attempting; broken claude
+            # subprocesses can hang for the full timeout (~6 min). The health
+            # check costs us at most 20s once per process.
+            try:
+                from src.utils.claude_p_health import is_claude_p_healthy
+                if not is_claude_p_healthy():
+                    logger.warning("_call_llm: claude -p unhealthy, going straight to OpenAI fallback")
+                    return self._call_openai_fallback(system_prompt, user_prompt)
+            except Exception:
+                pass
             logger.info("Using claude -p for Anthropic model call (no API key)")
             try:
                 return self._call_claude_p(system_prompt, user_prompt)
@@ -1421,9 +1431,19 @@ DO NOT INTRODUCE:
 
 {script}"""
 
+        # v3.29: skip the structural variety pass entirely if claude -p is broken.
+        # Without this guard, a hung claude -p eats 10 minutes per cron run.
+        try:
+            from src.utils.claude_p_health import is_claude_p_healthy
+            if not is_claude_p_healthy():
+                logger.warning("Structural variety pass: claude -p unhealthy, keeping original script")
+                return script
+        except Exception:
+            pass
+
         try:
             logger.info(f"Running structural variety pass via claude -p ({len(script)} chars)")
-            revised = self._call_claude_p(system_prompt, user_prompt, timeout=600).strip()
+            revised = self._call_claude_p(system_prompt, user_prompt, timeout=240).strip()
 
             # Validate the result
             if not revised or len(revised) < len(script) * 0.5:

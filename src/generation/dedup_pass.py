@@ -179,7 +179,7 @@ def run_dedup_pass(
     lookback: int = 8,
     digest_repo=None,
     exclude_digest_id: Optional[int] = None,
-    timeout: int = 1500,
+    timeout: int = 360,
 ) -> DedupResult:
     """Run the post-generation dedup pass.
 
@@ -208,6 +208,22 @@ def run_dedup_pass(
             skipped=True,
             skip_reason="draft too short to dedup",
         )
+
+    # v3.29: skip immediately if claude -p is broken on this host. Prevents
+    # 5+ minute subprocess timeouts from burning the cron-wrapper budget.
+    try:
+        from src.utils.claude_p_health import is_claude_p_healthy
+        if not is_claude_p_healthy():
+            return DedupResult(
+                rewritten_script=draft_script,
+                chars_before=chars_before,
+                chars_after=chars_before,
+                lookback_count=0,
+                skipped=True,
+                skip_reason="claude -p unhealthy (skipped via health probe)",
+            )
+    except Exception as e:
+        logger.warning(f"Dedup pass: health check failed ({e}); attempting anyway")
 
     # Fetch prior digests for this topic
     try:
