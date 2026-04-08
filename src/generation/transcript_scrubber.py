@@ -219,10 +219,16 @@ def scrub_episodes(
     if not saturated_topics:
         return list(episodes)
 
+    # Minimum transcript length after scrubbing — below this we consider the
+    # episode "gutted" and revert it to the original. Keeps the downstream
+    # generator from choking on empty transcripts (it requires >=1000 chars).
+    MIN_POST_SCRUB_CHARS = 1500
+
     cleaned_episodes = []
     total_before = 0
     total_after = 0
     scrubbed_count = 0
+    reverted_count = 0
 
     for ep in episodes:
         # Use copy.copy so scores dict is shared but we can reassign transcript
@@ -233,16 +239,44 @@ def scrub_episodes(
             saturated_topics,
             timeout=timeout,
         )
-        new_ep.transcript_content = cleaned
+        # If scrubbing removed almost everything, the episode is entirely
+        # about a saturated topic. Revert to original so the generator still
+        # has something to work with; the SATURATED prompt directive + dedup
+        # pass will handle it at the output end.
+        if not result.skipped and len(cleaned) < MIN_POST_SCRUB_CHARS:
+            logger.info(
+                f"Transcript scrub gutted episode '{ep.title[:50]}' "
+                f"({result.chars_before} -> {len(cleaned)} chars); reverting to original"
+            )
+            new_ep.transcript_content = original_transcript
+            total_before += result.chars_before
+            total_after += result.chars_before
+            reverted_count += 1
+        else:
+            new_ep.transcript_content = cleaned
+            total_before += result.chars_before
+            total_after += result.chars_after
+            if not result.skipped:
+                scrubbed_count += 1
         cleaned_episodes.append(new_ep)
-        total_before += result.chars_before
-        total_after += result.chars_after
-        if not result.skipped:
-            scrubbed_count += 1
+
+    # Additional safety: if total content after scrub is less than 40% of
+    # total before, abandon scrubbing entirely and return the originals.
+    # This catches the "all episodes were saturated" case where even the
+    # reverted ones plus the scrubbed ones don't have enough content to
+    # write a coherent digest.
+    if total_before > 0 and total_after < total_before * 0.4:
+        logger.warning(
+            f"Transcript scrub wiped {((total_before - total_after) / total_before) * 100:.0f}% "
+            f"of total content ({total_before} -> {total_after}); abandoning scrub, "
+            f"returning original episodes"
+        )
+        return list(episodes)
 
     logger.info(
-        f"Transcript scrub summary: {scrubbed_count}/{len(episodes)} episodes "
-        f"cleaned, {total_before} -> {total_after} chars "
+        f"Transcript scrub summary: {scrubbed_count}/{len(episodes)} cleaned, "
+        f"{reverted_count} reverted (gutted), "
+        f"{total_before} -> {total_after} chars "
         f"({total_after - total_before:+d})"
     )
     return cleaned_episodes
