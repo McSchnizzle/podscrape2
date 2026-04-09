@@ -91,11 +91,12 @@ class PublishingPipelineRunner:
                 title="Daily AI & Tech Digest",
                 description="AI-curated daily digest of podcast conversations about artificial intelligence, technology trends, and digital innovation.",
                 author="Paul Brown",
-                email="brownpr0@gmail.com",
+                email="paulinpdx503@gmail.com",
                 category="Technology",
                 subcategory="Tech News",
                 website_url="https://podcast.paulrbrown.org",
-                copyright="© 2025 Paul Brown"
+                copyright="© 2025 Paul Brown",
+                image_url="https://podcast.paulrbrown.org/images/logo.png"
             )
             self.rss_generator = create_rss_generator(podcast_metadata)
 

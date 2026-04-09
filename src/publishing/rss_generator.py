@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 RSS Feed Generator for RSS Podcast Digest System
-Generates simplified RSS 2.0 compliant XML (no iTunes extensions)
+Generates RSS 2.0 compliant XML with iTunes podcast extensions
 """
 
 import os
@@ -50,7 +50,7 @@ class PodcastMetadata:
 
 class RSSGenerator:
     """
-    Generates simplified RSS 2.0 compliant XML feeds (no iTunes extensions)
+    Generates RSS 2.0 compliant XML feeds with iTunes podcast extensions
     """
     
     def __init__(self, podcast_metadata: PodcastMetadata):
@@ -80,6 +80,7 @@ class RSSGenerator:
         # Create RSS root element
         rss = ET.Element("rss")
         rss.set("version", "2.0")
+        rss.set("xmlns:itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
         
         # Create channel element
         channel = ET.SubElement(rss, "channel")
@@ -109,7 +110,7 @@ class RSSGenerator:
         ET.SubElement(channel, "link").text = self.metadata.website_url
         ET.SubElement(channel, "language").text = self.metadata.language
         ET.SubElement(channel, "lastBuildDate").text = self._format_rss_date(get_pacific_now())
-        ET.SubElement(channel, "generator").text = "RSS Podcast Digest System v1.0"
+        ET.SubElement(channel, "generator").text = "RSS Podcast Digest System v2.0"
 
         # Podcast image (RSS 2.0 standard)
         if self.metadata.image_url:
@@ -121,6 +122,18 @@ class RSSGenerator:
         # Copyright
         if self.metadata.copyright:
             ET.SubElement(channel, "copyright").text = self.metadata.copyright
+
+        # iTunes extensions
+        if self.metadata.image_url:
+            itunes_image = ET.SubElement(channel, "itunes:image")
+            itunes_image.set("href", self.metadata.image_url)
+        ET.SubElement(channel, "itunes:author").text = self.metadata.author
+        owner = ET.SubElement(channel, "itunes:owner")
+        ET.SubElement(owner, "itunes:name").text = self.metadata.author
+        ET.SubElement(owner, "itunes:email").text = self.metadata.email
+        ET.SubElement(channel, "itunes:category").set("text", self.metadata.category)
+        ET.SubElement(channel, "itunes:explicit").text = "true" if self.metadata.explicit else "false"
+        ET.SubElement(channel, "itunes:summary").text = self.metadata.description
     
     def _add_episode_item(self, channel: ET.Element, episode: PodcastEpisode):
         """Add episode item to RSS feed"""
