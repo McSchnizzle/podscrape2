@@ -107,7 +107,14 @@ function generateRSSXML(digests: Digest[]): string {
     <lastBuildDate>${now.toUTCString()}</lastBuildDate>
     <generator>RSS Podcast Digest System v2.0 (Dynamic API)</generator>
     <copyright>© 2025 Paul Brown</copyright>
+    <itunes:image href="https://podcast.paulrbrown.org/images/logo.png"/>
+    <itunes:author>Paul Brown</itunes:author>
+    <itunes:owner>
+      <itunes:name>Paul Brown</itunes:name>
+      <itunes:email>paulinpdx503@gmail.com</itunes:email>
+    </itunes:owner>
     <itunes:category text="Technology"/>
+    <itunes:summary>AI-curated daily digest focused on artificial intelligence, machine learning, technology trends, and digital innovation from across the podcast landscape.</itunes:summary>
     <itunes:explicit>false</itunes:explicit>${items}
   </channel>
 </rss>`;
