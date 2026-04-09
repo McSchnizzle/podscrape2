@@ -76,7 +76,7 @@ function generateRSSXML(digests: Digest[]): string {
     if (!digest.github_url || !digest.mp3_path) continue;
 
     const mp3Filename = digest.mp3_path.split('/').pop() || '';
-    const mp3Url = `https://github.com/${repoName}/releases/download/daily-${digest.digest_date}/${encodeURIComponent(mp3Filename)}`;
+    const mp3Url = `https://op3.dev/e/github.com/${repoName}/releases/download/daily-${digest.digest_date}/${encodeURIComponent(mp3Filename)}`;
 
     // Create unique GUID including MP3 filename (which contains timestamp)
     const mp3Basename = mp3Filename.replace('.mp3', '');
