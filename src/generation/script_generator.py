@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 360) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -1298,12 +1298,7 @@ Follow ALL rules in the system prompt exactly, especially:
                     speaker_2_name=speaker_2_name,
                     num_episodes=len(transcripts),
                 )
-                try:
-                    script_content = self._call_claude_p(skill_based_prompt, user_prompt)
-                except (ScriptGenerationError, Exception) as claude_err:
-                    logger.warning(f"claude -p failed, falling back to OpenAI API: {claude_err}")
-                    script_content = self._call_openai_fallback(system_prompt, user_prompt)
-                    used_fallback = True
+                script_content = self._call_claude_p(skill_based_prompt, user_prompt)
             else:
                 script_content = self._call_llm(system_prompt, user_prompt)
 
