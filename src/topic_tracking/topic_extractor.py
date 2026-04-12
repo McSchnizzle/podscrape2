@@ -197,11 +197,7 @@ class StoryArcExtractor:
                 logger.warning(
                     f"Story arc extraction: claude -p timed out for {episode_guid}"
                 )
-                try:
-                    from src.utils.claude_p_health import mark_unhealthy
-                    mark_unhealthy(f"story arc extraction timeout ({episode_guid})")
-                except Exception:
-                    pass
+                # Don't poison global health — prompt-specific timeout
                 return []
 
             # Strip markdown code fences defensively

@@ -339,11 +339,7 @@ class DigestArcReconciler:
                 raw = self._call_claude_p(prompt)
             except subprocess.TimeoutExpired:
                 logger.warning("Recurring stories: claude -p timed out")
-                try:
-                    from src.utils.claude_p_health import mark_unhealthy
-                    mark_unhealthy("recurring stories extraction timeout")
-                except Exception:
-                    pass
+                # Don't poison global health — prompt-specific timeout
                 return []
 
             # Strip markdown fences defensively

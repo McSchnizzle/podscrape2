@@ -160,11 +160,8 @@ def scrub_transcript(
         )
     except subprocess.TimeoutExpired:
         logger.warning("Transcript scrub: claude -p timed out")
-        try:
-            from src.utils.claude_p_health import mark_unhealthy
-            mark_unhealthy("transcript scrub timeout")
-        except Exception:
-            pass
+        # Note: we do NOT call mark_unhealthy() here. A prompt-specific
+        # timeout is not the same as the CLI being broken.
         return transcript, ScrubResult(
             chars_before=chars_before,
             chars_after=chars_before,

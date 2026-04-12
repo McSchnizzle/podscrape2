@@ -1450,7 +1450,7 @@ DO NOT INTRODUCE:
 
         try:
             logger.info(f"Running structural variety pass via claude -p ({len(script)} chars)")
-            revised = self._call_claude_p(system_prompt, user_prompt, timeout=240).strip()
+            revised = self._call_claude_p(system_prompt, user_prompt, timeout=360).strip()
 
             # Validate the result
             if not revised or len(revised) < len(script) * 0.5:
@@ -1471,15 +1471,9 @@ DO NOT INTRODUCE:
 
         except Exception as e:
             logger.warning(f"Structural variety pass failed ({e}), keeping original script")
-            # v3.30: if the failure was a timeout, mark claude -p unhealthy so
-            # subsequent calls (dedup, scrubber, etc.) skip it instead of
-            # repeating the same hang.
-            if "timed out" in str(e).lower() or "TimeoutExpired" in type(e).__name__:
-                try:
-                    from src.utils.claude_p_health import mark_unhealthy
-                    mark_unhealthy("structural variety pass timeout")
-                except Exception:
-                    pass
+            # Note: we intentionally do NOT call mark_unhealthy() here.
+            # The variety pass is optional polish — its timeout should never
+            # poison critical downstream features (dedup, reconciler, scrubber).
             return script
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],

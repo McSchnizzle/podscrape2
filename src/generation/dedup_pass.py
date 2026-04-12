@@ -60,6 +60,8 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) ->
 
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
+    effort = "medium"
+
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
     env.pop("ANTHROPIC_API_KEY", None)
@@ -68,7 +70,7 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) ->
         [
             claude_path, "-p",
             "--model", "sonnet",
-            "--effort", "medium",
+            "--effort", effort,
             "--tools", "",
             "--no-session-persistence",
             "-",
@@ -262,59 +264,74 @@ def run_dedup_pass(
 
     user_prompt = _build_user_prompt(draft_script, prior)
 
-    try:
-        revised = _call_claude_p(
-            _DEDUP_SYSTEM_PROMPT,
-            user_prompt,
-            timeout=timeout,
-        ).strip()
-    except subprocess.TimeoutExpired:
-        logger.warning("Dedup pass: claude -p timed out, keeping original draft")
+    # Retry logic: claude -p with medium effort occasionally returns a
+    # truncated/broken result (<5% of input). One retry usually succeeds.
+    max_attempts = 2
+    revised = None
+    for attempt in range(max_attempts):
         try:
-            from src.utils.claude_p_health import mark_unhealthy
-            mark_unhealthy("dedup pass timeout")
-        except Exception:
-            pass
-        return DedupResult(
-            rewritten_script=draft_script,
-            chars_before=chars_before,
-            chars_after=chars_before,
-            lookback_count=len(prior),
-            skipped=True,
-            skip_reason="claude -p timeout",
-        )
-    except DedupPassError as e:
-        logger.warning(f"Dedup pass: claude -p failed, keeping original draft: {e}")
-        return DedupResult(
-            rewritten_script=draft_script,
-            chars_before=chars_before,
-            chars_after=chars_before,
-            lookback_count=len(prior),
-            skipped=True,
-            skip_reason=str(e),
-        )
+            revised = _call_claude_p(
+                _DEDUP_SYSTEM_PROMPT,
+                user_prompt,
+                timeout=timeout,
+            ).strip()
+        except subprocess.TimeoutExpired:
+            logger.warning("Dedup pass: claude -p timed out, keeping original draft")
+            return DedupResult(
+                rewritten_script=draft_script,
+                chars_before=chars_before,
+                chars_after=chars_before,
+                lookback_count=len(prior),
+                skipped=True,
+                skip_reason="claude -p timeout",
+            )
+        except DedupPassError as e:
+            logger.warning(f"Dedup pass: claude -p failed, keeping original draft: {e}")
+            return DedupResult(
+                rewritten_script=draft_script,
+                chars_before=chars_before,
+                chars_after=chars_before,
+                lookback_count=len(prior),
+                skipped=True,
+                skip_reason=str(e),
+            )
+
+        # Check for flaky truncated result
+        if len(revised) >= chars_before * 0.05:
+            break  # Result looks reasonable
+        if attempt < max_attempts - 1:
+            logger.warning(
+                f"Dedup pass attempt {attempt+1}: result too short "
+                f"({len(revised)} vs {chars_before}), retrying"
+            )
+        else:
+            logger.warning(
+                f"Dedup pass: result still too short after {max_attempts} attempts "
+                f"({len(revised)} vs {chars_before}); keeping original"
+            )
+            return DedupResult(
+                rewritten_script=draft_script,
+                chars_before=chars_before,
+                chars_after=chars_before,
+                lookback_count=len(prior),
+                skipped=True,
+                skip_reason="result too short after retry (likely model failure)",
+            )
 
     chars_after = len(revised)
 
     # --- Safety validations ---
 
-    # 1. If result is implausibly small (<10% of original), something went wrong.
-    # v3.27: lowered from 0.3 to 0.1 because aggressive dedup against 8 saturated
-    # priors can legitimately cut ~85% when a day's transcripts are almost
-    # entirely rehashed content. The dynamic-expansion retry loop will pull
-    # more episodes if the result is below the target floor but above 10%.
-    if chars_after < chars_before * 0.1:
-        logger.warning(
-            f"Dedup pass result catastrophically short "
-            f"({chars_after} vs {chars_before}); keeping original"
-        )
-        return DedupResult(
-            rewritten_script=draft_script,
-            chars_before=chars_before,
-            chars_after=chars_before,
-            lookback_count=len(prior),
-            skipped=True,
-            skip_reason="result too short",
+    # If result is 5-30% of original: aggressive but possibly legitimate.
+    # Return as a valid (non-skipped) result so the expansion loop can
+    # pull more episodes to compensate.
+    if chars_after < chars_before * 0.3:
+        # 5-30% of original: aggressive but possibly legitimate. Return the
+        # deduped result so the expansion loop can pull more episodes.
+        logger.info(
+            f"Dedup pass aggressively cut content "
+            f"({chars_after} vs {chars_before}, {chars_after/chars_before:.0%}); "
+            f"expansion loop will compensate"
         )
 
     # 2. Speaker labels must be preserved for dialogue scripts.

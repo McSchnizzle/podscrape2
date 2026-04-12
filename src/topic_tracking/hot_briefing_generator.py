@@ -159,11 +159,7 @@ def generate_hot_briefing_for_arc(arc_id: int, *, timeout: int = 120) -> Optiona
         )
     except subprocess.TimeoutExpired:
         logger.warning(f"Hot briefing: claude -p timed out for arc {arc_id}")
-        try:
-            from src.utils.claude_p_health import mark_unhealthy
-            mark_unhealthy(f"hot briefing arc {arc_id} timeout")
-        except Exception:
-            pass
+        # Don't poison global health — prompt-specific timeout
         return None
     except HotBriefingError as e:
         logger.warning(f"Hot briefing: claude -p failed for arc {arc_id}: {e}")
