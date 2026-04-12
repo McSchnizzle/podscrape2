@@ -227,7 +227,7 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 600) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -976,101 +976,35 @@ class ScriptGenerator:
 
     def _build_repetition_avoidance_instructions(self, recently_covered_arcs: List[str], topic: str = "AI and Technology") -> str:
         """
-        Build prompt instructions that tell the model what listeners already know,
-        so it can focus on genuinely new information from today's transcripts.
+        Build lightweight repetition avoidance instructions.
 
-        Instead of suppressing entire arcs, this provides the specific content
-        from recent digests as a "already reported" baseline. The model should
-        still cover these arcs — but only the parts that go beyond this baseline.
+        Since v3.34, transcripts are pre-deduped before reaching the script
+        generator, so we no longer need to include full prior digest snippets
+        in the prompt. Just a short note that the transcripts have been
+        pre-filtered for novelty.
 
         Args:
             recently_covered_arcs: List of arc names recently covered
+            topic: Topic name (unused but kept for interface compatibility)
 
         Returns:
-            Formatted string with fact-based repetition avoidance
+            Formatted string with repetition avoidance instructions
         """
         if not recently_covered_arcs:
             return ""
 
-        # Fetch the last 3 digest scripts to extract what was already reported
-        prior_digest_summary = self._get_recent_digest_summary(topic=topic)
+        return """
 
-        return f"""
+## PRE-FILTERED TRANSCRIPTS
 
-## WHAT OUR AUDIENCE ALREADY KNOWS (from recent episodes)
+These transcripts have been pre-filtered to remove content that was already
+covered in recent episodes. The material you see below is what's NEW and
+hasn't been reported to our audience yet. Cover it thoroughly — every
+transcript provided has unique content worth discussing.
 
-Our listeners follow this show daily. The following is a summary of what we
-reported in the last 2-3 episodes. Do NOT repeat these specific facts,
-statistics, or explanations — our audience already heard them.
-
-{prior_digest_summary}
-
-**RULES FOR HANDLING FAMILIAR TOPICS:**
-
-1. **Still cover the arc** — do NOT skip a topic just because we covered it
-   before. Today's transcripts may contain new angles, new sources, new data,
-   or new reactions that we haven't reported yet.
-
-2. **Do NOT repeat specific facts** listed above. If a transcript restates
-   "93.9% on SWE-bench" or lists the same partner companies we already named,
-   skip those specific claims. Find what IS new.
-
-3. **Frame continuing stories as updates**: "New wrinkle on Mythos today..."
-   or "The Glasswing story took a turn..." — but then deliver NEW information,
-   not a recap.
-
-4. **A new source's perspective counts as new** — if a different podcast host
-   or guest has a different take on a story we covered, that perspective is
-   worth reporting even if the underlying facts are the same.
-
-5. **If a transcript has NOTHING new** beyond what's listed above, compress
-   it to 1-2 sentences acknowledging the continued coverage and move on.
-   Do NOT skip the episode entirely — note that sources are still talking
-   about it, then move to the next episode.
+Do NOT skip any episode or treat any content as "old news" — if it's in
+the transcript, it survived the dedup filter because it's genuinely new.
 """
-
-    def _get_recent_digest_summary(self, topic: str = "AI and Technology") -> str:
-        """Extract key facts from the last 3 digests to serve as the
-        'audience already knows' baseline.
-
-        Returns snippets of recent digest scripts so the model can see
-        the specific claims and facts it should not repeat.
-        """
-        try:
-            from src.database.models import get_database_manager
-            from src.database.sqlalchemy_models import Digest as DigestModel
-
-            db = get_database_manager()
-            with db.get_session() as session:
-                recent = (
-                    session.query(DigestModel)
-                    .filter(
-                        DigestModel.topic == topic,
-                        DigestModel.script_content.isnot(None),
-                    )
-                    .order_by(DigestModel.generated_at.desc())
-                    .limit(3)
-                    .all()
-                )
-
-                if not recent:
-                    return "(No recent digests found)"
-
-                # Build a compact summary of what was covered.
-                # Include enough detail that the model can identify repeated facts.
-                lines = []
-                for d in recent:
-                    date_str = d.digest_date.isoformat() if d.digest_date else "unknown"
-                    # Take the first 4000 chars of each script — enough to capture
-                    # the key facts without blowing up the prompt
-                    snippet = (d.script_content or "")[:4000]
-                    lines.append(f"--- Episode from {date_str} ---\n{snippet}\n")
-
-                return "\n".join(lines)
-
-        except Exception as e:
-            logger.warning(f"Failed to build recent digest summary: {e}")
-            return "(Could not load recent digests)"
 
     def _build_claude_p_dialogue_prompt(
         self,
