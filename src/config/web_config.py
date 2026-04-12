@@ -176,8 +176,8 @@ AI_MODELS = {
         'whisper-1': {'max_file_size_mb': 25, 'display_name': 'Whisper-1 (25MB limit)'}
     },
     'anthropic': {
-        'claude-opus-4-6': {'max_output': 128000, 'max_input': 200000, 'display_name': 'Claude Opus 4.6'},
-        'claude-sonnet-4-6': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Sonnet 4.6'},
+        'claude-opus-4-6': {'max_output': 128000, 'max_input': 1000000, 'display_name': 'Claude Opus 4.6 (1M)'},
+        'claude-sonnet-4-6': {'max_output': 64000, 'max_input': 1000000, 'display_name': 'Claude Sonnet 4.6 (1M)'},
         'claude-haiku-4-5-20251001': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Haiku 4.5'},
         'claude-opus-4-5-20251101': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Opus 4.5'},
         'claude-sonnet-4-5-20250929': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Sonnet 4.5'},
@@ -269,7 +269,7 @@ DEFAULTS = {
     # AI Configuration - Digest Generation Phase
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL): {"type": "string", "default": "gpt-5"},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS): {"type": "int", "default": 25000, "min": 1000, "max": 128000},
-    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 150000, "min": 10000, "max": 272000},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 500000, "min": 10000, "max": 1000000},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MIN_CHARS): {"type": "int", "default": 2000, "min": 0, "max": 500000},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS): {"type": "int", "default": 200000, "min": 0, "max": 1000000},

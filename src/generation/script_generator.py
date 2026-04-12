@@ -120,7 +120,7 @@ class ScriptGenerator:
         if self.web_config:
             self.ai_model = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL, 'gpt-5')
             self.max_output_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS, 25000)
-            self.max_input_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 150000)
+            self.max_input_tokens = self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 500000)
 
             # Load transcript limit settings (previously hardcoded, now from web config)
             self.transcript_min_chars = int(self.web_config.get_setting(
@@ -136,7 +136,7 @@ class ScriptGenerator:
         else:
             self.ai_model = 'gpt-5'
             self.max_output_tokens = 25000
-            self.max_input_tokens = 150000
+            self.max_input_tokens = 500000
             self.transcript_min_chars = 2000
             self.transcript_max_chars = 200000  # Default to 200K for full transcript support
 
@@ -736,25 +736,25 @@ class ScriptGenerator:
                 for arc in developing_arcs[:5]:  # Limit to top 5 developing
                     context += self._format_arc_for_context(arc, for_narrative)
 
-            # v3.27: SATURATED arcs get a stronger directive — these were
-            # already covered 3+ times and are the primary source of listener
-            # fatigue. The dedup pass will clean up what leaks through, but the
-            # prompt-side warning reduces how much leaks in the first place.
+            # v3.32: Saturated arcs are stories covered 3+ times. Instead of
+            # suppressing them entirely (which drops new angles), we tell the
+            # model to skip repeated facts but still find new information.
             if saturated_arcs:
-                context += "\n**SATURATED STORIES** (already covered 3+ times — DO NOT re-introduce):\n\n"
+                context += "\n**WELL-COVERED STORIES** (covered 3+ times — audience knows the basics):\n\n"
                 for arc in saturated_arcs[:8]:
                     arc_name = arc.get('arc_name', '')
                     if for_narrative:
                         arc_name = self._normalize_arc_name_for_tts(arc_name)
                     context += f"- {arc_name}\n"
                 context += (
-                    "\nFor SATURATED stories: our audience already knows the background. "
-                    "Mention a saturated story ONLY if today's episodes contain a genuinely "
-                    "NEW development (reversal, new data, new party, consequence). When you "
-                    "do, skip the background entirely and deliver the new fact in 2-4 "
-                    "sentences max, explicitly framed as an update (e.g., 'Quick update on "
-                    "the story we've been tracking about X...'). If there is no new "
-                    "development today, do NOT mention the saturated story at all.\n"
+                    "\nFor WELL-COVERED stories: our audience knows the background. "
+                    "Do NOT re-explain the basics or repeat statistics/facts from prior "
+                    "episodes. Instead, look for genuinely new information in today's "
+                    "transcripts: a new source's reaction, new data, a consequence, or "
+                    "a different angle. If you find something new, frame it as an update "
+                    "(e.g., 'New development on the Glasswing story...'). If there is "
+                    "truly NOTHING new, briefly note that sources continue to cover it "
+                    "and move on — do not skip the topic entirely.\n"
                 )
 
             # Add framing instructions
@@ -974,61 +974,103 @@ class ScriptGenerator:
             logger.warning(f"Failed to mark story arcs as included: {e}")
             return 0
 
-    def _build_repetition_avoidance_instructions(self, recently_covered_arcs: List[str]) -> str:
+    def _build_repetition_avoidance_instructions(self, recently_covered_arcs: List[str], topic: str = "AI and Technology") -> str:
         """
-        Build prompt instructions to avoid repetitive content.
+        Build prompt instructions that tell the model what listeners already know,
+        so it can focus on genuinely new information from today's transcripts.
 
-        When story arcs have been covered in recent digests, this generates
-        instructions telling GPT to focus on NEW developments only.
-
-        PRECEDENCE RULES (resolves conflict with mandatory arc framing):
-        - Recently covered arcs should ONLY be mentioned if there are NEW developments
-        - If no new developments exist for a recently covered arc, SKIP it entirely
-        - Frame as "update" rather than new coverage
+        Instead of suppressing entire arcs, this provides the specific content
+        from recent digests as a "already reported" baseline. The model should
+        still cover these arcs — but only the parts that go beyond this baseline.
 
         Args:
             recently_covered_arcs: List of arc names recently covered
 
         Returns:
-            Formatted string with repetition avoidance instructions
+            Formatted string with fact-based repetition avoidance
         """
         if not recently_covered_arcs:
             return ""
 
-        arc_list = "\n".join(f"  - {arc}" for arc in recently_covered_arcs[:10])
+        # Fetch the last 3 digest scripts to extract what was already reported
+        prior_digest_summary = self._get_recent_digest_summary(topic=topic)
 
         return f"""
 
-## PRECEDENCE RULE: RECENTLY COVERED ARCS (CRITICAL)
+## WHAT OUR AUDIENCE ALREADY KNOWS (from recent episodes)
 
-The following story arcs were covered in digests within the last 3 days:
-{arc_list}
+Our listeners follow this show daily. The following is a summary of what we
+reported in the last 2-3 episodes. Do NOT repeat these specific facts,
+statistics, or explanations — our audience already heard them.
 
-**STRICT RULES FOR THESE ARCS:**
+{prior_digest_summary}
 
-1. **CHECK FOR NEW DEVELOPMENTS FIRST**
-   - Before mentioning any of these arcs, verify there is NEW information in today's transcripts
-   - If the transcript content only repeats what was likely covered before, SKIP the arc entirely
+**RULES FOR HANDLING FAMILIAR TOPICS:**
 
-2. **IF NEW DEVELOPMENTS EXIST:**
-   - Frame as UPDATE only: "The latest on [arc]..." or "Since we last covered..."
-   - Focus EXCLUSIVELY on what has CHANGED
-   - Do NOT rehash background, benchmarks, or statistics already discussed
-   - Keep coverage brief - listeners are already familiar with the story
+1. **Still cover the arc** — do NOT skip a topic just because we covered it
+   before. Today's transcripts may contain new angles, new sources, new data,
+   or new reactions that we haven't reported yet.
 
-3. **IF NO NEW DEVELOPMENTS:**
-   - Do NOT mention the arc at all
-   - Do NOT say "no updates on..." - just skip it
-   - Move on to fresh content
+2. **Do NOT repeat specific facts** listed above. If a transcript restates
+   "93.9% on SWE-bench" or lists the same partner companies we already named,
+   skip those specific claims. Find what IS new.
 
-4. **FRAMING EXAMPLES:**
-   - "Building on our recent coverage of [topic], there's a new development..."
-   - "The [story] we've been tracking has taken a turn..."
-   - "Quick update on [topic]: [new info only]"
+3. **Frame continuing stories as updates**: "New wrinkle on Mythos today..."
+   or "The Glasswing story took a turn..." — but then deliver NEW information,
+   not a recap.
 
-**This rule takes precedence over any instruction to include story arcs.**
-If an arc is on this list AND has no new developments, it must be skipped.
+4. **A new source's perspective counts as new** — if a different podcast host
+   or guest has a different take on a story we covered, that perspective is
+   worth reporting even if the underlying facts are the same.
+
+5. **If a transcript has NOTHING new** beyond what's listed above, compress
+   it to 1-2 sentences acknowledging the continued coverage and move on.
+   Do NOT skip the episode entirely — note that sources are still talking
+   about it, then move to the next episode.
 """
+
+    def _get_recent_digest_summary(self, topic: str = "AI and Technology") -> str:
+        """Extract key facts from the last 3 digests to serve as the
+        'audience already knows' baseline.
+
+        Returns snippets of recent digest scripts so the model can see
+        the specific claims and facts it should not repeat.
+        """
+        try:
+            from src.database.models import get_database_manager
+            from src.database.sqlalchemy_models import Digest as DigestModel
+
+            db = get_database_manager()
+            with db.get_session() as session:
+                recent = (
+                    session.query(DigestModel)
+                    .filter(
+                        DigestModel.topic == topic,
+                        DigestModel.script_content.isnot(None),
+                    )
+                    .order_by(DigestModel.generated_at.desc())
+                    .limit(3)
+                    .all()
+                )
+
+                if not recent:
+                    return "(No recent digests found)"
+
+                # Build a compact summary of what was covered.
+                # Include enough detail that the model can identify repeated facts.
+                lines = []
+                for d in recent:
+                    date_str = d.digest_date.isoformat() if d.digest_date else "unknown"
+                    # Take the first 4000 chars of each script — enough to capture
+                    # the key facts without blowing up the prompt
+                    snippet = (d.script_content or "")[:4000]
+                    lines.append(f"--- Episode from {date_str} ---\n{snippet}\n")
+
+                return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"Failed to build recent digest summary: {e}")
+            return "(Could not load recent digests)"
 
     def _build_claude_p_dialogue_prompt(
         self,
@@ -1136,7 +1178,7 @@ If an arc is on this list AND has no new developments, it must be skipped.
         # Build repetition avoidance instructions if arcs were recently covered
         repetition_instructions = ""
         if recently_covered_arcs:
-            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
+            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs, topic=topic)
             logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
 
         # Calculate transcript limit with arc context reserved
@@ -1186,13 +1228,19 @@ Do not invent or assume developments not present in the transcript content.
 If a story arc is listed above but has no supporting content in today's episodes, do not mention it.
 
 REQUIREMENTS:
-- Target 18,000-22,000 characters (this is measured in characters, not words)
+- Target 25,000-30,000 characters (this is measured in characters, not words)
 - Create engaging dialogue between {speaker_1_name} and {speaker_2_name}
 - Use audio tags sparingly — MAX 25 total, MAX 35% of turns tagged
 - Follow the structure and anti-AI rules outlined in the topic instructions
 - Include episode titles and dates when relevant
-- Focus on the most important insights and developments
 - Hosts are curators — attribute opinions to sources, do not manufacture disagreements
+
+**EPISODE BREADTH REQUIREMENT (CRITICAL):**
+Every episode transcript provided below MUST contribute at least one distinct
+segment, insight, or data point to the digest. Do NOT fixate on 3-4 episodes
+and ignore the rest. If an episode covers a familiar topic, find the angle,
+detail, source perspective, or data point that IS unique to that episode.
+Even a brief 2-3 sentence mention is better than ignoring an episode entirely.
 
 Date: {digest_date.strftime('%B %d, %Y')}
 Topic: {topic}
@@ -1225,7 +1273,7 @@ SPEAKER_2: [audio_tag] dialogue text...
 The colon MUST come immediately after the speaker number, BEFORE the audio tag.
 
 Follow ALL rules in the system prompt exactly, especially:
-- Target 18,000-22,000 characters (NOT more)
+- Target 25,000-30,000 characters (NOT more)
 - MAX 25 audio tags total, MAX 35% of turns tagged
 - MAX 15 em dashes in the entire script — use commas, colons, semicolons, parentheses instead
 - Do NOT manufacture disagreements between hosts — they are curators, not pundits. Attribute opinions to sources.
@@ -1272,10 +1320,10 @@ Follow ALL rules in the system prompt exactly, especially:
             char_count = len(script_content)
 
             # Validate character count
-            if char_count < 16000:
-                logger.warning(f"Dialogue script is shorter than target: {char_count} < 16,000 characters")
-            elif char_count > 30000:
-                logger.warning(f"Dialogue script exceeds target: {char_count} > 30,000 characters")
+            if char_count < 22000:
+                logger.warning(f"Dialogue script is shorter than target: {char_count} < 22,000 characters")
+            elif char_count > 35000:
+                logger.warning(f"Dialogue script exceeds target: {char_count} > 35,000 characters")
 
             provider = f"OpenAI fallback ({self.OPENAI_FALLBACK_MODEL})" if used_fallback else self.ai_model
             logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via {provider})")
@@ -1530,7 +1578,7 @@ DO NOT INTRODUCE:
         # Build repetition avoidance instructions if arcs were recently covered
         repetition_instructions = ""
         if recently_covered_arcs:
-            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs)
+            repetition_instructions = self._build_repetition_avoidance_instructions(recently_covered_arcs, topic=topic)
             logger.info(f"Adding repetition avoidance for {len(recently_covered_arcs)} recently covered arcs")
 
         # Calculate transcript limit with arc context reserved

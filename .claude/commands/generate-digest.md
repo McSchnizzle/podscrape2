@@ -32,7 +32,7 @@ Supported tags: [excited], [thoughtful], [serious], [concerned], [hopeful], [ent
 
 ## Script Length
 
-**Target: 18,000–22,000 characters.** Do not exceed 24,000 under any circumstances.
+**Target: 25,000–30,000 characters.** Do not exceed 35,000 under any circumstances.
 
 If approaching the character limit during the script, compress the current topic and move to the closer. Do not cut the closer.
 
