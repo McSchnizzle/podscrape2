@@ -2212,28 +2212,66 @@ Thank you for your understanding, and we'll see you tomorrow!
         if has_overlap:
             logger.info(f"Story arc overlap for {topic}: {overlap_msg}")
 
+        # v3.34: Pre-generation transcript dedup — strip repeated content from
+        # transcripts BEFORE the script generator sees them. This replaces the
+        # post-generation dedup pass which couldn't fix content the LLM never
+        # generated in the first place.
+        original_episodes = list(episodes)
+        try:
+            from src.generation.transcript_dedup import dedup_episode_batch
+            from src.database.sqlalchemy_models import Digest as DigestModel
+            from src.database.models import get_database_manager
+
+            db = get_database_manager()
+            with db.get_session() as session:
+                prior_digests = (
+                    session.query(DigestModel)
+                    .filter(DigestModel.topic == topic, DigestModel.script_content.isnot(None))
+                    .order_by(DigestModel.generated_at.desc())
+                    .limit(8)
+                    .all()
+                )
+                prior_scripts = [d.script_content for d in prior_digests]
+
+            if prior_scripts:
+                dedup_results, _ = dedup_episode_batch(
+                    episodes=episodes,
+                    prior_digest_scripts=prior_scripts,
+                    timeout_per_episode=300,
+                )
+
+                # Replace transcript_content with deduped versions
+                for ep, result in zip(episodes, dedup_results):
+                    if not result.skipped and result.deduped_transcript:
+                        ep.transcript_content = result.deduped_transcript
+                        logger.info(
+                            f"Pre-gen dedup: '{ep.title[:40]}' "
+                            f"{result.original_chars:,} -> {result.deduped_chars:,} chars "
+                            f"({result.reduction_pct:.0%} removed)"
+                        )
+
+                # Remove episodes with no new content
+                episodes = [
+                    ep for ep, result in zip(episodes, dedup_results)
+                    if result.deduped_chars > 0
+                ]
+                if len(episodes) < len(original_episodes):
+                    logger.info(
+                        f"Pre-gen dedup: {len(original_episodes) - len(episodes)} episodes "
+                        f"had no new content, {len(episodes)} remaining"
+                    )
+        except Exception as e:
+            logger.warning(f"Pre-gen transcript dedup failed ({e}), using original transcripts")
+            episodes = original_episodes
+
         # Generate script (pass repetition info for update framing if needed)
         script_content, word_count = self.generate_script(
             topic, episodes, digest_date,
             recently_covered_arcs=recently_covered_arcs if has_overlap else None
         )
 
-        # Run post-generation dedup pass (v3.26+)
-        # Compares draft to last N digests, rewrites saturated beats as quick updates.
-        # If result is below min-chars floor, pull extra scored episodes and retry once.
+        # Store original (pre-dedup) transcript content for audit
         predupe_content = script_content
-        dedup_result = self._run_dedup_pass_with_retry(
-            topic=topic,
-            draft_script=script_content,
-            episodes=episodes,
-            digest_date=digest_date,
-            recently_covered_arcs=recently_covered_arcs if has_overlap else None,
-        )
-        if dedup_result is not None:
-            script_content = dedup_result["script_content"]
-            word_count = dedup_result["word_count"]
-            episodes = dedup_result["episodes"]
-            predupe_content = dedup_result["predupe_content"]
 
         # Save script to file with timestamp for uniqueness
         digest_timestamp = datetime.now(UTC)
