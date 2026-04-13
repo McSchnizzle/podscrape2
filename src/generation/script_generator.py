@@ -1038,9 +1038,10 @@ the transcript, it survived the dedup filter because it's genuinely new.
 
         return (
             f"{skill_content}\n\n"
-            f"## Topic-Specific Instructions\n{topic_instructions}\n"
-            f"{story_arc_context}\n"
-            f"{repetition_instructions}\n\n"
+            f"## Topic-Specific Instructions\n{topic_instructions}\n\n"
+            f"**PRE-FILTERED TRANSCRIPTS:** These transcripts have been pre-filtered "
+            f"to remove content already covered in recent episodes. Everything provided "
+            f"is NEW material. Cover it all thoroughly.\n\n"
             f"Date: {digest_date.strftime('%B %d, %Y')}\n"
             f"Topic: {topic}\n"
             f"Episodes: {num_episodes}\n\n"
@@ -1153,13 +1154,10 @@ CHARACTER ROLES:
 
 TOPIC INSTRUCTIONS:
 {instruction.content}
-{story_arc_context}
-{repetition_instructions}
 
-**CRITICAL - STORY ARC GROUNDING:**
-Only reference story arcs that have supporting evidence in the episode transcripts provided below.
-Do not invent or assume developments not present in the transcript content.
-If a story arc is listed above but has no supporting content in today's episodes, do not mention it.
+**PRE-FILTERED TRANSCRIPTS:**
+These transcripts have been pre-filtered to remove content already covered in
+recent episodes. Everything below is NEW material. Cover it all thoroughly.
 
 REQUIREMENTS:
 - Target 25,000-30,000 characters (this is measured in characters, not words)
