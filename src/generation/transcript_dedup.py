@@ -183,9 +183,11 @@ def dedup_transcript(
         pass
 
     # Truncate prior content if massive (keep most recent, which is most relevant)
-    max_prior = 30_000  # ~7.5k tokens of prior context
+    # Prior content is ordered most-recent-first, so [:max_prior] keeps the
+    # newest digests. 100k chars (~25k tokens) covers the last 3-4 digests.
+    max_prior = 100_000
     if len(prior_content) > max_prior:
-        prior_content = prior_content[-max_prior:]
+        prior_content = prior_content[:max_prior]
 
     # Truncate very long transcripts — for dedup we need enough to identify
     # repeated content, not the full transcript. The full transcript still
