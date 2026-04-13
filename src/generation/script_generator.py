@@ -257,7 +257,7 @@ class ScriptGenerator:
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
 
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
+            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,
