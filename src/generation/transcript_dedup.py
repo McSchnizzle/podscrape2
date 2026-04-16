@@ -119,12 +119,33 @@ def _build_dedup_prompt(
     transcript: str,
     prior_content: str,
     episode_title: str,
+    evergreen_topics: Optional[List[str]] = None,
 ) -> str:
     """Build the full prompt for transcript dedup."""
+    evergreen_section = ""
+    if evergreen_topics:
+        topics_list = "\n".join(f"- {t}" for t in evergreen_topics)
+        evergreen_section = (
+            f"\n## SATURATED TOPICS (aggressive stripping required)\n\n"
+            f"These stories have been covered in 3+ recent digests. Our audience "
+            f"is thoroughly familiar with the background:\n\n{topics_list}\n\n"
+            f"**For SATURATED topics, strip MORE aggressively:**\n"
+            f"- Remove ALL background, exposition, and context — listeners know it\n"
+            f"- Remove ALL re-introductions of entities, partner lists, benchmark "
+            f"numbers, quoted sources that were already named\n"
+            f"- Keep ONLY: genuinely new developments from today (new quote from a "
+            f"new source, new data point, new reaction, new consequence, new reversal)\n"
+            f"- If a paragraph is explaining what a saturated topic IS, rather than "
+            f"what's new about it, REMOVE the paragraph entirely\n"
+            f"- A mention like 'the Mythos story we've been tracking' is fine — "
+            f"re-explaining what Mythos is is NOT\n\n"
+        )
+
     return (
         f"{_DEDUP_SYSTEM_PROMPT}\n\n"
         f"## PRIOR CONTENT (what our audience already knows)\n\n"
-        f"{prior_content}\n\n"
+        f"{prior_content}\n"
+        f"{evergreen_section}"
         f"---\n\n"
         f"## TRANSCRIPT TO CLEAN: \"{episode_title}\"\n\n"
         f"{transcript}\n\n"
@@ -133,12 +154,128 @@ def _build_dedup_prompt(
     )
 
 
+_EVERGREEN_DETECTION_PROMPT = """\
+You are analyzing recent podcast digest scripts to identify SATURATED TOPICS —
+stories that have been covered in 3 or more of the recent digests and whose
+background is now thoroughly familiar to the audience.
+
+You will receive the last several digest scripts. Return a list of saturated
+topics, one per line, in this format:
+
+- Topic name: one-line description of the core story/entity
+
+Rules for what counts as SATURATED:
+- The topic appears with meaningful coverage (not just a passing mention) in 3+ \
+digests
+- The background, key players, and main facts have been explained before
+- New episodes should focus on fresh angles, not re-establish the story
+
+DO NOT include:
+- Topics covered in only 1-2 digests (they're not saturated yet)
+- Generic themes like "AI safety" or "open source" (too broad)
+- Ongoing trends without a specific story anchor
+- Topics that only appeared in one digest with tangential mentions
+
+Format your response as a plain list. If no topics qualify, return the single \
+line: [NO_SATURATED_TOPICS]
+
+Examples of GOOD saturated topics:
+- Anthropic Claude Mythos: Unreleased frontier model with cybersecurity capabilities
+- Project Glasswing: Anthropic's controlled-access program for Mythos with big tech partners
+- Muse Spark launch: Meta's first model from Meta Super Intelligence Labs
+
+Examples of things NOT to include:
+- Too broad: "AI safety concerns"
+- Not saturated: "Google's new Gemini feature" (only appeared once)
+- Generic: "Open-weight models" (a category, not a story)
+
+Output ONLY the bullet list, no preamble or explanation.
+"""
+
+
+def detect_evergreen_topics(
+    prior_digest_scripts: List[str],
+    timeout: int = 240,
+) -> List[str]:
+    """Identify stories that have been covered in 3+ recent digests.
+
+    These "saturated" topics get stricter dedup handling — background and
+    exposition must be stripped even if the specific wording is new.
+
+    Args:
+        prior_digest_scripts: Recent digest scripts, most-recent-first.
+        timeout: claude -p timeout.
+
+    Returns:
+        List of topic descriptions (possibly empty).
+    """
+    if len(prior_digest_scripts) < 3:
+        logger.info("Evergreen detection: fewer than 3 prior digests, skipping")
+        return []
+
+    try:
+        from src.utils.claude_p_health import is_claude_p_healthy
+        if not is_claude_p_healthy():
+            logger.info("Evergreen detection: claude -p unhealthy, skipping")
+            return []
+    except Exception:
+        pass
+
+    # Use up to 5 most recent digests, trimmed to fit under ~80k chars total
+    selected = prior_digest_scripts[:5]
+    lines = []
+    for i, script in enumerate(selected, start=1):
+        # Trim each to ~15k chars to keep the prompt manageable
+        lines.append(f"--- DIGEST {i} (most recent first) ---\n{script[:15_000]}\n")
+    digests_text = "\n".join(lines)
+
+    prompt = (
+        f"{_EVERGREEN_DETECTION_PROMPT}\n\n"
+        f"## RECENT DIGESTS\n\n"
+        f"{digests_text}\n\n"
+        f"---\n\n"
+        f"Return the bullet list of saturated topics now."
+    )
+
+    try:
+        logger.info(
+            f"Evergreen detection: scanning {len(selected)} digests "
+            f"({len(digests_text):,} chars)"
+        )
+        response = _call_claude_p(prompt, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        logger.warning("Evergreen detection timed out, continuing without it")
+        return []
+    except Exception as e:
+        logger.warning(f"Evergreen detection failed: {e}, continuing without it")
+        return []
+
+    if "[NO_SATURATED_TOPICS]" in response:
+        logger.info("Evergreen detection: no saturated topics found")
+        return []
+
+    # Parse bullet list
+    topics = []
+    for line in response.split("\n"):
+        line = line.strip()
+        if line.startswith("- ") or line.startswith("* "):
+            topics.append(line[2:].strip())
+        elif line.startswith("• "):
+            topics.append(line[2:].strip())
+
+    logger.info(f"Evergreen detection: found {len(topics)} saturated topics")
+    for t in topics:
+        logger.info(f"  - {t}")
+    return topics
+
+
 def dedup_transcript(
     transcript: str,
     episode_title: str,
     episode_id: int,
     prior_content: str,
     timeout: int = 300,
+    evergreen_topics: Optional[List[str]] = None,
 ) -> TranscriptDedupResult:
     """Dedup a single transcript against prior content.
 
@@ -149,6 +286,8 @@ def dedup_transcript(
         prior_content: Combined text of prior digests + previously deduped
             transcripts in this batch.
         timeout: claude -p timeout in seconds.
+        evergreen_topics: Optional list of saturated topics that should be
+            stripped more aggressively.
 
     Returns:
         TranscriptDedupResult with the cleaned transcript.
@@ -184,8 +323,9 @@ def dedup_transcript(
 
     # Truncate prior content if massive (keep most recent, which is most relevant)
     # Prior content is ordered most-recent-first, so [:max_prior] keeps the
-    # newest digests. 100k chars (~25k tokens) covers the last 3-4 digests.
-    max_prior = 100_000
+    # newest digests. 200k chars (~50k tokens) covers the last 6-7 digests
+    # (~1 week), enough to catch entities introduced earlier in the news cycle.
+    max_prior = 200_000
     if len(prior_content) > max_prior:
         prior_content = prior_content[:max_prior]
 
@@ -196,7 +336,12 @@ def dedup_transcript(
     max_transcript = 25_000
     transcript_input = transcript[:max_transcript]
 
-    prompt = _build_dedup_prompt(transcript_input, prior_content, episode_title)
+    prompt = _build_dedup_prompt(
+        transcript_input,
+        prior_content,
+        episode_title,
+        evergreen_topics=evergreen_topics,
+    )
     logger.info(
         f"Pre-gen dedup: '{episode_title[:50]}' "
         f"({original_chars:,} chars transcript, "
@@ -278,6 +423,10 @@ def dedup_episode_batch(
         prior_parts.append(f"--- PRIOR DIGEST {i+1} ---\n{script}\n")
     prior_content = "\n".join(prior_parts)
 
+    # Detect saturated topics (covered in 3+ recent digests) so they get
+    # stricter dedup handling — strip background, keep only what's new today.
+    evergreen_topics = detect_evergreen_topics(prior_digest_scripts)
+
     results = []
     novel_transcripts = []
 
@@ -301,6 +450,7 @@ def dedup_episode_batch(
             episode_id=ep.id,
             prior_content=prior_content,
             timeout=timeout_per_episode,
+            evergreen_topics=evergreen_topics,
         )
         results.append(result)
 

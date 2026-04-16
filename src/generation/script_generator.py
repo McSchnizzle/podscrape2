@@ -2151,11 +2151,15 @@ Thank you for your understanding, and we'll see you tomorrow!
 
             db = get_database_manager()
             with db.get_session() as session:
+                # Fetch last 14 digests (~2 weeks) so the dedup pass can detect
+                # entities/stories introduced earlier in the news cycle. The
+                # 200k char cap inside dedup_transcript trims this to roughly
+                # the most recent 6-7 digests.
                 prior_digests = (
                     session.query(DigestModel)
                     .filter(DigestModel.topic == topic, DigestModel.script_content.isnot(None))
                     .order_by(DigestModel.generated_at.desc())
-                    .limit(8)
+                    .limit(14)
                     .all()
                 )
                 prior_scripts = [d.script_content for d in prior_digests]

@@ -173,11 +173,13 @@ class CompleteAudioProcessor:
                     full_summary += links_section
                     logger.info(f"Appended {len(episode_metadata.episode_links)} episode links to summary")
 
+                # Prepend digest ID as episode number (e.g. "Ep 610: ...")
+                titled = f"Ep {digest.id}: {episode_metadata.title}"
                 self.digest_repo.update_audio(
                     digest_id=digest.id,
                     mp3_path=audio_metadata.file_path,
                     duration_seconds=int(audio_metadata.duration_seconds or 0),
-                    title=episode_metadata.title,
+                    title=titled,
                     summary=full_summary
                 )
                 results['database_updated'] = True
