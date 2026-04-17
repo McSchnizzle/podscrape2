@@ -366,6 +366,59 @@ export class DatabaseClient {
     if (error) throw error
   }
 
+  // Watch Themes (v3.38+) — Paul's curated weekly personal digest themes
+  async getWatchThemes() {
+    const { data, error } = await supabase
+      .from('watch_themes')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true })
+    if (error) throw error
+    return data || []
+  }
+
+  async upsertWatchTheme(theme: {
+    id?: number
+    name: string
+    description: string
+    active?: boolean
+    sort_order?: number
+  }) {
+    const payload: Record<string, unknown> = {
+      name: theme.name,
+      description: theme.description,
+      active: theme.active ?? true,
+      sort_order: theme.sort_order ?? 100,
+      updated_at: new Date().toISOString(),
+    }
+    if (theme.id) payload.id = theme.id
+
+    const { data, error } = await supabase
+      .from('watch_themes')
+      .upsert(payload)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  }
+
+  async deleteWatchTheme(id: number) {
+    const { error } = await supabase
+      .from('watch_themes')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+  }
+
+  // Favorite digests (v3.38+) — exempt from retention cleanup
+  async setDigestFavorite(id: number, isFavorite: boolean) {
+    const { error } = await supabase
+      .from('digests')
+      .update({ is_favorite: isFavorite })
+      .eq('id', id)
+    if (error) throw error
+  }
+
   async addTopicInstructionVersion(params: {
     topic_id: number
     instructions_md: string

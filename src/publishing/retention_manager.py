@@ -239,9 +239,11 @@ class RetentionManager:
                     )
                     episodes_count = episodes_query.count()
 
-                    # Count digests to be deleted (based on digest_date, not generated_at)
+                    # Count digests to be deleted (based on digest_date, not generated_at).
+                    # Favorites are exempt from age-based deletion.
                     digests_query = session.query(DigestModel).filter(
-                        DigestModel.digest_date < digest_cutoff.date()
+                        DigestModel.digest_date < digest_cutoff.date(),
+                        DigestModel.is_favorite.is_(False),
                     )
                     digests_count = digests_query.count()
 
@@ -414,27 +416,45 @@ class RetentionManager:
             stats.errors.append(error_msg)
     
     def _cleanup_github_releases(self, dry_run: bool, retention_days: int = 14) -> CleanupStats:
-        """Clean up old GitHub releases"""
+        """Clean up old GitHub releases. Favorited digests' release tags are skipped."""
         stats = CleanupStats()
-        
+
         try:
             if not self.github_publisher:
                 logger.debug("No GitHub publisher available for cleanup")
                 return stats
-            
+
             logger.info(f"Cleaning up GitHub releases (older than {retention_days} days)")
-            
+
+            # Build set of release tags referenced by favorite digests — those are skipped.
+            from ..database.sqlalchemy_models import Digest as DigestModel
+            favorite_urls: set[str] = set()
+            try:
+                with self.database_manager.get_session() as session:
+                    rows = session.query(DigestModel.github_url).filter(
+                        DigestModel.is_favorite.is_(True),
+                        DigestModel.github_url.isnot(None),
+                    ).all()
+                    favorite_urls = {r[0] for r in rows}
+            except Exception as e:
+                logger.warning(f"Could not load favorite digest URLs; no releases will be shielded: {e}")
+
             # Get releases
             releases = self.github_publisher.list_releases()
             cutoff_date = datetime.now() - timedelta(days=retention_days)
-            
+
             # Find releases to delete
             releases_to_delete = []
             for release in releases:
-                # Remove timezone info for comparison
                 release_date = release.published_at.replace(tzinfo=None)
-                if release_date < cutoff_date:
-                    releases_to_delete.append(release)
+                if release_date >= cutoff_date:
+                    continue
+                # Skip if this release URL is referenced by a favorite digest
+                release_url = getattr(release, 'html_url', '') or getattr(release, 'url', '')
+                if any(release_url.endswith(fav_url.split('/')[-1]) for fav_url in favorite_urls if fav_url):
+                    logger.info(f"Preserving GitHub release {release.name} — referenced by favorite digest")
+                    continue
+                releases_to_delete.append(release)
             
             # Delete releases
             for release in releases_to_delete:

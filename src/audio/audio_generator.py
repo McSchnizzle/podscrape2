@@ -42,6 +42,49 @@ class ElevenLabsQuotaExceededError(AudioGenerationError):
     """Raised when ElevenLabs quota is exhausted - triggers fallback to OpenAI TTS"""
     pass
 
+
+# v3.37: Minimum character count for the final speaker turn.
+# Short final turns (<~40 chars, e.g. "See you then.") have been observed to
+# trigger ElevenLabs v3 Text-to-Dialogue hallucinating a duplicate outro
+# (ep 611 incident, 2026-04-17). See docs/audio-incidents.md.
+FINAL_TURN_MIN_CHARS = 40
+FINAL_TURN_PADDING = " Take care, and catch you tomorrow."
+
+
+def guard_final_turn_length(script: str) -> str:
+    """Pad an over-short final SPEAKER turn so ElevenLabs v3 has enough anchor
+    context to not hallucinate a duplicate outro.
+
+    If the final turn's text is < FINAL_TURN_MIN_CHARS, append a short padding
+    sentence. No-op otherwise.
+    """
+    import re
+    # Find all speaker turns
+    pattern = re.compile(
+        r'^(SPEAKER_[12])(?:\s*[\(\[][^\)\]]+[\)\]])?:\s*(.+?)(?=^SPEAKER_[12]|\Z)',
+        re.MULTILINE | re.DOTALL,
+    )
+    matches = list(pattern.finditer(script))
+    if not matches:
+        return script
+
+    final = matches[-1]
+    final_text = final.group(2).strip()
+    if len(final_text) >= FINAL_TURN_MIN_CHARS:
+        return script
+
+    logger.warning(
+        f"Final speaker turn is only {len(final_text)} chars "
+        f"(< {FINAL_TURN_MIN_CHARS}): '{final_text[:60]}'. "
+        f"Padding to prevent ElevenLabs v3 duplicate-outro hallucination."
+    )
+    padded_text = final_text + FINAL_TURN_PADDING
+    # Replace just the final turn's text portion
+    before = script[:final.start(2)]
+    after = script[final.end(2):]
+    # Preserve any trailing whitespace in the original
+    return before + padded_text + after
+
 class AudioGenerator:
     """
     Generates high-quality audio from digest scripts using ElevenLabs TTS.
@@ -824,6 +867,10 @@ class AudioGenerator:
         logger.info(f"Voice config: {voice_config}")
         logger.info(f"Dialogue model: {dialogue_model}")
 
+        # v3.37: Guard against short final turns that trigger TTS duplicate-outro
+        # hallucination (ep 611 incident).
+        script_content = guard_final_turn_length(script_content)
+
         # Chunk the dialogue script
         # Use 2500 chars for safety margin (API limit is 3000)
         try:
@@ -908,6 +955,36 @@ class AudioGenerator:
             # Estimate duration based on total script characters
             total_chars = sum(chunk.char_count for chunk in chunks)
             estimated_duration = (total_chars / 5) / 150 * 60  # seconds
+
+            # v3.37: Write a chunk manifest alongside the MP3 so future audio
+            # incidents (like ep 611) can be diagnosed without log archaeology.
+            manifest_path = output_path.with_suffix('.chunks.json')
+            try:
+                manifest = {
+                    "generated_at": get_pacific_now().isoformat(),
+                    "episode_id": episode_id,
+                    "topic": topic,
+                    "dialogue_model": dialogue_model,
+                    "total_chars": total_chars,
+                    "estimated_duration_seconds": estimated_duration,
+                    "file_size_bytes": file_size,
+                    "chunk_count": len(chunks),
+                    "chunks": [
+                        {
+                            "chunk_number": c.chunk_number,
+                            "char_count": c.char_count,
+                            "turn_count": c.turn_count,
+                            "speakers": c.speakers,
+                            "text": c.text,
+                        }
+                        for c in chunks
+                    ],
+                }
+                with open(manifest_path, 'w') as mf:
+                    json.dump(manifest, mf, indent=2)
+                logger.info(f"Wrote chunk manifest: {manifest_path}")
+            except Exception as e:
+                logger.warning(f"Failed to write chunk manifest: {e}")
 
             logger.info(f"Generated dialogue audio: {output_path} ({file_size} bytes, ~{estimated_duration:.1f}s)")
 

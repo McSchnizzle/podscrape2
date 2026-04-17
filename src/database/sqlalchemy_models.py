@@ -181,6 +181,7 @@ class Digest(Base):
     published_at = Column(DateTime(timezone=False))
     generated_at = Column(DateTime(timezone=False), default=lambda: datetime.now(timezone.utc))
     status = Column(String(50), default='draft')  # draft, generated, audio_generated, published
+    is_favorite = Column(Boolean, nullable=False, default=False, server_default='false')
 
     __table_args__ = (
         UniqueConstraint("topic", "digest_date", "digest_timestamp", name="uq_digests_topic_date_timestamp"),
@@ -536,3 +537,45 @@ class StoryArcCoverage(Base):
         Index('ix_story_arc_coverage_digest_id', 'digest_id'),
         Index('ix_story_arc_coverage_covered_at', 'covered_at'),
     )
+
+
+class WatchTheme(Base):
+    """User-curated natural-language theme for personal weekly digest."""
+    __tablename__ = "watch_themes"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+    active = Column(Boolean, nullable=False, default=True, server_default='true')
+    sort_order = Column(Integer, nullable=False, default=100, server_default='100')
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_watch_themes_active', 'active'),
+        Index('ix_watch_themes_sort_order', 'sort_order'),
+    )
+
+
+class WatchDigestRun(Base):
+    """Audit record of each weekly watch-digest generation run."""
+    __tablename__ = "watch_digest_runs"
+
+    id = Column(Integer, primary_key=True)
+    run_date = Column(Date, nullable=False, unique=True)
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+    themes_scanned = Column(Integer, nullable=False)
+    episodes_scanned = Column(Integer, nullable=False)
+    html_content = Column(Text, nullable=True)
+    markdown_content = Column(Text, nullable=True)
+    email_delivered = Column(Boolean, nullable=False, default=False,
+                             server_default='false')
+    harold_delivered = Column(Boolean, nullable=False, default=False,
+                              server_default='false')
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
