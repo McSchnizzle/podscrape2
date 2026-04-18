@@ -336,7 +336,8 @@ def post_to_harold(html_body: str, markdown_body: str, run_date: date) -> bool:
 # Main orchestration
 # ---------------------------------------------------------------------------
 
-def run(dry_run: bool = False) -> int:
+def run(dry_run: bool = False, episode_limit: Optional[int] = None,
+        theme_ids: Optional[List[int]] = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -347,17 +348,26 @@ def run(dry_run: bool = False) -> int:
                 f"{window_end.isoformat()} (PT run_date {run_date.isoformat()})")
 
     db = get_database_manager()
-    with db.get_session() as session:
-        themes: List[WatchTheme] = session.query(WatchTheme).filter(
-            WatchTheme.active.is_(True)
-        ).order_by(WatchTheme.sort_order, WatchTheme.id).all()
-        logger.info(f"Loaded {len(themes)} active watch themes")
 
-        if not themes:
+    # Short-lived session: load themes + episode data, release connection
+    # before the long claude -p scan loop. Holding the session across many
+    # minutes of scanning causes Supabase to drop the connection.
+    with db.get_session() as session:
+        q = session.query(WatchTheme).filter(WatchTheme.active.is_(True))
+        if theme_ids:
+            q = q.filter(WatchTheme.id.in_(theme_ids))
+        themes_raw = q.order_by(WatchTheme.sort_order, WatchTheme.id).all()
+        themes_data = [
+            {"id": t.id, "name": t.name, "description": t.description}
+            for t in themes_raw
+        ]
+        logger.info(f"Loaded {len(themes_data)} active watch themes "
+                    f"{'(filtered)' if theme_ids else ''}")
+
+        if not themes_data:
             logger.warning("No active watch themes; nothing to generate")
             return 0
 
-        # Fetch candidate episodes in window with AI&Tech score above threshold
         rows = session.execute(text(
             "SELECT id, title, published_date, transcript_content, scores "
             "FROM episodes "
@@ -377,36 +387,41 @@ def run(dry_run: bool = False) -> int:
                     "transcript": r[3], "score": score,
                 })
 
-        logger.info(f"Scanning {len(episodes)} AI&Tech episodes in window "
-                    f"(score >= {SCORE_THRESHOLD})")
+    # Session released — scan loop runs DB-free
+    if episode_limit and len(episodes) > episode_limit:
+        episodes = episodes[:episode_limit]
+        logger.info(f"Limiting to {episode_limit} most recent episodes")
 
-        theme_results: List[ThemeResult] = []
-        for theme in themes:
-            logger.info(f"Theme: {theme.name}")
-            tr = ThemeResult(
-                theme_id=theme.id,
-                theme_name=theme.name,
-                theme_description=theme.description,
-                episodes_scanned=len(episodes),
+    logger.info(f"Scanning {len(episodes)} AI&Tech episodes in window "
+                f"(score >= {SCORE_THRESHOLD})")
+
+    theme_results: List[ThemeResult] = []
+    for theme in themes_data:
+        logger.info(f"Theme: {theme['name']}")
+        tr = ThemeResult(
+            theme_id=theme['id'],
+            theme_name=theme['name'],
+            theme_description=theme['description'],
+            episodes_scanned=len(episodes),
+        )
+        for ep in episodes:
+            matches = scan_episode_for_theme(
+                ep["transcript"], theme['name'], theme['description'], ep["title"],
             )
-            for ep in episodes:
-                matches = scan_episode_for_theme(
-                    ep["transcript"], theme.name, theme.description, ep["title"],
-                )
-                for m in matches:
-                    excerpt = m.get("excerpt", "").strip()
-                    if len(excerpt) < 30:
-                        continue
-                    tr.matches.append(ThemeMatch(
-                        episode_id=ep["id"],
-                        episode_title=ep["title"],
-                        episode_date=ep["published_date"].date() if hasattr(
-                            ep["published_date"], "date") else ep["published_date"],
-                        excerpt=excerpt[:400],
-                        relevance_note=m.get("note", "").strip()[:200],
-                    ))
-            logger.info(f"  → {len(tr.matches)} matches")
-            theme_results.append(tr)
+            for m in matches:
+                excerpt = m.get("excerpt", "").strip()
+                if len(excerpt) < 30:
+                    continue
+                tr.matches.append(ThemeMatch(
+                    episode_id=ep["id"],
+                    episode_title=ep["title"],
+                    episode_date=ep["published_date"].date() if hasattr(
+                        ep["published_date"], "date") else ep["published_date"],
+                    excerpt=excerpt[:400],
+                    relevance_note=m.get("note", "").strip()[:200],
+                ))
+        logger.info(f"  → {len(tr.matches)} matches")
+        theme_results.append(tr)
 
     html_body = render_html(run_date, theme_results)
     md_body = render_markdown(run_date, theme_results)
@@ -456,5 +471,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true",
                         help="Write HTML to disk, skip email + Harold POST")
+    parser.add_argument("--episode-limit", type=int, default=None,
+                        help="Scan only the N most-recent episodes (for testing)")
+    parser.add_argument("--theme-ids", type=str, default=None,
+                        help="Comma-separated watch_theme IDs to scan (for testing)")
     args = parser.parse_args()
-    sys.exit(run(dry_run=args.dry_run))
+    theme_ids = None
+    if args.theme_ids:
+        theme_ids = [int(x) for x in args.theme_ids.split(",") if x.strip()]
+    sys.exit(run(dry_run=args.dry_run, episode_limit=args.episode_limit,
+                 theme_ids=theme_ids))
