@@ -337,7 +337,7 @@ def post_to_harold(html_body: str, markdown_body: str, run_date: date) -> bool:
 # ---------------------------------------------------------------------------
 
 def run(dry_run: bool = False, episode_limit: Optional[int] = None,
-        theme_ids: Optional[List[int]] = None) -> int:
+        theme_ids: Optional[List[int]] = None, no_summarize: bool = False) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -423,48 +423,72 @@ def run(dry_run: bool = False, episode_limit: Optional[int] = None,
         logger.info(f"  → {len(tr.matches)} matches")
         theme_results.append(tr)
 
-    html_body = render_html(run_date, theme_results)
-    md_body = render_markdown(run_date, theme_results)
-
-    logger.info(f"Rendered {len(html_body):,} chars HTML / {len(md_body):,} chars MD")
+    raw_html = render_html(run_date, theme_results)
+    raw_md = render_markdown(run_date, theme_results)
+    logger.info(f"Rendered raw: {len(raw_html):,} chars HTML / {len(raw_md):,} chars MD")
 
     if dry_run:
-        out_path = Path("data") / f"watch-digest-dryrun-{run_date.isoformat()}.html"
-        out_path.parent.mkdir(exist_ok=True)
-        out_path.write_text(html_body)
-        logger.info(f"Dry-run: wrote {out_path}")
+        dry_dir = Path("data/watch-digests")
+        dry_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = dry_dir / f"{run_date.isoformat()}-raw.md"
+        raw_path.write_text(raw_md)
+        logger.info(f"Dry-run: wrote raw {raw_path}")
+        # Also run summarizer in dry-run so Paul can inspect both
+        if not no_summarize:
+            summarized_md, summarized_html = _summarize(run_date, raw_md)
+            sum_path = dry_dir / f"{run_date.isoformat()}-summary-dryrun.md"
+            sum_path.write_text(summarized_md)
+            logger.info(f"Dry-run: wrote summary {sum_path}")
         return 0
 
-    email_ok = send_email_via_graph(html_body, run_date)
-    harold_ok = post_to_harold(html_body, md_body, run_date)
+    # v3.41: Default delivery is the SUMMARIZED version (shape C). Raw excerpts
+    # are still saved to the audit row so a re-summarization pass can replay
+    # them with an updated SYNTHESIS_PROMPT. --no-summarize flag bypasses.
+    if no_summarize:
+        delivery_html = raw_html
+        delivery_md = raw_md
+        logger.info("--no-summarize: delivering raw digest")
+    else:
+        delivery_md, delivery_html = _summarize(run_date, raw_md)
+        logger.info(f"Summarized: {len(delivery_html):,} chars HTML / {len(delivery_md):,} chars MD")
 
-    # Upsert audit row
+    email_ok = send_email_via_graph(delivery_html, run_date)
+    harold_ok = post_to_harold(delivery_html, delivery_md, run_date)
+
+    # Upsert audit row — store RAW markdown (for re-summarization) + delivered HTML
     with db.get_session() as session:
         existing = session.query(WatchDigestRun).filter_by(run_date=run_date).first()
+        common = {
+            "window_start": window_start,
+            "window_end": window_end,
+            "themes_scanned": len(theme_results),
+            "episodes_scanned": len(episodes),
+            "html_content": delivery_html,
+            "markdown_content": raw_md,  # raw stored for re-summarization
+            "email_delivered": email_ok,
+            "harold_delivered": harold_ok,
+        }
         if existing:
-            existing.window_start = window_start
-            existing.window_end = window_end
-            existing.themes_scanned = len(theme_results)
-            existing.episodes_scanned = len(episodes)
-            existing.html_content = html_body
-            existing.markdown_content = md_body
-            existing.email_delivered = email_ok
-            existing.harold_delivered = harold_ok
+            for k, v in common.items():
+                setattr(existing, k, v)
         else:
-            session.add(WatchDigestRun(
-                run_date=run_date,
-                window_start=window_start,
-                window_end=window_end,
-                themes_scanned=len(theme_results),
-                episodes_scanned=len(episodes),
-                html_content=html_body,
-                markdown_content=md_body,
-                email_delivered=email_ok,
-                harold_delivered=harold_ok,
-            ))
+            session.add(WatchDigestRun(run_date=run_date, **common))
         session.commit()
 
     return 0 if (email_ok or harold_ok) else 1
+
+
+def _summarize(run_date: "date", raw_md: str) -> tuple[str, str]:
+    """Run the shape-C synthesis pass. Delegates to summarize_watch_digest
+    so there's one source of truth for the SYNTHESIS_PROMPT.
+    """
+    import summarize_watch_digest as sw
+    themes = sw.parse_themes(raw_md)
+    summaries = [(t.name, sw.summarize_theme(t)) for t in themes]
+    date_header = f"Watch Themes digest — week of {run_date.isoformat()}"
+    md = sw.render_summarized_markdown(date_header, summaries)
+    html_out = sw.render_summarized_html(date_header, summaries)
+    return md, html_out
 
 
 if __name__ == "__main__":
@@ -475,9 +499,11 @@ if __name__ == "__main__":
                         help="Scan only the N most-recent episodes (for testing)")
     parser.add_argument("--theme-ids", type=str, default=None,
                         help="Comma-separated watch_theme IDs to scan (for testing)")
+    parser.add_argument("--no-summarize", action="store_true",
+                        help="Skip shape-C summarization; deliver raw excerpts")
     args = parser.parse_args()
     theme_ids = None
     if args.theme_ids:
         theme_ids = [int(x) for x in args.theme_ids.split(",") if x.strip()]
     sys.exit(run(dry_run=args.dry_run, episode_limit=args.episode_limit,
-                 theme_ids=theme_ids))
+                 theme_ids=theme_ids, no_summarize=args.no_summarize))
