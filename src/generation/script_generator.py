@@ -273,49 +273,116 @@ class ScriptGenerator:
 
         return result.stdout.strip()
 
-    OPENAI_FALLBACK_MODEL = "gpt-5"
+    # v3.43: GPT fallback removed per Paul. If claude -p fails we retry with
+    # escalating backoff instead, then email on final exhaustion. See
+    # _call_claude_p_with_retry below.
+    CLAUDE_P_RETRY_WAITS = [30, 90, 180, 600]  # 5 attempts total; 15 min of waits
+    CLAUDE_P_MAX_ATTEMPTS = 5
 
-    def _call_openai_fallback(self, system_prompt: str, user_prompt: str) -> str:
-        """Fallback to OpenAI API when claude -p fails or times out."""
-        logger.info(f"Using OpenAI fallback model: {self.OPENAI_FALLBACK_MODEL}")
-        response = self.openai_client.responses.create(
-            model=self.OPENAI_FALLBACK_MODEL,
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            reasoning={"effort": "medium"},
-            max_output_tokens=25000
+    def _call_claude_p_with_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        timeout_per_attempt: int = 1200,
+        context: str = "script generation",
+    ) -> str:
+        """Call claude -p with escalating-backoff retry.
+
+        5 attempts total. Waits between attempts: 30s, 90s, 180s, 600s.
+        Worst case: 5 * 20min + 15min waits ~= 115 min.
+
+        After all attempts fail, emails Paul via notify_failure and raises
+        the last exception so callers can fall back to general summary.
+        """
+        import time
+
+        last_err: Optional[Exception] = None
+        attempt_errors: List[str] = []
+
+        for attempt in range(1, self.CLAUDE_P_MAX_ATTEMPTS + 1):
+            try:
+                logger.info(
+                    f"claude -p {context} attempt {attempt}/{self.CLAUDE_P_MAX_ATTEMPTS}"
+                )
+                return self._call_claude_p(system_prompt, user_prompt, timeout=timeout_per_attempt)
+            except Exception as e:
+                last_err = e
+                attempt_errors.append(f"attempt {attempt}: {type(e).__name__}: {str(e)[:200]}")
+                is_timeout = "timed out" in str(e).lower() or "TimeoutExpired" in type(e).__name__
+                if is_timeout:
+                    try:
+                        from src.utils.claude_p_health import mark_unhealthy
+                        mark_unhealthy(f"_call_claude_p_with_retry {context} attempt {attempt} timeout")
+                    except Exception:
+                        pass
+
+                if attempt >= self.CLAUDE_P_MAX_ATTEMPTS:
+                    logger.error(
+                        f"claude -p {context} exhausted all {self.CLAUDE_P_MAX_ATTEMPTS} attempts"
+                    )
+                    self._notify_claude_p_exhausted(context, attempt_errors)
+                    raise
+
+                wait = self.CLAUDE_P_RETRY_WAITS[attempt - 1]
+                logger.warning(
+                    f"claude -p {context} attempt {attempt} failed ({type(e).__name__}); "
+                    f"sleeping {wait}s before retry: {str(e)[:200]}"
+                )
+                time.sleep(wait)
+
+        # unreachable, but appeases type checker
+        raise last_err if last_err else RuntimeError("claude -p retry: no attempts made")
+
+    @staticmethod
+    def _notify_claude_p_exhausted(context: str, attempt_errors: List[str]) -> None:
+        """Email Paul when claude -p retries are exhausted. Best-effort."""
+        import socket
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+        except Exception:
+            return
+
+        password = os.environ.get("GMAIL_APP_PASSWORD")
+        if not password:
+            logger.warning("GMAIL_APP_PASSWORD unset; cannot email claude -p exhaustion")
+            return
+
+        host = socket.gethostname()
+        body = (
+            f"claude -p exhausted all retry attempts during {context} on {host}.\n\n"
+            f"The pipeline will fall back to the general-summary path for this "
+            f"digest. No action required unless this happens repeatedly.\n\n"
+            f"Per-attempt errors:\n  "
+            + "\n  ".join(attempt_errors)
+            + "\n\n---\ncheck: ssh et01 'tail -200 /home/pbrown/logs/podcast-cron.log'"
         )
-        return response.output_text
+        msg = MIMEText(body, "plain")
+        msg["Subject"] = f"[podcast] claude -p exhausted during {context}"
+        msg["From"] = "paulinpdx503@gmail.com"
+        msg["To"] = "paulinpdx503@gmail.com"
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587) as s:
+                s.starttls()
+                s.login("paulinpdx503@gmail.com", password)
+                s.send_message(msg)
+            logger.info("Emailed claude -p exhaustion alert")
+        except Exception as e:
+            logger.warning(f"Failed to email claude -p exhaustion alert: {e}")
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """Route LLM call to the appropriate provider based on configured model.
-        Falls back to OpenAI API if claude -p fails."""
+
+        v3.43: No GPT fallback for Anthropic models. Failures retry with
+        escalating backoff via _call_claude_p_with_retry. If all retries fail,
+        raises so the caller's own fallback (e.g. general summary) kicks in.
+        """
         if self._is_anthropic_model():
-            # v3.29: probe claude -p health before attempting; broken claude
-            # subprocesses can hang for the full timeout (~6 min). The health
-            # check costs us at most 20s once per process.
-            try:
-                from src.utils.claude_p_health import is_claude_p_healthy
-                if not is_claude_p_healthy():
-                    logger.warning("_call_llm: claude -p unhealthy, going straight to OpenAI fallback")
-                    return self._call_openai_fallback(system_prompt, user_prompt)
-            except Exception:
-                pass
             logger.info("Using claude -p for Anthropic model call (no API key)")
-            try:
-                return self._call_claude_p(system_prompt, user_prompt)
-            except (ScriptGenerationError, Exception) as e:
-                logger.warning(f"claude -p failed in _call_llm, falling back to OpenAI: {e}")
-                # v3.30: if the failure was a timeout, mark claude -p unhealthy
-                if "timed out" in str(e).lower() or "TimeoutExpired" in type(e).__name__:
-                    try:
-                        from src.utils.claude_p_health import mark_unhealthy
-                        mark_unhealthy("_call_llm script generation timeout")
-                    except Exception:
-                        pass
-                return self._call_openai_fallback(system_prompt, user_prompt)
+            return self._call_claude_p_with_retry(
+                system_prompt, user_prompt, context="script generation",
+            )
         else:
             response = self.openai_client.responses.create(
                 model=self.ai_model,
@@ -1121,7 +1188,6 @@ Follow ALL rules in the system prompt exactly, especially:
 - Vary the episode structure — do NOT follow the same template every time"""
 
         try:
-            used_fallback = False
             if self._is_anthropic_model():
                 # For claude -p path: replace the hardcoded system prompt with the
                 # skill file (.claude/commands/generate-digest.md), which contains
@@ -1138,7 +1204,10 @@ Follow ALL rules in the system prompt exactly, especially:
                     speaker_2_name=speaker_2_name,
                     num_episodes=len(transcripts),
                 )
-                script_content = self._call_claude_p(skill_based_prompt, user_prompt)
+                # v3.43: retry with backoff instead of GPT fallback
+                script_content = self._call_claude_p_with_retry(
+                    skill_based_prompt, user_prompt, context=f"dialogue script for {topic}",
+                )
             else:
                 script_content = self._call_llm(system_prompt, user_prompt)
 
@@ -1160,8 +1229,7 @@ Follow ALL rules in the system prompt exactly, especially:
             elif char_count > 35000:
                 logger.warning(f"Dialogue script exceeds target: {char_count} > 35,000 characters")
 
-            provider = f"OpenAI fallback ({self.OPENAI_FALLBACK_MODEL})" if used_fallback else self.ai_model
-            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via {provider})")
+            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via {self.ai_model})")
             return script_content, char_count
 
         except Exception as e:

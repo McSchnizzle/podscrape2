@@ -228,6 +228,12 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--threshold', type=float, help='Similarity threshold (0.0-1.0)', default=None)
     parser.add_argument('--output-json', help='Output JSON file path')
+    # Accepted from the orchestrator's shared phase-launcher (which passes --limit
+    # to every phase). Currently not enforced inside the deduplicator — arc
+    # dedup processes all eligible arcs — but we accept it so the phase doesn't
+    # argparse-error and get silently skipped. See Apr 18 root-cause analysis.
+    parser.add_argument('--limit', type=int, default=None,
+                        help='(accepted from orchestrator; currently unused by arc dedup)')
 
     args = parser.parse_args()
 
