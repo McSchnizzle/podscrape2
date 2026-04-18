@@ -3,6 +3,7 @@ StoryArcRepository: Data access for story_arcs and story_arc_events tables.
 Manages story arc creation, event tracking, and timeline management.
 """
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
@@ -12,6 +13,8 @@ from sqlalchemy.orm import joinedload
 
 from src.database.sqlalchemy_models import StoryArc, StoryArcEvent, StoryArcCoverage, Feed
 from src.database.models import get_database_manager
+
+logger = logging.getLogger(__name__)
 
 
 class StoryArcRepository:

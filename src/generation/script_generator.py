@@ -2308,6 +2308,7 @@ Thank you for your understanding, and we'll see you tomorrow!
                 digest_date=digest_date,
                 episode_count=len(episodes),
                 script_path=script_path,
+                script_content=script_content,  # v3.41: must persist for TTS phase
                 script_word_count=word_count,
                 average_score=0.0  # No topic-specific score for general summary
             )
