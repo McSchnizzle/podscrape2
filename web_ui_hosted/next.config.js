@@ -20,6 +20,12 @@ const nextConfig = {
       },
     ]
   },
+  async rewrites() {
+    return [
+      { source: '/daily-digest.xml',   destination: '/api/rss/daily-digest' },
+      { source: '/ai-tech-digest.xml', destination: '/api/rss/ai-tech-digest' },
+    ]
+  },
 }
 
 module.exports = nextConfig
