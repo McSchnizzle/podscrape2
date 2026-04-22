@@ -155,12 +155,15 @@ brew install gh && gh auth login  # GitHub publishing
 ```
 
 ### Production Cron Jobs (et01 Server)
-**IMPORTANT**: As of v2.72, all scheduled pipeline execution runs on the **et01 SSH server**, not GitHub Actions.
+**IMPORTANT**: As of v3.45, this project lives entirely at `/srv/projects/podcast/` on et01. All edits happen via SSH to et01 — no Mac checkout, no rsync deploy. Cloudflared tunnel serves `podcast.paulrbrown.org` from the `podcast-web.service` systemd unit on port 3050.
 
-- **Migration**: Cron jobs migrated from GitHub Actions to et01 in v2.72
-- **GitHub Actions**: All workflow files removed in v2.74 (`.github/workflows/` directory deleted)
-- **Daily Schedule**: Pipeline runs at 6 AM via crontab on et01
-- **Server Access**: SSH to et01 server for cron management
+- **Canonical path**: `/srv/projects/podcast/` on et01 (replaced `/srv/projects/podcast-pipeline/` in the v3.45 migration)
+- **Edit workflow**: SSH to et01, edit in place, commit, push directly to `origin/main`. NOT via rsync.
+- **Migration history**: Cron moved from GitHub Actions to et01 in v2.72; workflow files removed in v2.74; full consolidation to et01 single-folder in v3.45
+- **Daily schedule**: 9 PM PT via user crontab (`0 21 * * *`) wrapping `scripts/run_pipeline_with_alerts.sh` through `~/patrol/cron-wrapper.sh`
+- **Timeout**: 7200s / 2h in the cron wrapper. **Runtime is trending up** (Apr 19: 6247s / 1h44m, ~86% of cap). Bump to 10800s if runs start hitting the ceiling; investigate if baseline runtime exceeds ~2h consistently.
+- **Web UI**: `podcast-web.service` (systemd, port 3050) + `podcast-heartbeat.timer` (5-min ping of `/api/heartbeat`, replacing the old Vercel cron)
+- **Ingress**: existing `cloudflared-tunnel.service` (`linus-et01` tunnel); hostname → port mapping in `/home/pbrown/.cloudflared/config.yml`
 
 ```bash
 # View crontab on et01
