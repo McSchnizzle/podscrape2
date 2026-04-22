@@ -286,11 +286,16 @@ class ScriptGenerator:
         *,
         timeout_per_attempt: int = 1200,
         context: str = "script generation",
+        min_chars: Optional[int] = None,
     ) -> str:
         """Call claude -p with escalating-backoff retry.
 
         5 attempts total. Waits between attempts: 30s, 90s, 180s, 600s.
         Worst case: 5 * 20min + 15min waits ~= 115 min.
+
+        If `min_chars` is set and an attempt returns output shorter than that,
+        the attempt is treated as a failure so the retry loop kicks in
+        (handles truncated/short claude -p output the same way as errors).
 
         After all attempts fail, emails Paul via notify_failure and raises
         the last exception so callers can fall back to general summary.
@@ -305,7 +310,13 @@ class ScriptGenerator:
                 logger.info(
                     f"claude -p {context} attempt {attempt}/{self.CLAUDE_P_MAX_ATTEMPTS}"
                 )
-                return self._call_claude_p(system_prompt, user_prompt, timeout=timeout_per_attempt)
+                result = self._call_claude_p(system_prompt, user_prompt, timeout=timeout_per_attempt)
+                if min_chars is not None and len(result) < min_chars:
+                    raise ScriptGenerationError(
+                        f"claude -p {context} attempt {attempt} returned {len(result)} chars "
+                        f"(< hard floor {min_chars}); retrying"
+                    )
+                return result
             except Exception as e:
                 last_err = e
                 attempt_errors.append(f"attempt {attempt}: {type(e).__name__}: {str(e)[:200]}")
@@ -371,17 +382,22 @@ class ScriptGenerator:
         except Exception as e:
             logger.warning(f"Failed to email claude -p exhaustion alert: {e}")
 
-    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+    def _call_llm(self, system_prompt: str, user_prompt: str, *, min_chars: Optional[int] = None) -> str:
         """Route LLM call to the appropriate provider based on configured model.
 
         v3.43: No GPT fallback for Anthropic models. Failures retry with
         escalating backoff via _call_claude_p_with_retry. If all retries fail,
         raises so the caller's own fallback (e.g. general summary) kicks in.
+
+        `min_chars`: if set, claude -p output shorter than this is treated as
+        a failure and triggers a retry (Anthropic path only; OpenAI path has
+        no retry mechanism so the length check is left to the caller).
         """
         if self._is_anthropic_model():
             logger.info("Using claude -p for Anthropic model call (no API key)")
             return self._call_claude_p_with_retry(
                 system_prompt, user_prompt, context="script generation",
+                min_chars=min_chars,
             )
         else:
             response = self.openai_client.responses.create(
@@ -1205,11 +1221,14 @@ Follow ALL rules in the system prompt exactly, especially:
                     num_episodes=len(transcripts),
                 )
                 # v3.43: retry with backoff instead of GPT fallback
+                # min_chars=10000 lets the retry loop treat truncated/short
+                # output the same way as errors (v3.46).
                 script_content = self._call_claude_p_with_retry(
                     skill_based_prompt, user_prompt, context=f"dialogue script for {topic}",
+                    min_chars=10000,
                 )
             else:
-                script_content = self._call_llm(system_prompt, user_prompt)
+                script_content = self._call_llm(system_prompt, user_prompt, min_chars=10000)
 
             char_count = len(script_content)
 
@@ -1224,7 +1243,16 @@ Follow ALL rules in the system prompt exactly, especially:
             char_count = len(script_content)
 
             # Validate character count
-            if char_count < 22000:
+            # v3.46: hard-floor enforcement moved into _call_claude_p_with_retry
+            # (pre-cleanup) and into create_digest's expansion loop (final).
+            # Post-cleanup short output is logged here but not raised -- the
+            # caller's expansion loop will add more transcripts and retry.
+            if char_count < 10000:
+                logger.warning(
+                    f"Dialogue script below hard floor after cleanup: {char_count} < 10,000 "
+                    f"characters (target 22,000). Caller should expand episode set."
+                )
+            elif char_count < 22000:
                 logger.warning(f"Dialogue script is shorter than target: {char_count} < 22,000 characters")
             elif char_count > 35000:
                 logger.warning(f"Dialogue script exceeds target: {char_count} > 35,000 characters")
@@ -1568,11 +1596,20 @@ Transcript:
 REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable."""
 
         try:
-            script_content = self._call_llm(system_prompt, user_prompt)
+            # v3.46: min_chars=5000 lets claude -p retry on truncated output.
+            script_content = self._call_llm(system_prompt, user_prompt, min_chars=5000)
             char_count = len(script_content)
 
             # Validate character count
-            if char_count < 10000:
+            # v3.46: hard-floor enforcement moved into _call_claude_p_with_retry
+            # and into create_digest's expansion loop (final). Post-call short
+            # output is logged here; the caller handles expansion or raising.
+            if char_count < 5000:
+                logger.warning(
+                    f"Narrative script below hard floor: {char_count} < 5,000 characters "
+                    f"(target 10,000). Caller should expand episode set."
+                )
+            elif char_count < 10000:
                 logger.warning(f"Narrative script is shorter than target: {char_count} < 10,000 characters")
             elif char_count > 15000:
                 logger.warning(f"Narrative script exceeds target: {char_count} > 15,000 characters")
@@ -2172,10 +2209,73 @@ Thank you for your understanding, and we'll see you tomorrow!
             episodes = original_episodes
 
         # Generate script (pass repetition info for update framing if needed)
-        script_content, word_count = self.generate_script(
-            topic, episodes, digest_date,
-            recently_covered_arcs=recently_covered_arcs if has_overlap else None
+        # v3.46: dynamic episode expansion -- if the initial script is short,
+        # pull the next-ranked scored episode(s) and regenerate, up to a cap
+        # of MAX_TRANSCRIPTS total transcripts. Only raise at the final floor
+        # after the expansion cap is hit.
+        is_dialogue = self._is_dialogue_mode(topic)
+        MAX_TRANSCRIPTS = 9
+        TARGET_CHARS = 25000
+        HARD_FLOOR = 10000
+
+        gen_kwargs = {
+            'recently_covered_arcs': recently_covered_arcs if has_overlap else None,
+        }
+
+        script_content = ""
+        word_count = 0
+        try:
+            script_content, word_count = self.generate_script(
+                topic, episodes, digest_date, **gen_kwargs
+            )
+        except ScriptGenerationError as e:
+            logger.warning(
+                f"Initial script generation failed for {topic} with "
+                f"{len(episodes)} episodes: {e}; will attempt expansion"
+            )
+
+        while len(script_content) < TARGET_CHARS and len(episodes) < MAX_TRANSCRIPTS:
+            existing_ids = {ep.id for ep in episodes if ep.id is not None}
+            extras = self._get_extra_scored_episodes(
+                topic=topic,
+                exclude_ids=existing_ids,
+                limit=1,
+            )
+            if not extras:
+                logger.info(
+                    f"No more scored episodes available to expand {topic} digest "
+                    f"(current: {len(episodes)} episodes, {len(script_content)} chars)"
+                )
+                break
+
+            episodes = list(episodes) + list(extras)
+            logger.info(
+                f"Expanding {topic} digest to {len(episodes)} episodes "
+                f"(prior script: {len(script_content)} chars, target: {TARGET_CHARS})"
+            )
+            try:
+                script_content, word_count = self.generate_script(
+                    topic, episodes, digest_date, **gen_kwargs
+                )
+            except ScriptGenerationError as e:
+                logger.warning(
+                    f"Expansion attempt failed for {topic} at {len(episodes)} "
+                    f"episodes: {e}; continuing"
+                )
+                # Keep prior script_content (may be empty); loop will try more episodes
+
+        logger.info(
+            f"Post-expansion script for {topic}: {len(script_content)} chars "
+            f"from {len(episodes)} episodes (target {TARGET_CHARS}, floor {HARD_FLOOR})"
         )
+
+        if len(script_content) < HARD_FLOOR:
+            raise ScriptGenerationError(
+                f"Script for {topic} below hard floor after expansion: "
+                f"{len(script_content)} < {HARD_FLOOR} chars "
+                f"with {len(episodes)} transcripts (cap {MAX_TRANSCRIPTS}). "
+                f"Generation likely failed or transcripts lacked enough new material."
+            )
 
         # Store original (pre-dedup) transcript content for audit
         predupe_content = script_content
