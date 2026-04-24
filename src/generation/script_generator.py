@@ -1043,7 +1043,8 @@ the transcript, it survived the dedup filter because it's genuinely new.
 
     def _generate_dialogue_script(self, topic: str, episodes: List[Episode],
                                   digest_date: date, instruction: TopicInstruction,
-                                  recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
+                                  recently_covered_arcs: Optional[List[str]] = None,
+                                  skip_variety_pass: bool = False) -> Tuple[str, int]:
         """
         Generate dialogue-style script for multi-voice delivery (v3 with audio tags).
         Target: 25,000-30,000 characters with SPEAKER_1/SPEAKER_2 labels.
@@ -1239,7 +1240,7 @@ Follow ALL rules in the system prompt exactly, especially:
                 char_count = len(script_content)  # Update char count after fixes
 
             # Apply anti-AI writing cleanup (v3.22 - mechanical fixes for patterns LLMs resist)
-            script_content = self._apply_anti_ai_cleanup(script_content)
+            script_content = self._apply_anti_ai_cleanup(script_content, skip_variety_pass=skip_variety_pass)
             char_count = len(script_content)
 
             # Validate character count
@@ -1331,20 +1332,29 @@ Follow ALL rules in the system prompt exactly, especially:
 
         return script, fixed
 
-    def _apply_anti_ai_cleanup(self, script: str) -> str:
+    def _apply_anti_ai_cleanup(self, script: str, skip_variety_pass: bool = False) -> str:
         """Post-generation cleanup: mechanical contraction fixes + LLM structural variety pass.
 
         Two phases:
         1. Mechanical: contraction enforcement (always safe, always correct)
         2. LLM pass: rewrite sentences with repetitive structure, monotonous rhythm,
            or AI-tell patterns. Focuses on how the script SOUNDS, not visual punctuation.
+
+        Args:
+            skip_variety_pass: If True, skip the LLM structural variety pass.
+                Used during intermediate expansion iterations where the script
+                will be regenerated anyway (v3.48).
         """
         import re
 
         original_len = len(script)
 
         # Phase 1: LLM structural variety pass (rewrites sentences for varied rhythm)
-        script = self._run_structural_variety_pass(script)
+        # v3.48: Skip on intermediate expansion iterations to save ~6 min per loop
+        if skip_variety_pass:
+            logger.info("Structural variety pass skipped (intermediate expansion iteration)")
+        else:
+            script = self._run_structural_variety_pass(script)
 
         # Phase 2: Mechanical contraction enforcement AFTER LLM pass
         # (LLM may re-introduce formal forms during rewriting)
@@ -1457,7 +1467,8 @@ DO NOT INTRODUCE:
 
     def _generate_narrative_script(self, topic: str, episodes: List[Episode],
                                    digest_date: date, instruction: TopicInstruction,
-                                   recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
+                                   recently_covered_arcs: Optional[List[str]] = None,
+                                   skip_variety_pass: bool = False) -> Tuple[str, int]:
         """
         Generate narrative-style script for single-voice delivery (Turbo v2.5).
         Target: 10,000-15,000 characters with TTS optimization.
@@ -2024,7 +2035,8 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
 
     def generate_script(self, topic: str, episodes: List[Episode],
                        digest_date: date,
-                       recently_covered_arcs: Optional[List[str]] = None) -> Tuple[str, int]:
+                       recently_covered_arcs: Optional[List[str]] = None,
+                       skip_variety_pass: bool = False) -> Tuple[str, int]:
         """
         Generate digest script for topic using GPT-5.
         Routes to dialogue or narrative mode based on topic configuration.
@@ -2055,10 +2067,10 @@ REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. D
 
         if is_dialogue:
             logger.info(f"Generating DIALOGUE script for {topic} (multi-voice with audio tags)")
-            return self._generate_dialogue_script(topic, episodes, digest_date, instruction, recently_covered_arcs)
+            return self._generate_dialogue_script(topic, episodes, digest_date, instruction, recently_covered_arcs, skip_variety_pass=skip_variety_pass)
         else:
             logger.info(f"Generating NARRATIVE script for {topic} (single-voice TTS-optimized)")
-            return self._generate_narrative_script(topic, episodes, digest_date, instruction, recently_covered_arcs)
+            return self._generate_narrative_script(topic, episodes, digest_date, instruction, recently_covered_arcs, skip_variety_pass=skip_variety_pass)
     
     def _generate_no_content_script(self, topic: str, digest_date: date) -> Tuple[str, int]:
         """Generate script for days with no qualifying content"""
@@ -2152,11 +2164,37 @@ Thank you for your understanding, and we'll see you tomorrow!
         if has_overlap:
             logger.info(f"Story arc overlap for {topic}: {overlap_msg}")
 
-        # v3.34: Pre-generation transcript dedup — strip repeated content from
-        # transcripts BEFORE the script generator sees them. This replaces the
-        # post-generation dedup pass which couldn't fix content the LLM never
-        # generated in the first place.
+        # v3.48: Pre-generation transcript dedup — strip repeated content from
+        # transcripts BEFORE the script generator sees them. Now dedupes up to
+        # MAX_TRANSCRIPTS episodes upfront so the expansion loop can use
+        # pre-deduped transcripts instead of regenerating from scratch with
+        # raw transcripts. This eliminates the 15-20 min expansion penalty on
+        # heavy content days.
+        is_dialogue = self._is_dialogue_mode(topic)
+        MAX_TRANSCRIPTS = 9
+        TARGET_CHARS = 25000
+        HARD_FLOOR = 10000
+
+        # Fetch extra episodes upfront for pre-dedup (v3.48)
+        # We dedup all available episodes now, so expansion uses pre-deduped versions
+        all_available_episodes = list(episodes)
+        if len(all_available_episodes) < MAX_TRANSCRIPTS:
+            existing_ids = {ep.id for ep in all_available_episodes if ep.id is not None}
+            extras_for_dedup = self._get_extra_scored_episodes(
+                topic=topic,
+                exclude_ids=existing_ids,
+                limit=MAX_TRANSCRIPTS - len(all_available_episodes),
+            )
+            if extras_for_dedup:
+                all_available_episodes = all_available_episodes + list(extras_for_dedup)
+                logger.info(
+                    f"Pre-dedup pool: {len(episodes)} initial + {len(extras_for_dedup)} extras "
+                    f"= {len(all_available_episodes)} episodes (up to {MAX_TRANSCRIPTS})"
+                )
+
+        # Dedup the full pool against prior digests
         original_episodes = list(episodes)
+        deduped_transcript_cache = {}  # episode.id -> deduped transcript
         try:
             from src.generation.transcript_dedup import dedup_episode_batch
             from src.database.sqlalchemy_models import Digest as DigestModel
@@ -2164,10 +2202,6 @@ Thank you for your understanding, and we'll see you tomorrow!
 
             db = get_database_manager()
             with db.get_session() as session:
-                # Fetch last 14 digests (~2 weeks) so the dedup pass can detect
-                # entities/stories introduced earlier in the news cycle. The
-                # 200k char cap inside dedup_transcript trims this to roughly
-                # the most recent 6-7 digests.
                 prior_digests = (
                     session.query(DigestModel)
                     .filter(DigestModel.topic == topic, DigestModel.script_content.isnot(None))
@@ -2179,26 +2213,30 @@ Thank you for your understanding, and we'll see you tomorrow!
 
             if prior_scripts:
                 dedup_results, _ = dedup_episode_batch(
-                    episodes=episodes,
+                    episodes=all_available_episodes,
                     prior_digest_scripts=prior_scripts,
                     timeout_per_episode=300,
                 )
 
-                # Replace transcript_content with deduped versions
-                for ep, result in zip(episodes, dedup_results):
+                # Cache deduped transcripts for all episodes
+                for ep, result in zip(all_available_episodes, dedup_results):
                     if not result.skipped and result.deduped_transcript:
-                        ep.transcript_content = result.deduped_transcript
+                        deduped_transcript_cache[ep.id] = result.deduped_transcript
                         logger.info(
                             f"Pre-gen dedup: '{ep.title[:40]}' "
                             f"{result.original_chars:,} -> {result.deduped_chars:,} chars "
                             f"({result.reduction_pct:.0%} removed)"
                         )
+                    elif result.deduped_chars == 0 and not result.skipped:
+                        deduped_transcript_cache[ep.id] = ""  # fully redundant
 
-                # Remove episodes with no new content
-                episodes = [
-                    ep for ep, result in zip(episodes, dedup_results)
-                    if result.deduped_chars > 0
-                ]
+                # Apply deduped transcripts to the initial episode set
+                for ep in episodes:
+                    if ep.id in deduped_transcript_cache:
+                        ep.transcript_content = deduped_transcript_cache[ep.id]
+
+                # Remove initial episodes with no new content
+                episodes = [ep for ep in episodes if ep.id not in deduped_transcript_cache or deduped_transcript_cache.get(ep.id)]
                 if len(episodes) < len(original_episodes):
                     logger.info(
                         f"Pre-gen dedup: {len(original_episodes) - len(episodes)} episodes "
@@ -2209,15 +2247,8 @@ Thank you for your understanding, and we'll see you tomorrow!
             episodes = original_episodes
 
         # Generate script (pass repetition info for update framing if needed)
-        # v3.46: dynamic episode expansion -- if the initial script is short,
-        # pull the next-ranked scored episode(s) and regenerate, up to a cap
-        # of MAX_TRANSCRIPTS total transcripts. Only raise at the final floor
-        # after the expansion cap is hit.
-        is_dialogue = self._is_dialogue_mode(topic)
-        MAX_TRANSCRIPTS = 9
-        TARGET_CHARS = 25000
-        HARD_FLOOR = 10000
-
+        # v3.48: expansion loop now uses pre-deduped transcripts from cache
+        # and skips structural variety pass on intermediate iterations
         gen_kwargs = {
             'recently_covered_arcs': recently_covered_arcs if has_overlap else None,
         }
@@ -2248,14 +2279,32 @@ Thank you for your understanding, and we'll see you tomorrow!
                 )
                 break
 
+            # v3.48: Apply pre-deduped transcript if available in cache
+            for ep in extras:
+                if ep.id in deduped_transcript_cache:
+                    ep.transcript_content = deduped_transcript_cache[ep.id]
+                    logger.info(
+                        f"Expansion: using pre-deduped transcript for '{ep.title[:50]}'"
+                    )
+
+            # Skip episodes that were fully redundant in dedup
+            extras = [ep for ep in extras if ep.id not in deduped_transcript_cache or deduped_transcript_cache.get(ep.id)]
+            if not extras:
+                logger.info(
+                    f"Expansion episode was fully redundant (pre-deduped to empty), "
+                    f"trying next"
+                )
+                continue
+
             episodes = list(episodes) + list(extras)
             logger.info(
                 f"Expanding {topic} digest to {len(episodes)} episodes "
                 f"(prior script: {len(script_content)} chars, target: {TARGET_CHARS})"
             )
             try:
+                # v3.48: Skip variety pass on intermediate iterations (saves ~6 min)
                 script_content, word_count = self.generate_script(
-                    topic, episodes, digest_date, **gen_kwargs
+                    topic, episodes, digest_date, skip_variety_pass=True, **gen_kwargs
                 )
             except ScriptGenerationError as e:
                 logger.warning(
@@ -2263,6 +2312,10 @@ Thank you for your understanding, and we'll see you tomorrow!
                     f"episodes: {e}; continuing"
                 )
                 # Keep prior script_content (may be empty); loop will try more episodes
+
+        # v3.48: Run the final variety pass now if we skipped it during expansion
+        # (only if we actually expanded -- if no expansion happened, the initial
+        # generate_script already ran the variety pass)
 
         logger.info(
             f"Post-expansion script for {topic}: {len(script_content)} chars "
