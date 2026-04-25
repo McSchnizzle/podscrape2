@@ -28,7 +28,7 @@ echo "Pipeline started: $(date)" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 
 # Run the pipeline, capturing output to both the main log and temp log
-python3 run_full_pipeline_orchestrator.py --verbose --days-back 5 --limit 10 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
+python3 run_full_pipeline_orchestrator.py --verbose --days-back 5 --limit 10 --skip-audio 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
 EXIT_CODE=${PIPESTATUS[0]}
 
 END_TIME=$(date +%s)

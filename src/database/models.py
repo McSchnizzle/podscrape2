@@ -483,6 +483,18 @@ class EpisodeRepository:
                 .all()
             return [self._model_to_episode(model) for model in episode_models]
 
+    def get_pending_by_priority(self, limit: Optional[int] = None) -> List[Episode]:
+        """Get pending episodes ordered by feed priority (lower = higher priority),
+        then published_date desc as tiebreaker. Used by the standalone audio cron."""
+        with self.db.get_session() as session:
+            query = session.query(EpisodeModel)\
+                .join(FeedModel, EpisodeModel.feed_id == FeedModel.id)\
+                .filter(EpisodeModel.status == 'pending')\
+                .order_by(FeedModel.priority.asc(), EpisodeModel.published_date.desc())
+            if limit is not None:
+                query = query.limit(limit)
+            return [self._model_to_episode(model) for model in query.all()]
+
     def get_by_status_list(self, statuses: List[str]) -> List[Episode]:
         """Get all episodes with any of the specified statuses"""
         with self.db.get_session() as session:

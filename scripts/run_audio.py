@@ -179,31 +179,40 @@ class AudioProcessor_Runner:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
 
-    def process_episodes_optimized(self, max_relevant_episodes, parallel=True, max_workers=8):
+    def process_episodes_optimized(self, max_relevant_episodes, parallel=True, max_workers=8,
+                                   max_total_episodes=None):
         """Process episodes until max_relevant_episodes RELEVANT episodes are found.
 
         This optimization processes episodes from the database (pending status)
         until we accumulate the desired number of RELEVANT episodes (score >= threshold).
-        
+
         Args:
             max_relevant_episodes: Target number of relevant episodes to find
             parallel: Enable parallel processing (default: True)
             max_workers: Maximum number of concurrent workers (default: 8)
+            max_total_episodes: If set, cap total episodes processed regardless of relevance,
+                                and order pending by feed priority (used by standalone audio cron).
         """
         if parallel:
             self.logger.info(f"🎯 P2 OPTIMIZATION (PARALLEL): Processing until {max_relevant_episodes} relevant episodes found")
             self.logger.info(f"   🚀 Smart backfill with concurrent workers (details below)")
-            return self._process_episodes_parallel(max_relevant_episodes, max_workers)
+            return self._process_episodes_parallel(max_relevant_episodes, max_workers,
+                                                   max_total_episodes=max_total_episodes)
         else:
             self.logger.info(f"🎯 P2 OPTIMIZATION (SEQUENTIAL): Processing until {max_relevant_episodes} relevant episodes found")
-            return self._process_episodes_sequential(max_relevant_episodes)
+            return self._process_episodes_sequential(max_relevant_episodes,
+                                                    max_total_episodes=max_total_episodes)
     
-    def _process_episodes_sequential(self, max_relevant_episodes):
+    def _process_episodes_sequential(self, max_relevant_episodes, max_total_episodes=None):
         """Original sequential processing logic"""
         self.logger.info(f"Processing sequentially until {max_relevant_episodes} relevant episodes found")
 
-        # Get ALL pending episodes (oldest first for chronological processing)
-        pending_episodes = self.episode_repo.get_by_status('pending')
+        # Get pending episodes - priority-ordered+capped if max_total_episodes set, else all
+        if max_total_episodes is not None:
+            self.logger.info(f"   📌 Priority-ordered fetch capped at {max_total_episodes} episodes")
+            pending_episodes = self.episode_repo.get_pending_by_priority(limit=max_total_episodes)
+        else:
+            pending_episodes = self.episode_repo.get_by_status('pending')
 
         if not pending_episodes:
             return {
@@ -348,7 +357,7 @@ class AudioProcessor_Runner:
             'processing_mode': 'sequential'
         }
     
-    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=4):
+    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=4, max_total_episodes=None):
         """Parallel processing with smart backfill logic.
 
         IMPORTANT: Reduced to 4 workers (from 8) to mitigate Whisper model thread safety issues.
@@ -363,12 +372,18 @@ class AudioProcessor_Runner:
         6. Repeat until max_relevant_episodes are found
         """
         # Step 1: Reset stuck 'processing' episodes at startup
-        reset_count = self.episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
+        # 60-min threshold: long Whisper transcriptions on multi-hour episodes can
+        # legitimately exceed shorter timeouts and would otherwise trigger split-brain resets.
+        reset_count = self.episode_repo.reset_stuck_processing_episodes(timeout_minutes=60)
         if reset_count > 0:
             self.logger.info(f"🔄 Reset {reset_count} stuck 'processing' episodes back to 'pending'")
 
-        # Get ALL pending episodes (oldest first)
-        pending_episodes = self.episode_repo.get_by_status('pending')
+        # Get pending episodes - priority-ordered+capped if max_total_episodes set, else all
+        if max_total_episodes is not None:
+            self.logger.info(f"📌 Priority-ordered fetch capped at {max_total_episodes} episodes")
+            pending_episodes = self.episode_repo.get_pending_by_priority(limit=max_total_episodes)
+        else:
+            pending_episodes = self.episode_repo.get_by_status('pending')
         
         if not pending_episodes:
             self.logger.info("📊 No pending episodes found to process")
@@ -418,7 +433,7 @@ class AudioProcessor_Runner:
                 with lock:
                     # Check for stuck processing episodes periodically
                     if total_processed % 5 == 0:  # Every 5 episodes
-                        reset_count = worker_episode_repo.reset_stuck_processing_episodes(timeout_minutes=10)
+                        reset_count = worker_episode_repo.reset_stuck_processing_episodes(timeout_minutes=60)
                         if reset_count > 0:
                             self.logger.info(f"🔄 Reset {reset_count} additional stuck episodes during processing")
 
@@ -1434,6 +1449,8 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--output-json', help='Output JSON file path (default: stdout)')
     parser.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (use sequential)')
+    parser.add_argument('--max-total-episodes', type=int, default=None,
+                       help='Cap total episodes processed (regardless of relevance), priority-ordered. Used by standalone audio cron.')
 
     args = parser.parse_args()
 
@@ -1483,10 +1500,17 @@ def main():
                     max_episodes = max_episodes_setting
                     runner.logger.info(f"🚀 Using database setting: {max_episodes} relevant episodes (from pipeline.max_episodes_per_run)")
                 
-                runner.logger.info(f"🚀 AUDIO PHASE: Processing pending episodes from database (seeking {max_episodes} relevant episodes)")
+                # Standalone audio cron mode: cap total episodes processed regardless of score
+                max_total = args.max_total_episodes
+                if max_total is not None:
+                    runner.logger.info(f"🚀 AUDIO PHASE (standalone): Processing up to {max_total} total episodes from database (priority-ordered)")
+                    max_episodes = max_total  # also cap relevant target so processor stops cleanly
+                else:
+                    runner.logger.info(f"🚀 AUDIO PHASE: Processing pending episodes from database (seeking {max_episodes} relevant episodes)")
                 # Use parallel processing by default, unless --no-parallel flag is set
                 use_parallel = not args.no_parallel
-                result = runner.process_episodes_optimized(max_episodes, parallel=use_parallel)
+                result = runner.process_episodes_optimized(max_episodes, parallel=use_parallel,
+                                                          max_total_episodes=max_total)
 
         # Display audio phase summary
         if result['success'] and result.get('episodes_processed', 0) > 0:

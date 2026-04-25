@@ -37,7 +37,7 @@ class PipelineOrchestrator:
 
     def __init__(self, log_file: str = None, phase_stop: str = None, dry_run: bool = False,
                  limit: int = None, days_back: int = 7, episode_guid: str = None, verbose: bool = False,
-                 sequential: bool = False):
+                 sequential: bool = False, skip_audio: bool = False):
 
         # Move legacy logs on first run
         move_legacy_logs_to_logs_dir()
@@ -58,6 +58,7 @@ class PipelineOrchestrator:
         self.episode_guid = episode_guid
         self.verbose = verbose
         self.sequential = sequential
+        self.skip_audio = skip_audio
 
         # Script paths - phase scripts are in the scripts directory
         self.scripts_dir = Path(__file__).parent
@@ -78,6 +79,8 @@ class PipelineOrchestrator:
             self.logger.info("🔍 VERBOSE: Debug logging enabled")
         if self.sequential:
             self.logger.info("🔄 SEQUENTIAL: Parallel processing disabled for audio phase")
+        if self.skip_audio:
+            self.logger.info("⏭️  SKIP-AUDIO: Phase 2 will be skipped (handled by standalone audio cron)")
 
         # Initialize retention manager with WebConfig settings
         try:
@@ -401,7 +404,14 @@ class PipelineOrchestrator:
                 return self._log_success(start_time, episodes_found, [], [], [])
 
             # Phase 2: Audio Processing
-            if episodes_found == 0:
+            if self.skip_audio:
+                self.logger.info("\n⏭️  PHASE 2: AUDIO PROCESSING — SKIPPED (--skip-audio)")
+                self.logger.info("📝 Standalone audio cron handles transcription; proceeding to digest phase...")
+                self._record_phase_event('audio', 'skipped', {
+                    'reason': 'skip-audio flag set; audio runs out-of-band on dedicated cron'
+                })
+                episodes_processed = 0
+            elif episodes_found == 0:
                 self.logger.info("\n📝 No new episodes discovered - skipping audio phase")
                 self.logger.info("📝 Continuing to digest phase to process already-scored episodes...")
                 episodes_processed = 0
@@ -635,6 +645,8 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     parser.add_argument('--sequential', action='store_true',
                        help='Disable parallel processing in audio phase (safer for single-server deployments)')
+    parser.add_argument('--skip-audio', action='store_true',
+                       help='Skip Phase 2 (audio). Use when audio is handled out-of-band by a standalone cron.')
 
     args = parser.parse_args()
 
@@ -646,7 +658,8 @@ def main():
         days_back=args.days_back,
         episode_guid=args.episode_guid,
         verbose=args.verbose,
-        sequential=args.sequential
+        sequential=args.sequential,
+        skip_audio=args.skip_audio
     )
 
     orchestrator.run_pipeline()
