@@ -11,6 +11,7 @@ import sys
 import json
 import logging
 import time
+import hashlib
 from datetime import datetime
 from pathlib import Path
 import argparse
@@ -1290,8 +1291,8 @@ class AudioProcessor_Runner:
                 progress_file.unlink()
 
             # Delete original audio file - must match the same id-derivation rule as
-            # AudioProcessor.download_audio (strip non-alphanumeric, take first 6).
-            episode_id = re.sub(r'[^a-zA-Z0-9]', '', episode_guid)[:6]
+            # AudioProcessor.download_audio (md5 of GUID, first 6 hex chars).
+            episode_id = hashlib.md5(episode_guid.encode()).hexdigest()[:6]
             audio_cache_dir = Path(self.audio_processor.audio_cache_dir)
             for audio_file in audio_cache_dir.glob(f"*-{episode_id}.mp3"):
                 try:

@@ -163,7 +163,7 @@ class AudioProcessor:
         # Strip ALL non-alphanumeric characters for filename safety. Some GUIDs (e.g. art19's
         # `gid://art19-episode-locator/V0/...`) contain slashes/colons that break filenames if
         # only hyphens are stripped.
-        episode_id = re.sub(r'[^a-zA-Z0-9]', '', episode_guid)[:6]
+        episode_id = hashlib.md5(episode_guid.encode()).hexdigest()[:6]
         filename = f"{feed_keyword}-{episode_id}.mp3"
         file_path = self.audio_cache_dir / filename
         
@@ -277,7 +277,7 @@ class AudioProcessor:
         
         # Create episode chunk directory using same naming convention
         # CRITICAL: Use lock to prevent race conditions when multiple workers create same directory
-        episode_id = re.sub(r'[^a-zA-Z0-9]', '', episode_guid)[:6]
+        episode_id = hashlib.md5(episode_guid.encode()).hexdigest()[:6]
         chunk_episode_dir = self.chunk_dir / episode_id
 
         with _chunk_dir_lock:
@@ -440,7 +440,7 @@ class AudioProcessor:
             episode_guid: Episode identifier
             keep_original: Whether to keep the original downloaded file
         """
-        episode_id = re.sub(r'[^a-zA-Z0-9]', '', episode_guid)[:6]
+        episode_id = hashlib.md5(episode_guid.encode()).hexdigest()[:6]
         
         # Clean up chunks
         chunk_episode_dir = self.chunk_dir / episode_id
