@@ -180,7 +180,7 @@ class AudioProcessor_Runner:
         self.cleanup()
 
     def process_episodes_optimized(self, max_relevant_episodes, parallel=True, max_workers=8,
-                                   max_total_episodes=None):
+                                   max_total_episodes=None, prefetched_episodes=None):
         """Process episodes until max_relevant_episodes RELEVANT episodes are found.
 
         This optimization processes episodes from the database (pending status)
@@ -192,23 +192,31 @@ class AudioProcessor_Runner:
             max_workers: Maximum number of concurrent workers (default: 8)
             max_total_episodes: If set, cap total episodes processed regardless of relevance,
                                 and order pending by feed priority (used by standalone audio cron).
+            prefetched_episodes: If provided, use this list instead of fetching from DB.
+                                 Overrides max_total_episodes. Used by --max-youtube/--max-rss.
         """
         if parallel:
             self.logger.info(f"🎯 P2 OPTIMIZATION (PARALLEL): Processing until {max_relevant_episodes} relevant episodes found")
             self.logger.info(f"   🚀 Smart backfill with concurrent workers (details below)")
             return self._process_episodes_parallel(max_relevant_episodes, max_workers,
-                                                   max_total_episodes=max_total_episodes)
+                                                   max_total_episodes=max_total_episodes,
+                                                   prefetched_episodes=prefetched_episodes)
         else:
             self.logger.info(f"🎯 P2 OPTIMIZATION (SEQUENTIAL): Processing until {max_relevant_episodes} relevant episodes found")
             return self._process_episodes_sequential(max_relevant_episodes,
-                                                    max_total_episodes=max_total_episodes)
+                                                    max_total_episodes=max_total_episodes,
+                                                    prefetched_episodes=prefetched_episodes)
     
-    def _process_episodes_sequential(self, max_relevant_episodes, max_total_episodes=None):
+    def _process_episodes_sequential(self, max_relevant_episodes, max_total_episodes=None,
+                                     prefetched_episodes=None):
         """Original sequential processing logic"""
         self.logger.info(f"Processing sequentially until {max_relevant_episodes} relevant episodes found")
 
-        # Get pending episodes - priority-ordered+capped if max_total_episodes set, else all
-        if max_total_episodes is not None:
+        # Pending source priority: prefetched list > priority-ordered cap > full pending
+        if prefetched_episodes is not None:
+            self.logger.info(f"   📌 Using prefetched list ({len(prefetched_episodes)} episodes)")
+            pending_episodes = prefetched_episodes
+        elif max_total_episodes is not None:
             self.logger.info(f"   📌 Priority-ordered fetch capped at {max_total_episodes} episodes")
             pending_episodes = self.episode_repo.get_pending_by_priority(limit=max_total_episodes)
         else:
@@ -337,12 +345,15 @@ class AudioProcessor_Runner:
         # Enhanced logging summary as requested
         self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
 
-        # Success criteria: No failures occurred
-        # Note: Finding 0 relevant episodes is NOT a failure - it's a valid outcome
-        success = len(failed_episodes) == 0
+        # Phase succeeds if it ran to completion. Individual episode failures are reported
+        # in the JSON output but don't fail the phase — only infrastructure errors caught
+        # by the outer except block produce exit 1.
+        success = True
 
-        if success and relevant_count == 0 and total_processed > 0:
-            self.logger.info("✓ Audio phase completed successfully (0 relevant episodes found - this is normal)")
+        if relevant_count == 0 and total_processed > 0:
+            self.logger.info("✓ Audio phase completed (0 relevant episodes found - this is normal)")
+        if len(failed_episodes) > 0:
+            self.logger.warning(f"⚠️ {len(failed_episodes)} episode(s) failed individually (phase still successful)")
 
         return {
             'success': success,
@@ -357,7 +368,8 @@ class AudioProcessor_Runner:
             'processing_mode': 'sequential'
         }
     
-    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=4, max_total_episodes=None):
+    def _process_episodes_parallel(self, max_relevant_episodes, max_workers=4, max_total_episodes=None,
+                                   prefetched_episodes=None):
         """Parallel processing with smart backfill logic.
 
         IMPORTANT: Reduced to 4 workers (from 8) to mitigate Whisper model thread safety issues.
@@ -378,8 +390,11 @@ class AudioProcessor_Runner:
         if reset_count > 0:
             self.logger.info(f"🔄 Reset {reset_count} stuck 'processing' episodes back to 'pending'")
 
-        # Get pending episodes - priority-ordered+capped if max_total_episodes set, else all
-        if max_total_episodes is not None:
+        # Pending source priority: prefetched list > priority-ordered cap > full pending
+        if prefetched_episodes is not None:
+            self.logger.info(f"📌 Using prefetched list ({len(prefetched_episodes)} episodes)")
+            pending_episodes = prefetched_episodes
+        elif max_total_episodes is not None:
             self.logger.info(f"📌 Priority-ordered fetch capped at {max_total_episodes} episodes")
             pending_episodes = self.episode_repo.get_pending_by_priority(limit=max_total_episodes)
         else:
@@ -611,9 +626,10 @@ class AudioProcessor_Runner:
         self.logger.info(f"   Peak workers: {actual_max_workers}")
         self.logger.info(f"   Performance: ~{actual_max_workers}x faster than sequential")
 
-        # Success criteria: Phase succeeds if episodes were processed, even if some individually failed
-        # Individual episode failures (e.g. short YouTube transcripts) shouldn't fail the whole phase
-        success = len(processed_episodes) > 0 or len(failed_episodes) == 0
+        # Phase succeeds if it ran to completion. Individual episode failures are reported
+        # in the JSON output but don't fail the phase — only infrastructure errors caught
+        # by the outer except block produce exit 1.
+        success = True
 
         if len(failed_episodes) > 0:
             self.logger.warning(f"⚠️ {len(failed_episodes)} episode(s) failed individually (phase still successful)")
@@ -1067,12 +1083,17 @@ class AudioProcessor_Runner:
                         self.logger.info(f"yt-dlp subtitle fallback passed quality check for {video_id}")
 
                 if not is_valid:
+                    # Quality-insufficient transcripts are a permanent rejection: a 152s video
+                    # won't grow to 180s, a 16-word transcript won't sprout content. Mark
+                    # not_relevant (terminal) so we don't re-fetch on every cron run, and
+                    # return success so the phase-level exit code stays clean.
                     self.youtube_stats['failed'] += 1
                     self.logger.warning(f"YouTube transcript quality insufficient after all attempts: {reason}")
-                    self.episode_repo.mark_failure(episode_guid, f"YouTube transcript quality insufficient: {reason}")
+                    self.episode_repo.update_status(episode_guid, 'not_relevant')
                     return {
-                        'success': False, 'guid': episode_guid, 'title': db_episode.title,
-                        'error': f'YouTube transcript quality insufficient: {reason}'
+                        'success': True, 'guid': episode_guid, 'title': db_episode.title,
+                        'status': 'not_relevant', 'skipped': True,
+                        'message': f'YouTube transcript quality insufficient: {reason}'
                     }
 
             # Extract plain text and build transcript with metadata header
@@ -1451,6 +1472,10 @@ def main():
     parser.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (use sequential)')
     parser.add_argument('--max-total-episodes', type=int, default=None,
                        help='Cap total episodes processed (regardless of relevance), priority-ordered. Used by standalone audio cron.')
+    parser.add_argument('--max-youtube', type=int, default=None,
+                       help='Cap YouTube episodes processed per run. Combine with --max-rss for balanced fetch.')
+    parser.add_argument('--max-rss', type=int, default=None,
+                       help='Cap RSS (non-YouTube) episodes processed per run. Combine with --max-youtube for balanced fetch.')
 
     args = parser.parse_args()
 
@@ -1500,9 +1525,23 @@ def main():
                     max_episodes = max_episodes_setting
                     runner.logger.info(f"🚀 Using database setting: {max_episodes} relevant episodes (from pipeline.max_episodes_per_run)")
                 
-                # Standalone audio cron mode: cap total episodes processed regardless of score
+                # Resolve fetch strategy:
+                # 1. --max-youtube/--max-rss → balanced fetch from each feed type
+                # 2. --max-total-episodes → priority-ordered cap regardless of feed type
+                # 3. neither → original "find N relevant" behavior across all pending
+                prefetched = None
                 max_total = args.max_total_episodes
-                if max_total is not None:
+                if args.max_youtube is not None or args.max_rss is not None:
+                    yt_n = args.max_youtube or 0
+                    rss_n = args.max_rss or 0
+                    runner.logger.info(f"🚀 AUDIO PHASE (standalone, balanced): up to {yt_n} YouTube + {rss_n} RSS episodes")
+                    prefetched = runner.episode_repo.get_pending_balanced(
+                        youtube_limit=args.max_youtube,
+                        rss_limit=args.max_rss
+                    )
+                    runner.logger.info(f"   📊 Prefetch returned {len(prefetched)} pending episodes")
+                    max_episodes = max(len(prefetched), 1)  # cap relevant target at fetch size
+                elif max_total is not None:
                     runner.logger.info(f"🚀 AUDIO PHASE (standalone): Processing up to {max_total} total episodes from database (priority-ordered)")
                     max_episodes = max_total  # also cap relevant target so processor stops cleanly
                 else:
@@ -1510,7 +1549,8 @@ def main():
                 # Use parallel processing by default, unless --no-parallel flag is set
                 use_parallel = not args.no_parallel
                 result = runner.process_episodes_optimized(max_episodes, parallel=use_parallel,
-                                                          max_total_episodes=max_total)
+                                                          max_total_episodes=max_total,
+                                                          prefetched_episodes=prefetched)
 
         # Display audio phase summary
         if result['success'] and result.get('episodes_processed', 0) > 0:

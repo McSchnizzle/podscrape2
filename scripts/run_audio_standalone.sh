@@ -29,8 +29,9 @@ echo "Audio phase started: $(date)" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 
 # Run the standalone audio phase
-# --max-total-episodes 3 caps total processed regardless of relevance, priority-ordered
-python3 scripts/run_audio.py --max-total-episodes 3 --verbose 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
+# --max-youtube 3 + --max-rss 3 = balanced fetch from each feed type (6 total max).
+# Prevents one feed type's backlog from starving the other in 3-hourly runs.
+python3 scripts/run_audio.py --max-youtube 3 --max-rss 3 --verbose 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
 EXIT_CODE=${PIPESTATUS[0]}
 
 END_TIME=$(date +%s)

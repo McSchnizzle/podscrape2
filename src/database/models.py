@@ -495,6 +495,32 @@ class EpisodeRepository:
                 query = query.limit(limit)
             return [self._model_to_episode(model) for model in query.all()]
 
+    def get_pending_balanced(self, youtube_limit: Optional[int] = None,
+                             rss_limit: Optional[int] = None) -> List[Episode]:
+        """Get pending episodes with separate caps per feed type.
+        YouTube and RSS subsets are independently priority-ordered, then concatenated.
+        Prevents one feed type's backlog from starving the other in audio cron runs."""
+        with self.db.get_session() as session:
+            yt_query = session.query(EpisodeModel)\
+                .join(FeedModel, EpisodeModel.feed_id == FeedModel.id)\
+                .filter(EpisodeModel.status == 'pending')\
+                .filter(FeedModel.feed_type == 'youtube')\
+                .order_by(FeedModel.priority.asc(), EpisodeModel.published_date.desc())
+            if youtube_limit is not None:
+                yt_query = yt_query.limit(youtube_limit)
+            yt_models = yt_query.all()
+
+            rss_query = session.query(EpisodeModel)\
+                .join(FeedModel, EpisodeModel.feed_id == FeedModel.id)\
+                .filter(EpisodeModel.status == 'pending')\
+                .filter(FeedModel.feed_type != 'youtube')\
+                .order_by(FeedModel.priority.asc(), EpisodeModel.published_date.desc())
+            if rss_limit is not None:
+                rss_query = rss_query.limit(rss_limit)
+            rss_models = rss_query.all()
+
+            return [self._model_to_episode(m) for m in (yt_models + rss_models)]
+
     def get_by_status_list(self, statuses: List[str]) -> List[Episode]:
         """Get all episodes with any of the specified statuses"""
         with self.db.get_session() as session:
