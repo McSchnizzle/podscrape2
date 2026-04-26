@@ -6,6 +6,7 @@ Reads JSON input from discovery phase or direct episode data.
 """
 
 import os
+import re
 import sys
 import json
 import logging
@@ -1003,7 +1004,6 @@ class AudioProcessor_Runner:
 
     def _extract_youtube_video_id(self, url):
         """Extract YouTube video ID from various URL formats."""
-        import re
         patterns = [
             r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
             r'youtube\.com/shorts/([a-zA-Z0-9_-]{11})',
@@ -1289,8 +1289,9 @@ class AudioProcessor_Runner:
             if progress_file.exists():
                 progress_file.unlink()
 
-            # Delete original audio file
-            episode_id = episode_guid.replace('-', '')[:6]
+            # Delete original audio file - must match the same id-derivation rule as
+            # AudioProcessor.download_audio (strip non-alphanumeric, take first 6).
+            episode_id = re.sub(r'[^a-zA-Z0-9]', '', episode_guid)[:6]
             audio_cache_dir = Path(self.audio_processor.audio_cache_dir)
             for audio_file in audio_cache_dir.glob(f"*-{episode_id}.mp3"):
                 try:
