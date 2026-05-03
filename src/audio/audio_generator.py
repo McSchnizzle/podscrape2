@@ -47,43 +47,19 @@ class ElevenLabsQuotaExceededError(AudioGenerationError):
 # Short final turns (<~40 chars, e.g. "See you then.") have been observed to
 # trigger ElevenLabs v3 Text-to-Dialogue hallucinating a duplicate outro
 # (ep 611 incident, 2026-04-17). See docs/audio-incidents.md.
-FINAL_TURN_MIN_CHARS = 40
-FINAL_TURN_PADDING = " Take care, and catch you tomorrow."
+# v3.53: guard disabled — the padding created audible duplicate sign-offs
+# in every episode (ep 614 worst case: "Take care. Take care, and catch you
+# tomorrow."). The ep 611 hallucination was a one-off; the cure was worse
+# than the disease. See docs/audio-incidents.md.
+# FINAL_TURN_MIN_CHARS = 40
+# FINAL_TURN_PADDING = " Take care, and catch you tomorrow."
 
 
 def guard_final_turn_length(script: str) -> str:
-    """Pad an over-short final SPEAKER turn so ElevenLabs v3 has enough anchor
-    context to not hallucinate a duplicate outro.
-
-    If the final turn's text is < FINAL_TURN_MIN_CHARS, append a short padding
-    sentence. No-op otherwise.
-    """
-    import re
-    # Find all speaker turns
-    pattern = re.compile(
-        r'^(SPEAKER_[12])(?:\s*[\(\[][^\)\]]+[\)\]])?:\s*(.+?)(?=^SPEAKER_[12]|\Z)',
-        re.MULTILINE | re.DOTALL,
-    )
-    matches = list(pattern.finditer(script))
-    if not matches:
-        return script
-
-    final = matches[-1]
-    final_text = final.group(2).strip()
-    if len(final_text) >= FINAL_TURN_MIN_CHARS:
-        return script
-
-    logger.warning(
-        f"Final speaker turn is only {len(final_text)} chars "
-        f"(< {FINAL_TURN_MIN_CHARS}): '{final_text[:60]}'. "
-        f"Padding to prevent ElevenLabs v3 duplicate-outro hallucination."
-    )
-    padded_text = final_text + FINAL_TURN_PADDING
-    # Replace just the final turn's text portion
-    before = script[:final.start(2)]
-    after = script[final.end(2):]
-    # Preserve any trailing whitespace in the original
-    return before + padded_text + after
+    """No-op since v3.53 — padding removed because it created audible
+    duplicate sign-offs in every episode. Kept as a passthrough so
+    callers don't need to change."""
+    return script
 
 class AudioGenerator:
     """
@@ -867,8 +843,8 @@ class AudioGenerator:
         logger.info(f"Voice config: {voice_config}")
         logger.info(f"Dialogue model: {dialogue_model}")
 
-        # v3.37: Guard against short final turns that trigger TTS duplicate-outro
-        # hallucination (ep 611 incident).
+        # v3.37 guard disabled in v3.53 — padding caused duplicate sign-offs.
+        # Kept as no-op passthrough for safety.
         script_content = guard_final_turn_length(script_content)
 
         # Chunk the dialogue script

@@ -45,3 +45,30 @@ the pad is applied before chunking.
 audio segments post-generation. That would require decoding every digest,
 which adds CPU cost for a probabilistic issue that the pre-TTS guard should
 largely eliminate. If duplicate outros recur despite the guard, revisit.
+
+## 2026-05-03 — guard_final_turn_length causing duplicate sign-offs (every episode since v3.38)
+
+**Symptom**: Every episode since v3.38 (ep 613+) has a redundant sign-off at
+the very end. Examples:
+- "See you tomorrow. Take care, and catch you tomorrow." (ep 628)
+- "Take care. Take care, and catch you tomorrow." (ep 614 — worst case)
+- "Back tomorrow. Take care, and catch you tomorrow." (ep 613)
+
+On some mobile players the audio duplication sounds even longer, possibly due
+to player buffering behavior at the end of the file.
+
+**Root cause**: The `guard_final_turn_length` function (v3.38) appended a
+hardcoded `" Take care, and catch you tomorrow."` to any final turn shorter
+than 40 chars. Since scripts naturally end with short sign-offs ("See you
+then.", "See you tomorrow.", "Thanks for listening."), the guard fired on
+~90% of episodes, adding text that repeated words already present in the
+natural sign-off.
+
+**Fix (v3.53)**: `guard_final_turn_length` converted to a no-op passthrough.
+Constants and logic commented out. The ep 611 ElevenLabs hallucination that
+motivated the guard was a one-off; the padding cure was worse than the
+disease — it created audible duplication in 15+ consecutive episodes.
+
+**If duplicate-outro hallucination recurs**: Consider post-generation audio
+fingerprint comparison (compare last N seconds with preceding N seconds)
+rather than text-level padding.
