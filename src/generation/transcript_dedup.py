@@ -225,8 +225,8 @@ def detect_evergreen_topics(
     selected = prior_digest_scripts[:5]
     lines = []
     for i, script in enumerate(selected, start=1):
-        # Trim each to ~15k chars to keep the prompt manageable
-        lines.append(f"--- DIGEST {i} (most recent first) ---\n{script[:15_000]}\n")
+        # Send full digest scripts -- no truncation (Paul directive 2026-05-07)
+        lines.append(f"--- DIGEST {i} (most recent first) ---\n{script}\n")
     digests_text = "\n".join(lines)
 
     prompt = (
@@ -329,12 +329,12 @@ def dedup_transcript(
     if len(prior_content) > max_prior:
         prior_content = prior_content[:max_prior]
 
-    # Truncate very long transcripts — for dedup we need enough to identify
-    # repeated content, not the full transcript. The full transcript still
-    # goes to the script generator; we're only stripping redundancy here.
-    # Keep under 25k to ensure claude -p can complete within timeout.
-    max_transcript = 25_000
-    transcript_input = transcript[:max_transcript]
+    # Send the full transcript to dedup. The deduped result replaces
+    # ep.transcript_content in the script generator, so truncating here
+    # silently drops content the script writer never sees. Bug: 2026-05-06
+    # ep 2748 (31k chars). Timeout is handled by timeout_per_episode=300s.
+    # max_transcript removed -- send full transcript
+    transcript_input = transcript
 
     prompt = _build_dedup_prompt(
         transcript_input,
@@ -461,7 +461,7 @@ def dedup_episode_batch(
                 f"--- EPISODE: {ep.title} ---\n{result.deduped_transcript}\n"
             )
             prior_content += f"\n--- ALREADY SELECTED: {ep.title} ---\n"
-            prior_content += result.deduped_transcript[:10_000] + "\n"
+            prior_content += result.deduped_transcript + "\n"
 
     combined = "\n\n".join(novel_transcripts)
 

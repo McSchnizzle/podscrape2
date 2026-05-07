@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="/srv/projects/podcast-pipeline"
+PROJECT_ROOT="/srv/projects/podcast"
 cd "$PROJECT_ROOT"
 
 # shellcheck source=/dev/null

@@ -1181,7 +1181,7 @@ You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided 
             user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
 
 Transcript:
-{transcript_data['transcript'][:transcript_limit]}
+{transcript_data['transcript']}
 
 ---
 
@@ -1596,7 +1596,7 @@ You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided 
             user_prompt += f"""Episode {i}: "{transcript_data['title']}" (Published: {transcript_data['published_date']}, Relevance Score: {transcript_data['score']:.2f})
 
 Transcript:
-{transcript_data['transcript'][:transcript_limit]}
+{transcript_data['transcript']}
 
 ---
 
@@ -2605,7 +2605,7 @@ You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided 
         for i, transcript in enumerate(transcripts, 1):
             user_prompt += f"""
 Episode {i}: {transcript['title']} (Published: {transcript['published_date']})
-Transcript: {transcript['transcript'][:transcript_limit]}
+Transcript: {transcript['transcript']}
 
 """
 
