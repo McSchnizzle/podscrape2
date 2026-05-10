@@ -14,6 +14,8 @@ from pathlib import Path
 import argparse
 
 # Add src to path - handle both direct execution and orchestrator calls
+import time
+import random
 script_dir = Path(__file__).parent
 project_root = script_dir.parent
 src_dir = project_root / 'src'
@@ -222,10 +224,22 @@ class DiscoveryRunner:
 
             try:
                 # Fetch feed with requests (with timeout to prevent hanging)
+                # Rate-limit YouTube feeds to avoid intermittent 404s from burst detection
                 feed = None
+                is_youtube = 'youtube.com' in feed_url
+                if is_youtube and feed_idx > 1:
+                    delay = random.uniform(3.0, 5.0)
+                    self.logger.info(f"  Sleeping {delay:.1f}s (YouTube rate-limit guard)...")
+                    time.sleep(delay)
                 try:
                     self.logger.info(f"  Fetching feed (timeout: 12s)...")
                     resp = requests.get(feed_url, timeout=12, headers=headers)
+                    # Retry once on 404/500 for YouTube (transient rate-limiting)
+                    if is_youtube and resp.status_code in (404, 500):
+                        retry_delay = random.uniform(5.0, 8.0)
+                        self.logger.warning(f"  Got {resp.status_code}, retrying in {retry_delay:.1f}s...")
+                        time.sleep(retry_delay)
+                        resp = requests.get(feed_url, timeout=12, headers=headers)
                     resp.raise_for_status()
                     self.logger.info(f"  ✓ Fetch complete ({len(resp.content)} bytes)")
                     self.logger.info(f"  Parsing feed XML...")
