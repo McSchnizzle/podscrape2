@@ -25,11 +25,90 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+# kanban #430: split transcripts > MAX_CHUNK_CHARS into sentence-aligned
+# chunks so each chunk fits comfortably in a single claude -p round-trip.
+# 30,000 chars ~= 7,500 tokens, well under the model's context budget and
+# leaves plenty of room for prior_content + the system prompt.
+MAX_CHUNK_CHARS = 30_000
+
+# Sentence-end pattern: ., !, ? followed by whitespace. Catches the vast
+# majority of natural break points in podcast transcripts (which are
+# typically punctuated prose from whisper-style transcription). The
+# trailing whitespace is what we split AFTER so the chunk ends cleanly
+# on punctuation and the next chunk starts on the next sentence.
+_SENTENCE_END_RE = re.compile(r"[.!?](?:\s|$)")
+
+
+def split_transcript_into_chunks(
+    text: str,
+    max_chunk_chars: int = MAX_CHUNK_CHARS,
+) -> List[str]:
+    """Split a transcript into <=max_chunk_chars chunks at sentence boundaries.
+
+    Properties (kanban #430 AC1):
+    - Pure function. No I/O, no side effects.
+    - Returns ``[text]`` when ``len(text) <= max_chunk_chars`` (including the
+      empty-string case, which yields ``[""]``).
+    - Lossless: ``"".join(split_transcript_into_chunks(t)) == t`` for ANY
+      input.
+    - Splits at sentence boundaries (``.``, ``!``, ``?`` followed by
+      whitespace or end-of-string) whenever possible.
+    - Falls back to a hard cut at ``max_chunk_chars`` when no sentence
+      boundary exists in the window -- prevents one pathological run-on
+      sentence from producing a single giant chunk.
+
+    Args:
+        text: The transcript to split.
+        max_chunk_chars: Maximum chars per chunk. Defaults to
+            ``MAX_CHUNK_CHARS`` (30,000).
+
+    Returns:
+        List of chunk strings whose concatenation equals ``text``.
+    """
+    if max_chunk_chars <= 0:
+        raise ValueError(f"max_chunk_chars must be positive, got {max_chunk_chars}")
+
+    n = len(text)
+    if n <= max_chunk_chars:
+        return [text]
+
+    chunks: List[str] = []
+    start = 0
+    while start < n:
+        # If the remainder fits in one chunk, emit it and stop.
+        if n - start <= max_chunk_chars:
+            chunks.append(text[start:])
+            break
+
+        # Find the last sentence boundary in the window [start, start+max).
+        window_end = start + max_chunk_chars
+        window = text[start:window_end]
+        last_boundary_end = -1
+        for m in _SENTENCE_END_RE.finditer(window):
+            # m.end() is just past the trailing whitespace/end-of-window.
+            # We want to split AFTER that whitespace so the chunk ends on
+            # the punctuation+space and the next chunk starts clean.
+            last_boundary_end = m.end()
+
+        if last_boundary_end <= 0:
+            # No sentence boundary in the window -- hard split at the
+            # window edge. Still lossless.
+            split_at = window_end
+        else:
+            split_at = start + last_boundary_end
+
+        chunks.append(text[start:split_at])
+        start = split_at
+
+    return chunks
 
 
 @dataclass
@@ -334,56 +413,117 @@ def dedup_transcript(
     # silently drops content the script writer never sees. Bug: 2026-05-06
     # ep 2748 (31k chars). Timeout is handled by timeout_per_episode=300s.
     # max_transcript removed -- send full transcript
-    transcript_input = transcript
 
-    prompt = _build_dedup_prompt(
-        transcript_input,
-        prior_content,
-        episode_title,
-        evergreen_topics=evergreen_topics,
-    )
-    logger.info(
-        f"Pre-gen dedup: '{episode_title[:50]}' "
-        f"({original_chars:,} chars transcript, "
-        f"{len(prior_content):,} chars prior context)"
-    )
+    # kanban #430: chunk transcripts > MAX_CHUNK_CHARS so each round-trip
+    # to claude -p stays well inside context/output budgets. Each chunk
+    # is deduped against the SAME prior_content (so the "already covered"
+    # signal is identical for every chunk) and the cleaned chunks are
+    # concatenated in order. Lossless on the input side; preserves
+    # order on the output side.
+    chunks = split_transcript_into_chunks(transcript, MAX_CHUNK_CHARS)
+    is_chunked = len(chunks) > 1
 
-    try:
-        cleaned = _call_claude_p(prompt, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Pre-gen dedup timed out for '{episode_title[:50]}', using original")
-        return TranscriptDedupResult(
-            episode_id=episode_id,
-            episode_title=episode_title,
-            original_chars=original_chars,
-            deduped_chars=original_chars,
-            deduped_transcript=transcript,
-            skipped=True,
-            skip_reason="timeout",
+    if is_chunked:
+        logger.info(
+            f"Pre-gen dedup: '{episode_title[:50]}' "
+            f"({original_chars:,} chars transcript, "
+            f"{len(prior_content):,} chars prior context) "
+            f"-> split into {len(chunks)} chunks"
         )
-    except Exception as e:
-        logger.warning(f"Pre-gen dedup failed for '{episode_title[:50]}': {e}")
-        return TranscriptDedupResult(
-            episode_id=episode_id,
-            episode_title=episode_title,
-            original_chars=original_chars,
-            deduped_chars=original_chars,
-            deduped_transcript=transcript,
-            skipped=True,
-            skip_reason=str(e),
+    else:
+        logger.info(
+            f"Pre-gen dedup: '{episode_title[:50]}' "
+            f"({original_chars:,} chars transcript, "
+            f"{len(prior_content):,} chars prior context)"
         )
 
-    # Handle the [NO_NEW_CONTENT] sentinel
-    if "[NO_NEW_CONTENT]" in cleaned:
-        logger.info(f"Pre-gen dedup: '{episode_title[:50]}' has no new content")
-        cleaned = ""
+    cleaned_parts: List[str] = []
+    for i, chunk in enumerate(chunks, start=1):
+        chunk_title = (
+            f"{episode_title} [part {i}/{len(chunks)}]"
+            if is_chunked
+            else episode_title
+        )
+        prompt = _build_dedup_prompt(
+            chunk,
+            prior_content,
+            chunk_title,
+            evergreen_topics=evergreen_topics,
+        )
+        try:
+            cleaned_chunk = _call_claude_p(prompt, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # Fail loudly: ANY chunk failure aborts the whole dedup and
+            # surfaces a skipped result. We do NOT silently emit a
+            # partial dedup (kanban #430 AC3).
+            reason = (
+                f"chunk {i}/{len(chunks)} timeout"
+                if is_chunked
+                else "timeout"
+            )
+            logger.warning(
+                f"Pre-gen dedup timed out for '{episode_title[:50]}' "
+                f"({reason}), using original"
+            )
+            return TranscriptDedupResult(
+                episode_id=episode_id,
+                episode_title=episode_title,
+                original_chars=original_chars,
+                deduped_chars=original_chars,
+                deduped_transcript=transcript,
+                skipped=True,
+                skip_reason=reason,
+            )
+        except Exception as e:
+            reason = (
+                f"chunk {i}/{len(chunks)} failed: {e}"
+                if is_chunked
+                else str(e)
+            )
+            logger.warning(
+                f"Pre-gen dedup failed for '{episode_title[:50]}': {reason}"
+            )
+            return TranscriptDedupResult(
+                episode_id=episode_id,
+                episode_title=episode_title,
+                original_chars=original_chars,
+                deduped_chars=original_chars,
+                deduped_transcript=transcript,
+                skipped=True,
+                skip_reason=reason,
+            )
+
+        # Handle the [NO_NEW_CONTENT] sentinel per-chunk: that chunk
+        # contributes nothing to the cleaned output but processing continues.
+        if "[NO_NEW_CONTENT]" in cleaned_chunk:
+            if is_chunked:
+                logger.info(
+                    f"Pre-gen dedup: '{episode_title[:50]}' chunk "
+                    f"{i}/{len(chunks)} has no new content"
+                )
+            cleaned_parts.append("")
+        else:
+            cleaned_parts.append(cleaned_chunk)
+
+    # Reassemble. Use "\n\n" between non-empty chunks so the script
+    # generator sees a natural paragraph break at chunk seams; drop
+    # empty parts so [NO_NEW_CONTENT] chunks don't introduce blank gaps.
+    non_empty = [p for p in cleaned_parts if p]
+    cleaned = "\n\n".join(non_empty) if is_chunked else (cleaned_parts[0] if cleaned_parts else "")
+
+    if not cleaned and is_chunked:
+        logger.info(
+            f"Pre-gen dedup: '{episode_title[:50]}' has no new content "
+            f"(all {len(chunks)} chunks empty)"
+        )
 
     deduped_chars = len(cleaned)
-    logger.info(
-        f"Pre-gen dedup: '{episode_title[:50]}' "
-        f"{original_chars:,} -> {deduped_chars:,} chars "
-        f"({deduped_chars/original_chars:.0%} retained)"
-    )
+    if original_chars > 0:
+        logger.info(
+            f"Pre-gen dedup: '{episode_title[:50]}' "
+            f"{original_chars:,} -> {deduped_chars:,} chars "
+            f"({deduped_chars/original_chars:.0%} retained)"
+        )
 
     return TranscriptDedupResult(
         episode_id=episode_id,
