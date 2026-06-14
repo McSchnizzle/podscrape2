@@ -9,7 +9,7 @@ from datetime import datetime, date
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 
-from .audio_generator import AudioGenerator, AudioMetadata
+from .audio_generator import AudioGenerator, AudioMetadata, NoVoiceConfigError
 from .metadata_generator import MetadataGenerator, EpisodeMetadata
 from .audio_manager import AudioManager
 from ..database.models import Digest, get_digest_repo
@@ -137,6 +137,16 @@ class CompleteAudioProcessor:
 
                 logger.info(f"Validated MP3: {final_mp3_path.stat().st_size} bytes")
                 results['audio_metadata'] = audio_metadata
+
+            except NoVoiceConfigError as e:
+                # Topic has no voice configuration — treat as SKIP, not a hard failure.
+                # One unconfigurable topic must never red-flag the entire TTS phase.
+                skip_reason = str(e)
+                logger.warning(f"Skipping digest {digest.id} (topic: {digest.topic}): {skip_reason}")
+                results['success'] = True
+                results['skipped'] = True
+                results['skip_reason'] = skip_reason
+                return results
 
             except Exception as e:
                 error_msg = f"TTS audio generation failed: {e}"

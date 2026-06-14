@@ -489,10 +489,21 @@ class PipelineOrchestrator:
             tts_result = self.run_phase_script('scripts/run_tts.py')
 
             if not tts_result.get('success'):
-                self.logger.warning(f"TTS phase failed: {tts_result.get('error')}")
+                # tts_result may have a top-level 'error' (runner-level exception) or
+                # per-digest 'errors' nested inside 'audio_results'.  Surface whichever
+                # is present so the log reads "TTS phase failed: <real detail>" instead
+                # of "TTS phase failed: None".
+                tts_error_detail = tts_result.get('error') or "; ".join(
+                    msg
+                    for r in tts_result.get('audio_results', [])
+                    if not r.get('success')
+                    for msg in (r.get('errors') or ([r.get('error')] if r.get('error') else []))
+                    if msg
+                ) or 'no detail available'
+                self.logger.warning(f"TTS phase failed: {tts_error_detail}")
                 self.logger.info("📡 Continuing to publishing phase to publish any completed digests...")
                 self._record_phase_event('tts', 'failed', {
-                    'error': tts_result.get('error')
+                    'error': tts_error_detail
                 })
                 audio_generated = 0
             else:

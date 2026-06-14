@@ -38,6 +38,15 @@ class AudioGenerationError(Exception):
     """Raised when audio generation fails"""
     pass
 
+class NoVoiceConfigError(AudioGenerationError):
+    """Raised when a topic has no voice configuration (no voice_id in DB or config/topics.json).
+
+    Treated as a SKIP, not a hard failure: one unconfigurable topic must not fail the
+    entire TTS phase.  Callers should catch this separately and mark the digest as
+    skipped so downstream phases continue unaffected.
+    """
+    pass
+
 class ElevenLabsQuotaExceededError(AudioGenerationError):
     """Raised when ElevenLabs quota is exhausted - triggers fallback to OpenAI TTS"""
     pass
@@ -332,19 +341,43 @@ class AudioGenerator:
             return None
 
     def _get_voice_id_for_topic(self, topic: str) -> str:
-        """Get voice ID for a specific topic"""
+        """Get voice ID for a specific topic.
+
+        First checks the database (topics.voice_1_id), then falls back to the
+        legacy config/topics.json file.  Raises NoVoiceConfigError (a subclass of
+        AudioGenerationError) when no voice is found anywhere so callers can treat
+        the digest as a SKIP rather than a hard failure.
+        """
+        # Primary: database lookup (database-first architecture since v1.52)
+        try:
+            from src.database.models import get_topic_repo
+            topic_repo = get_topic_repo()
+            all_topics = topic_repo.get_all_topics()
+            db_topic = next((t for t in all_topics if t.name == topic), None)
+            if db_topic and getattr(db_topic, 'voice_1_id', None):
+                return db_topic.voice_1_id
+        except Exception as db_err:
+            logger.debug(f"DB voice lookup failed for '{topic}': {db_err}")
+
+        # Fallback: legacy config/topics.json
         try:
             with open("config/topics.json", 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            
+
             for topic_config in config.get('topics', []):
                 if topic_config['name'] == topic:
                     return topic_config['voice_id']
-            
-            raise AudioGenerationError(f"No voice configuration found for topic: {topic}")
-            
-        except Exception as e:
-            raise AudioGenerationError(f"Failed to get voice ID for topic '{topic}': {e}")
+
+        except FileNotFoundError:
+            logger.debug("config/topics.json not found; skipping JSON fallback")
+        except Exception as json_err:
+            logger.debug(f"config/topics.json lookup failed for '{topic}': {json_err}")
+
+        # Nothing found — raise a skippable error, not a hard failure
+        raise NoVoiceConfigError(
+            f"No voice configuration found for topic '{topic}' "
+            f"(checked database and config/topics.json)"
+        )
 
     def _generate_chunked_narrative_audio(
         self,
