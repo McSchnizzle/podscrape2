@@ -2400,13 +2400,18 @@ Thank you for your understanding, and we'll see you tomorrow!
         qualifying_digests = [d for d in digests if d.episode_count > 0]
         
         if not qualifying_digests:
-            logger.info("No qualifying episodes for any topics, attempting general summary")
-            try:
-                general_digest = self.create_general_summary(digest_date, start_date, end_date)
-                if general_digest:
-                    digests.append(general_digest)
-            except Exception as e:
-                logger.error(f"Failed to create general summary: {e}")
+            # v3.55 (kanban #1617): General Summary fallback is DISABLED.
+            # The fallback had no voice configuration and could never be
+            # converted to audio, so it would perpetually orphan in
+            # pending-TTS and trip false-alarm Argus failures.
+            # When Paul wants a voiced general-summary, wire it as a normal
+            # topic with its own voice config — don't use this fallback.
+            logger.info(
+                "No qualifying episodes for any configured topic — "
+                "general summary fallback disabled (no voice config). "
+                "Nothing will be digested for %s.",
+                digest_date,
+            )
         
         logger.info(f"Created {len(digests)} digests for {digest_date}")
 

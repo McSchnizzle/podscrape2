@@ -1122,6 +1122,11 @@ class DigestRepository:
         Filters out 0-episode digests since they have no content to convert to audio.
         Orders by episode_count DESC so digests with content are processed first.
         Accepts digests with either script_path or script_content (database-first).
+
+        v3.55 (kanban #1617): 'General Summary' topic is permanently excluded.
+        It has no voice configuration and can never be converted to audio; any
+        surviving rows from before the disable are silently ignored here so they
+        can never perpetually orphan in pending-TTS.
         """
         from sqlalchemy import or_
         with self.db.get_session() as session:
@@ -1132,6 +1137,7 @@ class DigestRepository:
                 ))\
                 .filter(DigestModel.mp3_path.is_(None))\
                 .filter(DigestModel.episode_count > 0)\
+                .filter(DigestModel.topic != "General Summary")\
                 .order_by(DigestModel.episode_count.desc(), DigestModel.digest_date.asc())\
                 .all()
             return [self._model_to_digest(model) for model in digest_models]
