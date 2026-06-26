@@ -99,3 +99,10 @@ yarn-error.log*
 config/channels.json
 config/topics.json
 .vercel
+
+# Next.js public/ must NEVER contain a static daily-digest.xml -- it shadows the
+# next.config.js rewrite to the dynamic /api/rss/daily-digest route and silently
+# freezes the public RSS feed (regressed 2026-06-14, also Oct 2025). Keep the feed
+# dynamic-only. (test-feed.xml is a stray test artifact, ignore it too.)
+web_ui_hosted/public/daily-digest.xml
+web_ui_hosted/public/test-feed.xml
