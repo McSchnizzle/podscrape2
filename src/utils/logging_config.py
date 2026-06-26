@@ -399,11 +399,21 @@ def cleanup_old_logs(log_dir: str = None, days_to_keep: int = 3):
 
     cleaned_count = 0
     for log_file in log_dir.glob('*.log*'):
-        if log_file.stat().st_mtime < cutoff_time:
+        try:
+            mtime = log_file.stat().st_mtime
+        except FileNotFoundError:
+            # Race: a concurrent cleanup (e.g. the audio standalone cron, which
+            # also fires at 21:00) deleted this file between glob() and stat().
+            # Skip it -- log cleanup must never crash the pipeline at startup.
+            continue
+        if mtime < cutoff_time:
             try:
                 log_file.unlink()
                 cleaned_count += 1
                 logger.info(f"Cleaned up old log: {log_file.name}")
+            except FileNotFoundError:
+                # Already removed by a concurrent cleanup; nothing to do.
+                pass
             except Exception as e:
                 logger.warning(f"Failed to delete old log file {log_file}: {e}")
 
