@@ -2265,11 +2265,18 @@ Thank you for your understanding, and we'll see you tomorrow!
                 f"{len(episodes)} episodes: {e}; will attempt expansion"
             )
 
+        # Persistent exclusion set: tracks ALL episode IDs seen by the expansion
+        # loop, including those rejected as redundant. MUST live outside the while
+        # loop — a per-iteration re-init from `episodes` would silently discard
+        # rejected IDs, causing the same episode to be re-fetched indefinitely.
+        # (Commit be5ece5 tried to fix this via existing_ids.update() inside the
+        # loop, but existing_ids was re-created from `episodes` at the top of
+        # every iteration, so the update was always thrown away.)
+        excluded_from_expansion = {ep.id for ep in episodes if ep.id is not None}
         while len(script_content) < TARGET_CHARS and len(episodes) < MAX_TRANSCRIPTS:
-            existing_ids = {ep.id for ep in episodes if ep.id is not None}
             extras = self._get_extra_scored_episodes(
                 topic=topic,
-                exclude_ids=existing_ids,
+                exclude_ids=excluded_from_expansion,
                 limit=1,
             )
             if not extras:
@@ -2278,6 +2285,10 @@ Thank you for your understanding, and we'll see you tomorrow!
                     f"(current: {len(episodes)} episodes, {len(script_content)} chars)"
                 )
                 break
+
+            # Record all fetched IDs immediately (before the redundancy filter)
+            # so they're excluded from every subsequent fetch, even if rejected.
+            excluded_from_expansion.update(ep.id for ep in extras if ep.id is not None)
 
             # v3.48: Apply pre-deduped transcript if available in cache
             for ep in extras:
@@ -2288,14 +2299,12 @@ Thank you for your understanding, and we'll see you tomorrow!
                     )
 
             # Skip episodes that were fully redundant in dedup
-            fetched_ids = {ep.id for ep in extras}
             extras = [ep for ep in extras if ep.id not in deduped_transcript_cache or deduped_transcript_cache.get(ep.id)]
             if not extras:
                 logger.info(
                     f"Expansion episode was fully redundant (pre-deduped to empty), "
                     f"trying next"
                 )
-                existing_ids.update(fetched_ids)  # exclude the redundant ep on next fetch
                 continue
 
             episodes = list(episodes) + list(extras)
