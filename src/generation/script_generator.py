@@ -2288,12 +2288,14 @@ Thank you for your understanding, and we'll see you tomorrow!
                     )
 
             # Skip episodes that were fully redundant in dedup
+            fetched_ids = {ep.id for ep in extras}
             extras = [ep for ep in extras if ep.id not in deduped_transcript_cache or deduped_transcript_cache.get(ep.id)]
             if not extras:
                 logger.info(
                     f"Expansion episode was fully redundant (pre-deduped to empty), "
                     f"trying next"
                 )
+                existing_ids.update(fetched_ids)  # exclude the redundant ep on next fetch
                 continue
 
             episodes = list(episodes) + list(extras)
