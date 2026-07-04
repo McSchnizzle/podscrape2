@@ -792,6 +792,20 @@ class EpisodeRepository:
                 .all()
             return [self._model_to_episode(model) for model in episode_models]
 
+    def count_scored_since(self, cutoff: datetime) -> int:
+        """Count episodes whose scored_at timestamp is at or after ``cutoff``.
+
+        Used by the orchestrator to report an accurate scored-episode count even
+        when the scoring/audio phase runs out-of-band on a dedicated cron (the
+        ``--skip-audio`` nightly path scores nothing in-run, so a bare in-run
+        count is a misleading ``0`` — see kanban #2423).
+        """
+        with self.db.get_session() as session:
+            return session.query(EpisodeModel)\
+                .filter(EpisodeModel.scored_at.isnot(None))\
+                .filter(EpisodeModel.scored_at >= cutoff)\
+                .count()
+
     def get_failed_episodes(self) -> List[Episode]:
         """Get episodes that have failed processing"""
         with self.db.get_session() as session:

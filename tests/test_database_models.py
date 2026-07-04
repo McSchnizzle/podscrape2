@@ -217,6 +217,43 @@ class TestEpisodeRepository:
         assert failed_episode.failure_count == 3
         assert failed_episode.status == 'failed'
 
+    def test_count_scored_since(self, episode_repo):
+        """count_scored_since counts only episodes scored at/after the cutoff.
+
+        Regression guard for kanban #2423: the nightly orchestrator skips the
+        in-run scoring phase (--skip-audio), so it needs an out-of-band count
+        from the DB to report a truthful "Episodes Scored" number instead of a
+        misleading 0.
+        """
+        now = datetime.now(UTC)
+        # Two episodes scored recently (within 24h), one scored long ago,
+        # and one never scored.
+        fixtures = [
+            ("scored-recent-1", now - timedelta(hours=1)),
+            ("scored-recent-2", now - timedelta(hours=23)),
+            ("scored-stale", now - timedelta(days=3)),
+            ("never-scored", None),
+        ]
+        for guid, scored_at in fixtures:
+            episode_repo.create(Episode(
+                episode_guid=guid,
+                feed_id=1,
+                title=f"Episode {guid}",
+                published_date=now,
+                audio_url=f"https://example.com/{guid}.mp3",
+                status='scored' if scored_at else 'pending',
+                scores={"AI and Technology": 0.9} if scored_at else None,
+                scored_at=scored_at,
+            ))
+
+        cutoff = now - timedelta(hours=24)
+        # Only the two recent ones fall in the window; stale + never-scored excluded.
+        assert episode_repo.count_scored_since(cutoff) == 2
+        # A wide window catches the stale one too (3 recent-ish within 4 days).
+        assert episode_repo.count_scored_since(now - timedelta(days=4)) == 3
+        # A future cutoff catches nothing.
+        assert episode_repo.count_scored_since(now + timedelta(hours=1)) == 0
+
     def test_get_recent_episodes(self, episode_repo):
         """Test getting recent episodes"""
         # Create episodes with different dates

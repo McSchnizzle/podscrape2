@@ -597,6 +597,24 @@ class PipelineOrchestrator:
         except Exception as e:
             return self._log_failure(start_time, f"Pipeline failed: {e}")
 
+    def _count_recently_scored_episodes(self, hours: int = 24) -> int:
+        """Count episodes scored in the trailing ``hours`` window.
+
+        Scoring happens in the audio phase, which the nightly orchestrator skips
+        (--skip-audio) because a dedicated 3-hourly cron owns it. Without this the
+        final summary always logs "Episodes Scored: 0", which has repeatedly been
+        misread as a regression (kanban #2423). Best-effort: any DB failure just
+        returns 0 so it never blocks pipeline completion.
+        """
+        try:
+            from datetime import timedelta
+            from src.database.models import get_episode_repo
+            cutoff = datetime.now(UTC) - timedelta(hours=hours)
+            return get_episode_repo().count_scored_since(cutoff)
+        except Exception as exc:
+            self.logger.debug(f"Could not count recently-scored episodes: {exc}")
+            return 0
+
     def _log_success(self, start_time, episodes_found, scored_episodes, digests, audio_results):
         """Log successful pipeline completion"""
 
@@ -606,16 +624,33 @@ class PipelineOrchestrator:
         self.logger.info("🎉 PIPELINE EXECUTION COMPLETE")
         self.logger.info("="*100)
 
+        # When audio (and therefore scoring) runs out-of-band on the dedicated
+        # cron (--skip-audio), the in-run `scored_episodes` list is always empty,
+        # so a bare "Episodes Scored: 0" is misleading and has repeatedly been
+        # mistaken for a pipeline regression (kanban #2423). Report the true count
+        # of episodes scored in the trailing 24h from the database instead.
+        in_run_scored = len(scored_episodes)
+        out_of_band_scored = 0
+        if self.skip_audio and in_run_scored == 0:
+            out_of_band_scored = self._count_recently_scored_episodes()
+
         self.logger.info(f"⏱️  Total Runtime: {elapsed}")
         self.logger.info(f"📻 Episodes Found: {episodes_found}")
-        self.logger.info(f"📊 Episodes Scored: {len(scored_episodes)}")
+        if self.skip_audio and in_run_scored == 0:
+            self.logger.info(
+                f"📊 Episodes Scored: {out_of_band_scored} "
+                f"(out-of-band on audio cron, last 24h; audio phase skipped in-run)"
+            )
+        else:
+            self.logger.info(f"📊 Episodes Scored: {in_run_scored}")
         self.logger.info(f"📝 Digests Generated: {len(digests)}")
         self.logger.info(f"🎵 Audio Files Generated: {len([r for r in audio_results if r.get('success')])}")
 
         summary = {
             'success': True,
             'episodes_found': episodes_found,
-            'episodes_scored': len(scored_episodes),
+            'episodes_scored': in_run_scored,
+            'episodes_scored_out_of_band': out_of_band_scored,
             'digests_generated': len(digests),
             'audio_generated': len([r for r in audio_results if r.get('success')])
         }
