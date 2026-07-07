@@ -19,6 +19,9 @@ from src.utils import config as config_module
 @pytest.fixture(autouse=True)
 def clear_env_vars(monkeypatch):
     """Clear relevant environment variables before each test for isolation."""
+    # Prevent load_env() from clobbering test env vars with real .env values
+    monkeypatch.setattr(env_config, '_DOTENV_AVAILABLE', False)
+
     # Database-related variables
     database_keys = [
         "DATABASE_URL",
@@ -166,12 +169,12 @@ def test_require_database_url_requires_values():
 
 
 def test_build_from_supabase_env_handles_invalid_host(monkeypatch):
-    """Invalid SUPABASE_URL values should return None."""
+    """Invalid SUPABASE_URL values should raise MissingEnvError."""
     monkeypatch.setenv("SUPABASE_URL", "https://example.com")
     monkeypatch.setenv("SUPABASE_PASSWORD", "pw")
 
-    helper = getattr(env_config, "_build_from_supabase_env")
-    assert helper() is None
+    with pytest.raises(env_config.MissingEnvError):
+        env_config._build_from_supabase_env()
 
 
 # =============================================================================
@@ -187,9 +190,10 @@ def test_load_env_invokes_dotenv(monkeypatch):
         os.environ['TEST_ENV_VAR'] = 'value'
         return True
 
-    # Mock the dotenv loading in env_config module
+    # Re-enable dotenv for this specific test, then mock it
     import src.config.env as env_module
-    monkeypatch.setattr(env_module, 'load_dotenv', fake_load_dotenv)
+    monkeypatch.setattr(env_module, '_DOTENV_AVAILABLE', True)
+    monkeypatch.setattr(env_module, '_load_dotenv', fake_load_dotenv)
 
     env_config.load_env()
 

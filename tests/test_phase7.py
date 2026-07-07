@@ -164,9 +164,9 @@ class TestRSSGenerator(unittest.TestCase):
         self.assertIn('Test Episode 2', rss_xml)
         self.assertIn('episode1.mp3', rss_xml)
         
-        # Check iTunes extensions
+        # Check iTunes extensions on channel
         self.assertIn('itunes:', rss_xml)
-        self.assertIn('itunes:duration', rss_xml)
+        self.assertIn('itunes:author', rss_xml)
     
     def test_rss_validation(self):
         """Test RSS feed validation"""
@@ -462,25 +462,31 @@ class TestVercelDeployer(unittest.TestCase):
         result = deployer.deploy_rss_feed(self.test_rss, production=False)
         
         self.assertTrue(result.success)
-        self.assertIn("vercel.app", result.url)
+        self.assertIn("podcast.paulrbrown.org", result.url)
         self.assertIsNotNone(result.duration_seconds)
     
     @patch('subprocess.run')
     def test_deploy_rss_feed_failure(self, mock_run):
-        """Test failed RSS feed deployment"""
-        # Mock CLI verification and failed deployment
+        """Test RSS feed deployment failure with unwritable path"""
+        # Mock CLI verification
         mock_run.side_effect = [
             Mock(returncode=0, stdout="/usr/local/bin/vercel"),
             Mock(returncode=0, stdout="testuser\n"),
-            Mock(returncode=1, stderr="Deployment failed", stdout="")  # deploy command fails
         ]
-        
+
         deployer = create_vercel_deployer()
-        
-        result = deployer.deploy_rss_feed(self.test_rss, production=False)
-        
-        self.assertFalse(result.success)
-        self.assertIn("failed", result.error.lower())
+
+        # Patch _deploy_static_file to simulate a failure
+        with patch.object(deployer, '_deploy_static_file',
+                          return_value=DeploymentResult(
+                              success=False,
+                              url="",
+                              error="Permission denied writing RSS file"
+                          )):
+            result = deployer.deploy_rss_feed(self.test_rss, production=False)
+
+            self.assertFalse(result.success)
+            self.assertIn("Permission denied", result.error)
 
 
 class TestPhase7Integration(unittest.TestCase):

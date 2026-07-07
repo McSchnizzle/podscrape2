@@ -27,6 +27,7 @@ from typing import Optional, List, Dict, Any, Union, TypeVar, Type
 from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text, func
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
@@ -241,13 +242,19 @@ class DatabaseManager:
 
         # SQLite (used in tests) does not support pool_size / max_overflow
         is_sqlite = self.database_url.startswith("sqlite://")
+        is_memory_sqlite = is_sqlite and ":memory:" in self.database_url
 
         engine_kwargs: dict = {
             "pool_pre_ping": not is_sqlite,
             "pool_recycle": pool_recycle,
             "echo": False,  # Set to True for SQL debugging
         }
-        if not is_sqlite:
+        if is_memory_sqlite:
+            # In-memory SQLite requires a single connection pool so data survives
+            # across sessions within the same DatabaseManager (used by tests).
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            engine_kwargs["poolclass"] = StaticPool
+        elif not is_sqlite:
             engine_kwargs["pool_size"] = pool_size
             engine_kwargs["max_overflow"] = max_overflow
 
