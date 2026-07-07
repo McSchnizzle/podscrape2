@@ -34,7 +34,7 @@ Special characters: áéíóú ñ"""
         )
 
         # Retrieve and verify
-        retrieved_episode = episode_repo.get_by_guid(sample_episode.episode_guid)
+        retrieved_episode = episode_repo.get_by_episode_guid(sample_episode.episode_guid)
         assert retrieved_episode is not None
         assert retrieved_episode.transcript_content == test_transcript
         assert retrieved_episode.transcript_word_count == 100
@@ -56,7 +56,7 @@ Special characters: áéíóú ñ"""
         )
 
         # Retrieve and verify
-        retrieved_episode = episode_repo.get_by_guid(sample_episode.episode_guid)
+        retrieved_episode = episode_repo.get_by_episode_guid(sample_episode.episode_guid)
         assert retrieved_episode.transcript_content == large_transcript
         assert len(retrieved_episode.transcript_content) > 20000
 
@@ -133,7 +133,7 @@ class TestDatabaseMigrationIntegration:
         digest_repo.update_script(digest_id, None, 30, script_content)
 
         # Verify both can be retrieved without file system
-        episode = episode_repo.get_by_guid(sample_episode.episode_guid)
+        episode = episode_repo.get_by_episode_guid(sample_episode.episode_guid)
         digest = digest_repo.get_by_id(digest_id)
 
         assert episode.transcript_content == transcript_content
@@ -169,7 +169,7 @@ Script with special characters:
         digest_repo.update_script(digest_id, None, 80, unicode_script)
 
         # Retrieve and verify unicode handling
-        episode = episode_repo.get_by_guid(sample_episode.episode_guid)
+        episode = episode_repo.get_by_episode_guid(sample_episode.episode_guid)
         digest = digest_repo.get_by_id(digest_id)
 
         assert episode.transcript_content == unicode_transcript

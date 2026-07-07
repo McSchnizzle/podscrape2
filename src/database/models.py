@@ -239,14 +239,19 @@ class DatabaseManager:
             {"default": 3600}
         )["default"]
 
-        self.engine = create_engine(
-            self.database_url,
-            pool_pre_ping=True,
-            pool_recycle=pool_recycle,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            echo=False  # Set to True for SQL debugging
-        )
+        # SQLite (used in tests) does not support pool_size / max_overflow
+        is_sqlite = self.database_url.startswith("sqlite://")
+
+        engine_kwargs: dict = {
+            "pool_pre_ping": not is_sqlite,
+            "pool_recycle": pool_recycle,
+            "echo": False,  # Set to True for SQL debugging
+        }
+        if not is_sqlite:
+            engine_kwargs["pool_size"] = pool_size
+            engine_kwargs["max_overflow"] = max_overflow
+
+        self.engine = create_engine(self.database_url, **engine_kwargs)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         # Logging removed to prevent circular dependency with DatabaseLogHandler
         # logger.info(f"Database manager initialized with PostgreSQL")

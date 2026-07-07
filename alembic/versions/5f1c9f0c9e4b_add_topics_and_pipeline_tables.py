@@ -70,6 +70,32 @@ def upgrade() -> None:
     op.create_index('ix_pipeline_runs_started', 'pipeline_runs', ['started_at'])
     op.create_index('ix_pipeline_runs_workflow', 'pipeline_runs', ['workflow_run_id'])
 
+    # pipeline_logs table (was previously created only via supabase_schema.sql)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS pipeline_logs (
+            id SERIAL NOT NULL,
+            run_id VARCHAR(128) NOT NULL,
+            phase VARCHAR(64) NOT NULL,
+            timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+            level VARCHAR(16) NOT NULL,
+            logger_name VARCHAR(256) NOT NULL,
+            module VARCHAR(256),
+            function VARCHAR(256),
+            line INTEGER,
+            message TEXT NOT NULL,
+            extra JSONB,
+            PRIMARY KEY (id)
+        );
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_pipeline_logs_run_phase_time
+        ON pipeline_logs (run_id, phase, timestamp);
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_pipeline_logs_level
+        ON pipeline_logs (level);
+    """)
+
     op.create_table(
         'digest_episode_links',
         sa.Column('id', sa.Integer(), primary_key=True),
@@ -89,6 +115,10 @@ def downgrade() -> None:
     op.drop_index('ix_digest_episode_episode', table_name='digest_episode_links')
     op.drop_index('ix_digest_episode_digest', table_name='digest_episode_links')
     op.drop_table('digest_episode_links')
+
+    op.execute('DROP INDEX IF EXISTS ix_pipeline_logs_level;')
+    op.execute('DROP INDEX IF EXISTS ix_pipeline_logs_run_phase_time;')
+    op.execute('DROP TABLE IF EXISTS pipeline_logs;')
 
     op.drop_index('ix_pipeline_runs_workflow', table_name='pipeline_runs')
     op.drop_index('ix_pipeline_runs_started', table_name='pipeline_runs')
