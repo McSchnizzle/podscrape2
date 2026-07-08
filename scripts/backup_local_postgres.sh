@@ -21,20 +21,27 @@ mkdir -p "$BACKUP_DIR"
 
 STAMP=$(date +%Y%m%d_%H%M%S)
 OUT="$BACKUP_DIR/podcast-${STAMP}.sql.gz"
+TMP="${OUT}.partial"
+trap 'rm -f "$TMP"' EXIT
 
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "ERROR: container ${CONTAINER_NAME} is not running; no backup taken" >&2
     exit 1
 fi
 
-docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" --clean --if-exists | gzip > "$OUT"
+# Write to a temp path and move into place only after the dump verifies, so a
+# disk-full or mid-dump failure can never masquerade as the latest good backup.
+docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" --clean --if-exists | gzip > "$TMP"
+gzip -t "$TMP"
 
 # A dump of the live DB should never be trivially small; guard against silent truncation.
-SIZE=$(stat -c%s "$OUT")
+SIZE=$(stat -c%s "$TMP")
 if [ "$SIZE" -lt 1024 ]; then
-    echo "ERROR: backup ${OUT} is suspiciously small (${SIZE} bytes)" >&2
+    echo "ERROR: backup ${TMP} is suspiciously small (${SIZE} bytes)" >&2
     exit 1
 fi
+
+mv "$TMP" "$OUT"
 
 find "$BACKUP_DIR" -name 'podcast-*.sql.gz' -mtime +"$RETENTION_DAYS" -delete
 

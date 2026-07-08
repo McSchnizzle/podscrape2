@@ -34,6 +34,20 @@ fi
 if [ "${1:-}" = "--reset" ]; then
     echo "🗑  Removing existing container..."
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    if [ -d "$DB_DATA_DIR" ] && [ -n "$(ls -A "$DB_DATA_DIR" 2>/dev/null)" ]; then
+        echo "⚠️  Data dir $DB_DATA_DIR is kept; the recreated container reuses the existing"
+        echo "    PGDATA (POSTGRES_* init env is ignored). Use --reset-data to wipe it too."
+    fi
+elif [ "${1:-}" = "--reset-data" ]; then
+    echo "🗑  Removing existing container AND data dir $DB_DATA_DIR..."
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    read -r -p "Really delete all data in $DB_DATA_DIR? [y/N] " CONFIRM
+    if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+        rm -rf "$DB_DATA_DIR"
+    else
+        echo "Aborted; data dir kept."
+        exit 1
+    fi
 fi
 
 # Check if container already exists
