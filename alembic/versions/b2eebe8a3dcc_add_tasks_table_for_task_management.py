@@ -11,6 +11,14 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_all_policy,
+    drop_policy,
+    disable_rls,
+)
+
 
 # revision identifiers, used by Alembic.
 revision: str = 'b2eebe8a3dcc'
@@ -52,34 +60,18 @@ def upgrade() -> None:
     op.create_index('ix_tasks_last_update_date', 'tasks', ['last_update_date'], postgresql_ops={'last_update_date': 'DESC'})
 
     # Enable RLS on tasks table
-    op.execute("ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;")
-
-    # Create policy for service role (full access for backend operations)
-    op.execute("""
-        CREATE POLICY "service_role_policy" ON tasks
-        FOR ALL TO service_role
-        USING (true)
-        WITH CHECK (true);
-    """)
-
-    # Create policy for authenticated users (full access for web UI)
-    op.execute("""
-        CREATE POLICY "authenticated_users_policy" ON tasks
-        FOR ALL TO authenticated
-        USING (true)
-        WITH CHECK (true);
-    """)
+    enable_rls("tasks")
+    create_service_role_policy("tasks")
+    create_authenticated_all_policy("tasks")
 
 
 def downgrade() -> None:
     """Drop tasks table and related objects."""
 
     # Drop policies first
-    op.execute('DROP POLICY IF EXISTS "service_role_policy" ON tasks;')
-    op.execute('DROP POLICY IF EXISTS "authenticated_users_policy" ON tasks;')
-
-    # Disable RLS
-    op.execute("ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;")
+    drop_policy("tasks", "service_role_policy")
+    drop_policy("tasks", "authenticated_users_policy")
+    disable_rls("tasks")
 
     # Drop indexes
     op.drop_index('ix_tasks_last_update_date', table_name='tasks')

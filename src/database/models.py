@@ -27,6 +27,7 @@ from typing import Optional, List, Dict, Any, Union, TypeVar, Type
 from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text, func
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
 
@@ -239,14 +240,25 @@ class DatabaseManager:
             {"default": 3600}
         )["default"]
 
-        self.engine = create_engine(
-            self.database_url,
-            pool_pre_ping=True,
-            pool_recycle=pool_recycle,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            echo=False  # Set to True for SQL debugging
-        )
+        # SQLite (used in tests) does not support pool_size / max_overflow
+        is_sqlite = self.database_url.startswith("sqlite://")
+        is_memory_sqlite = is_sqlite and ":memory:" in self.database_url
+
+        engine_kwargs: dict = {
+            "pool_pre_ping": not is_sqlite,
+            "pool_recycle": pool_recycle,
+            "echo": False,  # Set to True for SQL debugging
+        }
+        if is_memory_sqlite:
+            # In-memory SQLite requires a single connection pool so data survives
+            # across sessions within the same DatabaseManager (used by tests).
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            engine_kwargs["poolclass"] = StaticPool
+        elif not is_sqlite:
+            engine_kwargs["pool_size"] = pool_size
+            engine_kwargs["max_overflow"] = max_overflow
+
+        self.engine = create_engine(self.database_url, **engine_kwargs)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         # Logging removed to prevent circular dependency with DatabaseLogHandler
         # logger.info(f"Database manager initialized with PostgreSQL")
@@ -791,6 +803,20 @@ class EpisodeRepository:
                 .limit(limit)\
                 .all()
             return [self._model_to_episode(model) for model in episode_models]
+
+    def count_scored_since(self, cutoff: datetime) -> int:
+        """Count episodes whose scored_at timestamp is at or after ``cutoff``.
+
+        Used by the orchestrator to report an accurate scored-episode count even
+        when the scoring/audio phase runs out-of-band on a dedicated cron (the
+        ``--skip-audio`` nightly path scores nothing in-run, so a bare in-run
+        count is a misleading ``0`` — see kanban #2423).
+        """
+        with self.db.get_session() as session:
+            return session.query(EpisodeModel)\
+                .filter(EpisodeModel.scored_at.isnot(None))\
+                .filter(EpisodeModel.scored_at >= cutoff)\
+                .count()
 
     def get_failed_episodes(self) -> List[Episode]:
         """Get episodes that have failed processing"""

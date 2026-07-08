@@ -39,6 +39,12 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
+  // Supabase auth is unconfigured since the project deletion (kanban #2669);
+  // skip session handling entirely rather than constructing a client that throws.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return supabaseResponse
+  }
+
   const supabase = getServerClient(request, supabaseResponse)
 
   // IMPORTANT: Avoid writing any logic between createServerClient and

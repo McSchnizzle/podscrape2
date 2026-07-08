@@ -104,6 +104,17 @@ else:
 # Configure test environment
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 
+# Ensure the WebConfigManager settings table exists when tests run against
+# the in-memory SQLite database (production creates it via Alembic).
+from src.config import web_config as _web_config
+
+def _ensure_web_settings_table(self):
+    if self.db_manager.engine.dialect.name == "sqlite":
+        _web_config.WebSettingModel.metadata.create_all(self.db_manager.engine)
+
+_web_config.WebConfigManager._ensure_table = _ensure_web_settings_table
+
+
 
 @pytest.fixture(scope="session")
 def test_database_engine():

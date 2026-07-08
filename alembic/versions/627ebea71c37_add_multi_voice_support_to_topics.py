@@ -10,6 +10,12 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_read_policy,
+)
+
 
 # revision identifiers, used by Alembic.
 revision: str = '627ebea71c37'
@@ -25,38 +31,15 @@ def upgrade() -> None:
     op.add_column('topics', sa.Column('dialogue_model', sa.String(50), nullable=False, server_default='eleven_turbo_v2_5'))
     op.add_column('topics', sa.Column('voice_config', sa.dialects.postgresql.JSONB(), nullable=True))
 
-    # Add RLS policies for new columns (follows Supabase security requirements)
-    op.execute("ALTER TABLE topics ENABLE ROW LEVEL SECURITY;")
+    # Enable RLS on topics (idempotent — already enabled by 1397ff315ac6, but
+    # kept for safety when running on a fresh local DB that skips RLS).
+    enable_rls("topics")
 
     # Service role policy (full access for backend operations)
-    op.execute('''
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_policies
-                WHERE tablename = 'topics' AND policyname = 'service_role_policy'
-            ) THEN
-                CREATE POLICY "service_role_policy" ON topics
-                FOR ALL TO service_role
-                USING (true) WITH CHECK (true);
-            END IF;
-        END $$;
-    ''')
+    create_service_role_policy("topics")
 
     # Authenticated read policy (web UI access)
-    op.execute('''
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_policies
-                WHERE tablename = 'topics' AND policyname = 'authenticated_read_policy'
-            ) THEN
-                CREATE POLICY "authenticated_read_policy" ON topics
-                FOR SELECT TO authenticated
-                USING (true);
-            END IF;
-        END $$;
-    ''')
+    create_authenticated_read_policy("topics")
 
 
 def downgrade() -> None:

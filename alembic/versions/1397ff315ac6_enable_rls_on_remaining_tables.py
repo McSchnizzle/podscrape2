@@ -10,6 +10,14 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_read_policy,
+    drop_policy,
+    disable_rls,
+)
+
 
 # revision identifiers, used by Alembic.
 revision: str = '1397ff315ac6'
@@ -30,23 +38,9 @@ def upgrade() -> None:
     ]
 
     for table_name in tables:
-        # Enable RLS on table
-        op.execute(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY;")
-
-        # Create policy for service role (full access for backend operations)
-        op.execute(f"""
-            CREATE POLICY "service_role_policy" ON {table_name}
-            FOR ALL TO service_role
-            USING (true)
-            WITH CHECK (true);
-        """)
-
-        # Create policy for authenticated users (read-only access for web UI)
-        op.execute(f"""
-            CREATE POLICY "authenticated_read_policy" ON {table_name}
-            FOR SELECT TO authenticated
-            USING (true);
-        """)
+        enable_rls(table_name)
+        create_service_role_policy(table_name)
+        create_authenticated_read_policy(table_name)
 
     # Note: alembic_version table is intentionally left unrestricted
     # as it's managed by Alembic migration system
@@ -63,9 +57,6 @@ def downgrade() -> None:
     ]
 
     for table_name in tables:
-        # Drop policies first
-        op.execute(f'DROP POLICY IF EXISTS "service_role_policy" ON {table_name};')
-        op.execute(f'DROP POLICY IF EXISTS "authenticated_read_policy" ON {table_name};')
-
-        # Disable RLS
-        op.execute(f"ALTER TABLE {table_name} DISABLE ROW LEVEL SECURITY;")
+        drop_policy(table_name, "service_role_policy")
+        drop_policy(table_name, "authenticated_read_policy")
+        disable_rls(table_name)

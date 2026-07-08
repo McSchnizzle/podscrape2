@@ -11,6 +11,14 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_read_policy,
+    drop_policy,
+    disable_rls,
+)
+
 
 revision: str = 'c4d5e6f7a8b9'
 down_revision: Union[str, Sequence[str], None] = 'a3c2199ce1a8'
@@ -58,23 +66,15 @@ def upgrade() -> None:
                     ['feed_id', 'error_category'])
 
     # RLS policies (required per project standards)
-    op.execute("ALTER TABLE workflow_errors ENABLE ROW LEVEL SECURITY;")
-    op.execute('''
-        CREATE POLICY "service_role_policy" ON workflow_errors
-        FOR ALL TO service_role
-        USING (true) WITH CHECK (true);
-    ''')
-    op.execute('''
-        CREATE POLICY "authenticated_read_policy" ON workflow_errors
-        FOR SELECT TO authenticated
-        USING (true);
-    ''')
+    enable_rls("workflow_errors")
+    create_service_role_policy("workflow_errors")
+    create_authenticated_read_policy("workflow_errors")
 
 
 def downgrade() -> None:
     """Drop workflow_errors table."""
-    op.execute('DROP POLICY IF EXISTS "authenticated_read_policy" ON workflow_errors;')
-    op.execute('DROP POLICY IF EXISTS "service_role_policy" ON workflow_errors;')
+    drop_policy("workflow_errors", "authenticated_read_policy")
+    drop_policy("workflow_errors", "service_role_policy")
 
     op.drop_index('ix_workflow_errors_feed_category', table_name='workflow_errors')
     op.drop_index('ix_workflow_errors_category_date', table_name='workflow_errors')

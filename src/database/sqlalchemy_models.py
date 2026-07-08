@@ -33,6 +33,26 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import JSON
+
+# JSON column that uses JSONB on PostgreSQL and plain JSON on SQLite.
+# This lets the same models work against both Supabase (production) and
+# in-memory SQLite (tests) without dialect-specific CompileError.
+JsonB = JSON().with_variant(JSONB(), "postgresql")
+
+# ARRAY column that uses PostgreSQL native ARRAY on Postgres and JSON on
+# SQLite.  On SQLite the column stores a JSON-encoded list, which is fine
+# for test fixtures.
+from sqlalchemy.types import TypeDecorator
+
+class TextArray(TypeDecorator):
+    """Portable TEXT[] — native ARRAY on Postgres, JSON on other dialects."""
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(postgresql.ARRAY(Text))
+        return dialect.type_descriptor(JSON())
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from src.database.episode_status import EpisodeStatus, VALID_EPISODE_STATUSES
@@ -265,7 +285,7 @@ class Topic(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     voice_id = Column(String(255))
-    voice_settings = Column(JSONB)
+    voice_settings = Column(JsonB)
     instructions_md = Column(Text)
     is_active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False, default=0)
@@ -276,7 +296,7 @@ class Topic(Base):
     # Multi-voice dialogue support (v1.79)
     use_dialogue_api = Column(Boolean, nullable=False, default=False)
     dialogue_model = Column(String(50), nullable=False, default='eleven_turbo_v2_5')
-    voice_config = Column(JSONB)  # {"speaker_1": {"name": "...", "voice_id": "..."}, "speaker_2": {...}}
+    voice_config = Column(JsonB)  # {"speaker_1": {"name": "...", "voice_id": "..."}, "speaker_2": {...}}
 
     # Topic tracking support (v1.100)
     enable_topic_tracking = Column(Boolean, nullable=False, default=False)
@@ -333,7 +353,7 @@ class PipelineRun(Base):
     conclusion = Column(String(64))
     started_at = Column(DateTime(timezone=False))
     finished_at = Column(DateTime(timezone=False))
-    phase = Column(JSONB)
+    phase = Column(JsonB)
     notes = Column(Text)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -373,7 +393,7 @@ class EpisodeTopic(Base):
     episode_id = Column(Integer, nullable=False)
     topic_name = Column(String(512), nullable=False)
     topic_slug = Column(String(255), nullable=False)
-    key_points = Column(postgresql.ARRAY(Text), nullable=False)  # Array of key insight strings
+    key_points = Column(TextArray(), nullable=False)  # Array of key insight strings
     first_mentioned_at = Column(DateTime(timezone=False), nullable=False)
     last_mentioned_at = Column(DateTime(timezone=False), nullable=False)
     mention_count = Column(Integer, nullable=False, default=1)
@@ -412,7 +432,7 @@ class CommonAd(Base):
 
     id = Column(Integer, primary_key=True)
     advertiser_name = Column(String(256), nullable=False, unique=True)
-    pattern_keywords = Column(JSONB, nullable=False)  # Array of keyword strings
+    pattern_keywords = Column(JsonB, nullable=False)  # Array of keyword strings
     confidence_threshold = Column(Float, nullable=False, default=0.8)
     is_active = Column(Boolean, nullable=False, default=True)
     first_detected_at = Column(DateTime(timezone=False), nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -444,7 +464,7 @@ class WorkflowError(Base):
     error_code = Column(String(32))
     error_message = Column(Text, nullable=False)
     error_summary = Column(String(512))
-    extra = Column(JSONB)
+    extra = Column(JsonB)
     source_log_id = Column(Integer)
     resolved = Column(Boolean, nullable=False, default=False)
     resolved_at = Column(DateTime(timezone=True))
@@ -503,7 +523,7 @@ class StoryArcEvent(Base):
     story_arc_id = Column(Integer, ForeignKey('story_arcs.id', ondelete='CASCADE'), nullable=False)
     event_date = Column(DateTime(timezone=True), nullable=False)
     event_summary = Column(Text, nullable=False)
-    key_points = Column(postgresql.ARRAY(Text), nullable=False, default=[])
+    key_points = Column(TextArray(), nullable=False, default=[])
     source_feed_id = Column(Integer, ForeignKey('feeds.id', ondelete='SET NULL'))
     source_episode_id = Column(Integer, ForeignKey('episodes.id', ondelete='SET NULL'))
     source_episode_guid = Column(String(512))

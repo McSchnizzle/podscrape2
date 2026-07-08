@@ -4,20 +4,19 @@
  */
 
 import { NextResponse } from 'next/server'
-import { DatabaseClient } from '@/utils/supabase'
+import { getPool } from '@/utils/db'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('api/health')
 
 export async function GET() {
   try {
-    const db = DatabaseClient.getInstance()
-    const health = await db.getSystemHealth()
+    await getPool().query('SELECT 1')
 
     return NextResponse.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      database: health.database,
+      database: 'connected',
       environment: process.env.NODE_ENV || 'unknown'
     })
   } catch (error) {

@@ -10,6 +10,12 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_read_policy,
+)
+
 
 # revision identifiers, used by Alembic.
 revision: str = 'a3c2199ce1a8'
@@ -43,23 +49,11 @@ def upgrade() -> None:
     op.execute("UPDATE episode_topics SET first_seen_at = created_at WHERE first_seen_at IS NULL")
 
     # Enable RLS on episode_topics (if not already enabled)
-    op.execute("ALTER TABLE episode_topics ENABLE ROW LEVEL SECURITY;")
+    enable_rls("episode_topics")
 
     # Create RLS policies for episode_topics (if not exist)
-    op.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_policies
-                WHERE tablename = 'episode_topics' AND policyname = 'service_role_policy'
-            ) THEN
-                CREATE POLICY "service_role_policy" ON episode_topics
-                FOR ALL TO service_role
-                USING (true) WITH CHECK (true);
-            END IF;
-        END
-        $$;
-    """)
+    create_service_role_policy("episode_topics")
+    create_authenticated_read_policy("episode_topics")
 
 
 def downgrade() -> None:

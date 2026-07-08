@@ -10,6 +10,12 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    create_authenticated_read_policy,
+)
+
 # revision identifiers, used by Alembic.
 revision: str = 'd8f9e2a7b5c4'
 down_revision: Union[str, Sequence[str], None] = '627ebea71c37'
@@ -50,17 +56,9 @@ def upgrade() -> None:
     op.create_index('ix_episode_topics_mentioned', 'episode_topics', ['last_mentioned_at'])
 
     # Enable RLS on episode_topics
-    op.execute("ALTER TABLE episode_topics ENABLE ROW LEVEL SECURITY;")
-    op.execute("""
-        CREATE POLICY "service_role_policy" ON episode_topics
-        FOR ALL TO service_role
-        USING (true) WITH CHECK (true);
-    """)
-    op.execute("""
-        CREATE POLICY "authenticated_read_policy" ON episode_topics
-        FOR SELECT TO authenticated
-        USING (true);
-    """)
+    enable_rls("episode_topics")
+    create_service_role_policy("episode_topics")
+    create_authenticated_read_policy("episode_topics")
 
     # Create common_ads table
     op.create_table(
@@ -86,17 +84,9 @@ def upgrade() -> None:
     op.create_index('ix_common_ads_advertiser', 'common_ads', ['advertiser_name'])
 
     # Enable RLS on common_ads
-    op.execute("ALTER TABLE common_ads ENABLE ROW LEVEL SECURITY;")
-    op.execute("""
-        CREATE POLICY "service_role_policy" ON common_ads
-        FOR ALL TO service_role
-        USING (true) WITH CHECK (true);
-    """)
-    op.execute("""
-        CREATE POLICY "authenticated_read_policy" ON common_ads
-        FOR SELECT TO authenticated
-        USING (true);
-    """)
+    enable_rls("common_ads")
+    create_service_role_policy("common_ads")
+    create_authenticated_read_policy("common_ads")
 
     # Seed initial ad patterns
     op.execute("""
@@ -124,8 +114,10 @@ def downgrade() -> None:
     op.drop_column('topics', 'enable_topic_tracking')
 
     # Drop RLS policies for common_ads
-    op.execute('DROP POLICY IF EXISTS "service_role_policy" ON common_ads;')
-    op.execute('DROP POLICY IF EXISTS "authenticated_read_policy" ON common_ads;')
+    from src.migration_rls import drop_policy, disable_rls
+    drop_policy("common_ads", "service_role_policy")
+    drop_policy("common_ads", "authenticated_read_policy")
+    disable_rls("common_ads")
 
     # Drop common_ads table
     op.drop_index('ix_common_ads_advertiser', table_name='common_ads')
@@ -133,13 +125,16 @@ def downgrade() -> None:
     op.drop_table('common_ads')
 
     # Drop RLS policies for episode_topics
-    op.execute('DROP POLICY IF EXISTS "service_role_policy" ON episode_topics;')
-    op.execute('DROP POLICY IF EXISTS "authenticated_read_policy" ON episode_topics;')
+    drop_policy("episode_topics", "service_role_policy")
+    drop_policy("episode_topics", "authenticated_read_policy")
+    disable_rls("episode_topics")
 
-    # Drop episode_topics table
+    # Drop indexes for episode_topics
     op.drop_index('ix_episode_topics_mentioned', table_name='episode_topics')
     op.drop_index('ix_episode_topics_included', table_name='episode_topics')
     op.drop_index('ix_episode_topics_digest_topic', table_name='episode_topics')
     op.drop_index('ix_episode_topics_slug', table_name='episode_topics')
     op.drop_index('ix_episode_topics_episode', table_name='episode_topics')
+
+    # Drop episode_topics table
     op.drop_table('episode_topics')

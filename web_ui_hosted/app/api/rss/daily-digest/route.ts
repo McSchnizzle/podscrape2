@@ -29,7 +29,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/utils/supabase';
+import { getPool } from '@/utils/db';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('api/rss/daily-digest');
@@ -179,20 +179,16 @@ export async function GET(request: NextRequest) {
   try {
     log.info('Generating RSS feed from database');
 
-    // Query Supabase for recent digests with MP3s and GitHub URLs
-    const { data: digests, error } = await supabase
-      .from('digests')
-      .select('id, topic, digest_date, mp3_path, mp3_title, mp3_summary, mp3_duration_seconds, github_url, generated_at')
-      .not('github_url', 'is', null)
-      .not('mp3_path', 'is', null)
-      .order('digest_date', { ascending: false })
-      .order('generated_at', { ascending: false })
-      .limit(50);
-
-    if (error) {
-      log.error('Database error', { error: error.message });
-      return new NextResponse('Error fetching digests from database', { status: 500 });
-    }
+    // Query local Postgres for recent digests with MP3s and GitHub URLs
+    const { rows: digests } = await getPool().query(
+      `SELECT id, topic, to_char(digest_date, 'YYYY-MM-DD') AS digest_date,
+              mp3_path, mp3_title, mp3_summary, mp3_duration_seconds, github_url, generated_at
+         FROM digests
+        WHERE github_url IS NOT NULL
+          AND mp3_path IS NOT NULL
+        ORDER BY digest_date DESC, generated_at DESC NULLS LAST
+        LIMIT 50`
+    );
 
     if (!digests || digests.length === 0) {
       log.warn('No published digests found');

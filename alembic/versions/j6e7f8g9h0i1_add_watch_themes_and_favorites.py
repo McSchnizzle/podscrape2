@@ -15,6 +15,12 @@ Two additions:
 from alembic import op
 import sqlalchemy as sa
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    drop_policy,
+)
+
 
 revision = 'j6e7f8g9h0i1'
 down_revision = 'i5d6e7f8g9h0'
@@ -40,11 +46,8 @@ def upgrade() -> None:
     op.create_index('ix_watch_themes_sort_order', 'watch_themes', ['sort_order'])
 
     # RLS on watch_themes — service_role bypass per project convention
-    op.execute("ALTER TABLE watch_themes ENABLE ROW LEVEL SECURITY")
-    op.execute(
-        "CREATE POLICY watch_themes_service_all ON watch_themes "
-        "FOR ALL TO service_role USING (true) WITH CHECK (true)"
-    )
+    enable_rls("watch_themes")
+    create_service_role_policy("watch_themes", policy_name="watch_themes_service_all")
 
     # digests.is_favorite --------------------------------------------------
     op.add_column(
@@ -77,21 +80,18 @@ def upgrade() -> None:
                   nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint('run_date', name='uq_watch_digest_runs_run_date'),
     )
-    op.execute("ALTER TABLE watch_digest_runs ENABLE ROW LEVEL SECURITY")
-    op.execute(
-        "CREATE POLICY watch_digest_runs_service_all ON watch_digest_runs "
-        "FOR ALL TO service_role USING (true) WITH CHECK (true)"
-    )
+    enable_rls("watch_digest_runs")
+    create_service_role_policy("watch_digest_runs", policy_name="watch_digest_runs_service_all")
 
 
 def downgrade() -> None:
-    op.execute("DROP POLICY IF EXISTS watch_digest_runs_service_all ON watch_digest_runs")
+    drop_policy("watch_digest_runs", "watch_digest_runs_service_all")
     op.drop_table('watch_digest_runs')
 
     op.drop_index('ix_digests_is_favorite', table_name='digests')
     op.drop_column('digests', 'is_favorite')
 
-    op.execute("DROP POLICY IF EXISTS watch_themes_service_all ON watch_themes")
+    drop_policy("watch_themes", "watch_themes_service_all")
     op.drop_index('ix_watch_themes_sort_order', table_name='watch_themes')
     op.drop_index('ix_watch_themes_active', table_name='watch_themes')
     op.drop_table('watch_themes')

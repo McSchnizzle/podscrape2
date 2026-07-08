@@ -10,6 +10,13 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from src.migration_rls import (
+    enable_rls,
+    create_service_role_policy,
+    drop_policy,
+    disable_rls,
+)
+
 
 # revision identifiers, used by Alembic.
 revision: str = '421544bfb39c'
@@ -21,25 +28,12 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Enable RLS on alembic_version table with service role access only."""
 
-    # Enable RLS on alembic_version table
-    op.execute("ALTER TABLE alembic_version ENABLE ROW LEVEL SECURITY;")
-
-    # Create policy for service role (Alembic migrations need full access)
-    op.execute("""
-        CREATE POLICY "service_role_policy" ON alembic_version
-        FOR ALL TO service_role
-        USING (true)
-        WITH CHECK (true);
-    """)
-
-    # Note: No authenticated user policy - this table should only be accessed by migrations
+    enable_rls("alembic_version")
+    create_service_role_policy("alembic_version")
 
 
 def downgrade() -> None:
     """Disable RLS on alembic_version table."""
 
-    # Drop policy first
-    op.execute('DROP POLICY IF EXISTS "service_role_policy" ON alembic_version;')
-
-    # Disable RLS
-    op.execute("ALTER TABLE alembic_version DISABLE ROW LEVEL SECURITY;")
+    drop_policy("alembic_version", "service_role_policy")
+    disable_rls("alembic_version")
