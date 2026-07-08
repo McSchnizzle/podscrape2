@@ -3,9 +3,10 @@
     {
       "name": "AI and Technology",
       "instruction_file": "AI and Technology.md",
-      "voice_id": "21m00Tcm4TlvDq8ikWAM",
+      "voice_id": "6OzrBCQf8cjERkYgzSg8",
       "active": true,
-      "description": "AI developments, machine learning breakthroughs, AI product launches, technology industry news, tech company developments, digital culture"
+      "description": "AI developments, machine learning breakthroughs, AI product launches, technology industry news, tech company developments, digital culture",
+      "voice_name": "Malcolm"
     },
     {
       "name": "Social Movements and Community Organizing",
@@ -32,5 +33,5 @@
       "use_speaker_boost": true
     }
   },
-  "last_updated": "2025-09-13T22:37:58.406986"
+  "last_updated": "2026-07-08T10:39:33.964042"
 }
