@@ -18,6 +18,8 @@ DB_NAME="podcast"
 DB_PASSWORD="podcast_local_dev"
 DB_PORT="5470"
 DB_HOST="127.0.0.1"
+# Data directory lives on the 1TB data drive (kanban #2669 AC1), not the root fs.
+DB_DATA_DIR="${PODCAST_DB_DATA_DIR:-/mnt/data1tb/pbrown-store/podcast-db-data}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -45,12 +47,14 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     fi
 else
     echo "🚀 Creating PostgreSQL 16 container '$CONTAINER_NAME'..."
+    mkdir -p "$DB_DATA_DIR"
     docker run -d \
         --name "$CONTAINER_NAME" \
         -e POSTGRES_USER="$DB_USER" \
         -e POSTGRES_PASSWORD="$DB_PASSWORD" \
         -e POSTGRES_DB="$DB_NAME" \
         -p "${DB_HOST}:${DB_PORT}:5432" \
+        -v "${DB_DATA_DIR}:/var/lib/postgresql/data" \
         --restart unless-stopped \
         postgres:16
     sleep 3
