@@ -29,6 +29,34 @@ interface AuthProviderProps {
   children: React.ReactNode
 }
 
+// Auth is unconfigured while the admin backend is rebuilt after the Supabase
+// project deletion (kanban #2710). NEXT_PUBLIC_* vars are inlined at build
+// time, so this is a build-time constant.
+const AUTH_CONFIGURED = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
+
+function MaintenanceNotice() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-6">
+      <div className="max-w-lg w-full rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-2xl text-center">
+        <div className="text-4xl mb-4">🔧</div>
+        <h1 className="text-xl font-semibold text-gray-100 mb-3">
+          Admin dashboard temporarily offline
+        </h1>
+        <p className="text-sm text-gray-300 leading-relaxed mb-4">
+          The podcast pipeline is running normally and the public feeds are
+          unaffected. The admin interface is waiting on a new login and data
+          backend after the move off Supabase.
+        </p>
+        <p className="text-xs text-gray-500">
+          Tracked as kanban #2710 · RSS: <span className="text-gray-400">/daily-digest.xml</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,6 +64,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const pathname = usePathname()
 
   useEffect(() => {
+    if (!AUTH_CONFIGURED) return
+
     let mounted = true
     let isAuthCheckInProgress = false
 
@@ -138,7 +168,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {AUTH_CONFIGURED ? children : <MaintenanceNotice />}
     </AuthContext.Provider>
   )
 }
