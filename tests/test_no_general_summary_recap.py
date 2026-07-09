@@ -116,6 +116,26 @@ class TestCreateDailyDigestsNoRecapFallback(unittest.TestCase):
                     "digest_repo.create() was called with topic='General Summary'",
                 )
 
+    def test_topic_digest_errors_fail_the_daily_digest_phase(self):
+        """
+        A topic creation exception is a real phase failure, not the same as a
+        quiet day with no qualifying episodes.
+        """
+        from src.generation.script_generator import ScriptGenerationError
+
+        sg = self._make_script_generator()
+        sg.create_digest = MagicMock(
+            side_effect=[RuntimeError("database write failed"), None]
+        )
+
+        with self.assertRaisesRegex(
+            ScriptGenerationError,
+            "AI Technology: database write failed",
+        ):
+            sg.create_daily_digests(date(2026, 6, 14))
+
+        sg.create_general_summary.assert_not_called()
+
 
 # ── Test 2: get_digests_pending_tts() excludes 'General Summary' rows ────────
 

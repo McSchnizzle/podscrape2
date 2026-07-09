@@ -2396,6 +2396,7 @@ Thank you for your understanding, and we'll see you tomorrow!
                             start_date: date = None, end_date: date = None) -> List[Digest]:
         """Create digests for all active topics for given date"""
         digests = []
+        topic_errors = []
 
         # Try to create topic-specific digests
         for topic_name in self.topic_instructions:
@@ -2404,8 +2405,17 @@ Thank you for your understanding, and we'll see you tomorrow!
                 if digest:  # Only append if digest was created (may be None if insufficient episodes)
                     digests.append(digest)
             except Exception as e:
-                logger.error(f"Failed to create digest for {topic_name}: {e}")
+                logger.exception("Failed to create digest for %s: %s", topic_name, e)
+                topic_errors.append((topic_name, e))
                 continue
+
+        if topic_errors:
+            details = "; ".join(
+                f"{topic}: {error}" for topic, error in topic_errors
+            )
+            raise ScriptGenerationError(
+                f"Digest generation failed for {len(topic_errors)} topic(s): {details}"
+            )
         
         # Check if we have any qualifying episodes (non-empty digests)
         qualifying_digests = [d for d in digests if d.episode_count > 0]

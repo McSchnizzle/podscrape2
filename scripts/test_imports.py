@@ -39,10 +39,6 @@ def check(label, fn):
         FAIL = True
 
 
-# ── Module imports ──────────────────────────────────────────────────
-print("Module imports:")
-
-
 def import_metadata_generator():
     from src.audio.metadata_generator import MetadataGenerator, EpisodeMetadata, MetadataGenerationError
     assert hasattr(MetadataGenerator, '_call_claude_p'), "Missing _call_claude_p"
@@ -81,38 +77,17 @@ def import_pipeline_modules():
     from src.config.web_config import WebConfigManager
 
 
-check("metadata_generator (claude -p methods + EpisodeMetadata.episode_links)", import_metadata_generator)
-check("content_scorer (claude -p methods)", import_content_scorer)
-check("script_generator (claude -p methods)", import_script_generator)
-check("audio modules (AudioGenerator, CompleteAudioProcessor)", import_audio_modules)
-check("pipeline modules (FeedParser, ConfigManager, WebConfigManager)", import_pipeline_modules)
+def instantiate_metadata_generator():
+    from src.audio.metadata_generator import MetadataGenerator
+    mg = MetadataGenerator()
+    assert mg is not None
 
 
-# ── Instantiation without OPENAI_API_KEY ────────────────────────────
-print("\nInstantiation (no OPENAI_API_KEY required):")
+def instantiate_content_scorer():
+    from src.scoring.content_scorer import ContentScorer
+    cs = ContentScorer()
+    assert cs is not None
 
-# Temporarily remove OPENAI_API_KEY to verify classes don't crash
-saved_key = os.environ.pop('OPENAI_API_KEY', None)
-try:
-    def instantiate_metadata_generator():
-        from src.audio.metadata_generator import MetadataGenerator
-        mg = MetadataGenerator()
-        assert mg is not None
-
-    def instantiate_content_scorer():
-        from src.scoring.content_scorer import ContentScorer
-        cs = ContentScorer()
-        assert cs is not None
-
-    check("MetadataGenerator() without OPENAI_API_KEY", instantiate_metadata_generator)
-    check("ContentScorer() without OPENAI_API_KEY", instantiate_content_scorer)
-finally:
-    if saved_key:
-        os.environ['OPENAI_API_KEY'] = saved_key
-
-
-# ── Skill files ─────────────────────────────────────────────────────
-print("\nSkill files:")
 
 SKILL_DIR = Path(project_root) / '.claude' / 'commands'
 
@@ -122,21 +97,57 @@ REQUIRED_SKILLS = [
     'score-topic.md',
 ]
 
-for skill_name in REQUIRED_SKILLS:
-    def check_skill(name=skill_name):
-        path = SKILL_DIR / name
+
+def make_check_skill(skill_name):
+    def check_skill():
+        path = SKILL_DIR / skill_name
         assert path.exists(), f"Skill file not found: {path}"
         content = path.read_text()
         assert len(content) > 100, f"Skill file suspiciously short ({len(content)} chars)"
 
-    check(f"{skill_name} exists and has content", check_skill)
+    return check_skill
 
 
-# ── Result ──────────────────────────────────────────────────────────
-print()
-if FAIL:
-    print("FAILED: Some checks did not pass. Fix before committing.")
-    sys.exit(1)
-else:
+def main() -> int:
+    global FAIL
+    FAIL = False
+
+    # ── Module imports ──────────────────────────────────────────────
+    print("Module imports:")
+
+    check("metadata_generator (claude -p methods + EpisodeMetadata.episode_links)", import_metadata_generator)
+    check("content_scorer (claude -p methods)", import_content_scorer)
+    check("script_generator (claude -p methods)", import_script_generator)
+    check("audio modules (AudioGenerator, CompleteAudioProcessor)", import_audio_modules)
+    check("pipeline modules (FeedParser, ConfigManager, WebConfigManager)", import_pipeline_modules)
+
+    # ── Instantiation without OPENAI_API_KEY ────────────────────────
+    print("\nInstantiation (no OPENAI_API_KEY required):")
+
+    # Temporarily remove OPENAI_API_KEY to verify classes don't crash
+    saved_key = os.environ.pop('OPENAI_API_KEY', None)
+    try:
+        check("MetadataGenerator() without OPENAI_API_KEY", instantiate_metadata_generator)
+        check("ContentScorer() without OPENAI_API_KEY", instantiate_content_scorer)
+    finally:
+        if saved_key:
+            os.environ['OPENAI_API_KEY'] = saved_key
+
+    # ── Skill files ─────────────────────────────────────────────────
+    print("\nSkill files:")
+
+    for skill_name in REQUIRED_SKILLS:
+        check(f"{skill_name} exists and has content", make_check_skill(skill_name))
+
+    # ── Result ──────────────────────────────────────────────────────
+    print()
+    if FAIL:
+        print("FAILED: Some checks did not pass. Fix before committing.")
+        return 1
+
     print("All pre-commit import checks passed.")
-    sys.exit(0)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
