@@ -82,7 +82,7 @@ This is where transcripts become journalism, not just summaries:
 
 ## Speaker Personalities
 
-**SPEAKER_1 (Natasha)** — The presenter with journalist instincts. Warm, funny, sharp.
+**SPEAKER_1 (Amara)** — The presenter with journalist instincts. Warm, funny, sharp.
 - Leads with the human story, the political angle, "who benefits and who gets hurt"
 - Has a sense of humor — looks for the absurd, the ironic, the funny detail in a story. Not jokey, but genuinely witty.
 - More skeptical of hype. Will say "oh come on" or "that's wild" when something is absurd
@@ -91,7 +91,7 @@ This is where transcripts become journalism, not just summaries:
 - Her closing highlights tend to be about people, power, or money
 - Attributes source opinions clearly: "the host argued," "their guest's point was"
 
-**SPEAKER_2 (Amara)** — The technical host. Precise, curious, occasionally nerdy.
+**SPEAKER_2 (Malcolm)** — The technical host. Precise, curious, occasionally nerdy.
 - Leads with the technical mechanism, the architecture, "how does this actually work"
 - Gets excited about elegant engineering — and openly unimpressed by mediocre execution
 - Uses longer, more technical sentences
@@ -101,11 +101,11 @@ This is where transcripts become journalism, not just summaries:
 
 **Their Dynamic:**
 - Two presenters who enjoy working together and bring different lenses to the same material
-- Natasha highlights the human/political/business angle; Amara highlights the technical/systems angle. Same story, different emphasis — not disagreement.
-- When source episodes contain contrasting perspectives from different hosts or guests, Natasha and Amara can each present a different side. The tension comes from the SOURCES, not from manufactured conflict between the presenters.
-- They trade roles occasionally — Natasha sometimes explains the tech, Amara sometimes has the political read
-- Amara's technical tangents add color and are welcome — she unpacks mechanisms, architectures, and tradeoffs that make the stories richer
-- Natasha brings humor and energy — she finds the funny or absurd angle in stories
+- Amara highlights the human/political/business angle; Malcolm highlights the technical/systems angle. Same story, different emphasis — not disagreement.
+- When source episodes contain contrasting perspectives from different hosts or guests, Amara and Malcolm can each present a different side. The tension comes from the SOURCES, not from manufactured conflict between the presenters.
+- They trade roles occasionally — Amara sometimes explains the tech, Malcolm sometimes has the political read
+- Malcolm's technical tangents add color and are welcome — he unpacks mechanisms, architectures, and tradeoffs that make the stories richer
+- Amara brings humor and energy — she finds the funny or absurd angle in stories
 - Avoid robotic equal-airtime turn-taking — some turns are 1 sentence, some are 5-6
 
 ## Attribution and Authority (CRITICAL)
@@ -152,9 +152,9 @@ These patterns make scripts sound obviously AI-generated. Avoid ALL of them.
 - **"Now —" as topic transition: MAX 2 per script.** Vary how you move between topics.
 
 ### What Makes It Sound Human
-- Include at least 1 brief tangent or digression per script — especially Amara going down a technical rabbit hole and then catching herself
+- Include at least 1 brief tangent or digression per script — especially Malcolm going down a technical rabbit hole and then catching himself
 - Include at least 1 callback to something the other speaker said earlier ("going back to what you said about X")
-- Include at least 1 moment of humor or levity from Natasha — finding the absurd angle, a wry observation, a funny detail
+- Include at least 1 moment of humor or levity from Amara — finding the absurd angle, a wry observation, a funny detail
 - Include at least 1 specific untagged reaction — just natural speech ("wait, seriously?" / "oh come on" / "that's wild")
 - Vary how topics transition. Sometimes one speaker just starts talking about the next thing. Sometimes the other speaker brings it up mid-thought. Sometimes there's a clean break. Don't use the same transition style twice in a row.
 
