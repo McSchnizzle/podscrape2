@@ -708,7 +708,14 @@ def main():
         skip_audio=args.skip_audio
     )
 
-    orchestrator.run_pipeline()
+    summary = orchestrator.run_pipeline()
+    # Kanban #2709 AC1: a failed run must exit non-zero. run_pipeline returns
+    # _log_failure's {'success': False, ...} dict on failure instead of
+    # raising, so falling off the end here exited 0 -- the cron wrapper then
+    # truthfully appended 'Pipeline completed successfully' over a run whose
+    # own log said PIPELINE FAILED (observed 2026-07-07 21:00).
+    if not isinstance(summary, dict) or not summary.get('success', False):
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

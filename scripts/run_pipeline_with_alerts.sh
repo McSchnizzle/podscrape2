@@ -31,6 +31,16 @@ echo "========================================" >> "$LOG_FILE"
 python3 run_full_pipeline_orchestrator.py --verbose --days-back 5 --limit 10 --skip-audio 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
 EXIT_CODE=${PIPESTATUS[0]}
 
+# Kanban #2709 AC1 belt-and-suspenders: on 2026-07-07 the orchestrator logged
+# 'PIPELINE FAILED' but exited 0 (exit-code bug, fixed in main()), so this
+# wrapper appended the success line over a failed run. Even if a future
+# regression reintroduces a lying exit code, a FAILED marker in the run's own
+# output must win over exit 0.
+if [ $EXIT_CODE -eq 0 ] && grep -q "PIPELINE FAILED" "$TEMP_LOG"; then
+    echo "Pipeline output contains PIPELINE FAILED despite exit 0 -- treating as failure (kanban #2709)" >> "$LOG_FILE"
+    EXIT_CODE=1
+fi
+
 END_TIME=$(date +%s)
 RUNTIME="$((END_TIME - START_TIME)) seconds"
 
