@@ -83,29 +83,35 @@ class VercelDeployer:
             raise PodcastError(f"Vercel CLI verification failed: {e}")
     
     @retry_with_backoff(max_retries=2, backoff_factor=1.5)
-    def deploy_rss_feed(self, rss_content: str, 
-                       production: bool = True) -> DeploymentResult:
+    def deploy_rss_feed(self, rss_content: str,
+                       production: bool = True,
+                       public_dir: Optional[Path] = None) -> DeploymentResult:
         """
         Deploy RSS feed content to Vercel
-        
+
         Args:
             rss_content: RSS XML content to deploy
             production: If True, deploy to production; if False, deploy as preview
-            
+            public_dir: Target directory for the static RSS file. Defaults to the
+                real web_ui_hosted/public/. Tests MUST pass a temp dir: a static
+                daily-digest.xml in the real public/ shadows the dynamic
+                /api/rss/daily-digest rewrite and breaks the live feed.
+
         Returns:
             DeploymentResult with deployment information
         """
         logger.info(f"Deploying RSS feed to Vercel ({'production' if production else 'preview'})")
         start_time = datetime.now()
-        
+
         try:
             # Direct file update approach - update the static XML without triggering rebuild
             # This is much faster and more efficient than git commit + full site rebuild
             project_root = Path(__file__).parent.parent.parent
 
-            # Ensure RSS file is in web_ui_hosted/public/
-            web_ui_hosted = project_root / 'web_ui_hosted'
-            public_dir = web_ui_hosted / 'public'
+            # Ensure RSS file is in web_ui_hosted/public/ unless overridden
+            if public_dir is None:
+                web_ui_hosted = project_root / 'web_ui_hosted'
+                public_dir = web_ui_hosted / 'public'
             if not public_dir.exists():
                 logger.warning(f"Creating public directory: {public_dir}")
                 public_dir.mkdir(parents=True, exist_ok=True)

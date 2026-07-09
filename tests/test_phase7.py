@@ -449,7 +449,7 @@ class TestVercelDeployer(unittest.TestCase):
     
     @patch('subprocess.run')
     def test_deploy_rss_feed_success(self, mock_run):
-        """Test successful RSS feed deployment"""
+        """Test successful RSS feed deployment (writes to a temp dir, never the real public/)"""
         # Mock CLI verification and deployment
         mock_run.side_effect = [
             Mock(returncode=0, stdout="/usr/local/bin/vercel"),
@@ -458,9 +458,12 @@ class TestVercelDeployer(unittest.TestCase):
         ]
         
         deployer = create_vercel_deployer()
-        
-        result = deployer.deploy_rss_feed(self.test_rss, production=False)
-        
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = deployer.deploy_rss_feed(
+                self.test_rss, production=False, public_dir=Path(temp_dir)
+            )
+
         self.assertTrue(result.success)
         self.assertIn("podcast.paulrbrown.org", result.url)
         self.assertIsNotNone(result.duration_seconds)
@@ -482,8 +485,10 @@ class TestVercelDeployer(unittest.TestCase):
                               success=False,
                               url="",
                               error="Permission denied writing RSS file"
-                          )):
-            result = deployer.deploy_rss_feed(self.test_rss, production=False)
+                          )), tempfile.TemporaryDirectory() as temp_dir:
+            result = deployer.deploy_rss_feed(
+                self.test_rss, production=False, public_dir=Path(temp_dir)
+            )
 
             self.assertFalse(result.success)
             self.assertIn("Permission denied", result.error)
