@@ -26,29 +26,37 @@ SATURATED_TOPICS = [
     "Anthropic DMCA takedown blitz",
 ]
 
-ep = get_episode_repo().get_by_id(EPISODE_ID)
-if not ep:
-    print(f"ERROR: episode {EPISODE_ID} not found")
-    sys.exit(1)
 
-print(f"Episode {ep.id}: '{ep.title[:70]}'")
-print(f"  transcript chars: {len(ep.transcript_content or '')}")
-print(f"  saturated topics: {SATURATED_TOPICS}")
-print()
+def main() -> int:
+    ep = get_episode_repo().get_by_id(EPISODE_ID)
+    if not ep:
+        print(f"ERROR: episode {EPISODE_ID} not found")
+        return 1
 
-cleaned, result = scrub_transcript(ep.transcript_content or "", SATURATED_TOPICS, timeout=900)
-
-print("=== Scrub result ===")
-print(f"  before: {result.chars_before}")
-print(f"  after:  {result.chars_after}")
-print(f"  delta:  {result.delta:+d}")
-print(f"  skipped: {result.skipped} ({result.skip_reason or '—'})")
-
-if not result.skipped:
-    # Show what's left — first 400 chars and last 400 chars
+    print(f"Episode {ep.id}: '{ep.title[:70]}'")
+    print(f"  transcript chars: {len(ep.transcript_content or '')}")
+    print(f"  saturated topics: {SATURATED_TOPICS}")
     print()
-    print("=== First 400 chars of cleaned transcript ===")
-    print(cleaned[:400])
-    print()
-    print("=== Last 400 chars ===")
-    print(cleaned[-400:])
+
+    cleaned, result = scrub_transcript(ep.transcript_content or "", SATURATED_TOPICS, timeout=900)
+
+    print("=== Scrub result ===")
+    print(f"  before: {result.chars_before}")
+    print(f"  after:  {result.chars_after}")
+    print(f"  delta:  {result.delta:+d}")
+    print(f"  skipped: {result.skipped} ({result.skip_reason or '—'})")
+
+    if not result.skipped:
+        # Show what's left — first 400 chars and last 400 chars
+        print()
+        print("=== First 400 chars of cleaned transcript ===")
+        print(cleaned[:400])
+        print()
+        print("=== Last 400 chars ===")
+        print(cleaned[-400:])
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
