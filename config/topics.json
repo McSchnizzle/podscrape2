@@ -6,7 +6,18 @@
       "voice_id": "6OzrBCQf8cjERkYgzSg8",
       "active": true,
       "description": "AI developments, machine learning breakthroughs, AI product launches, technology industry news, tech company developments, digital culture",
-      "voice_name": "Malcolm"
+      "use_dialogue_api": true,
+      "dialogue_model": "eleven_v3",
+      "voice_config": {
+        "speaker_1": {
+          "name": "Amara",
+          "voice_id": "h2sm0NbeIZXHBzJOMYcQ"
+        },
+        "speaker_2": {
+          "name": "Malcolm",
+          "voice_id": "6OzrBCQf8cjERkYgzSg8"
+        }
+      }
     },
     {
       "name": "Social Movements and Community Organizing",
@@ -33,5 +44,5 @@
       "use_speaker_boost": true
     }
   },
-  "last_updated": "2026-07-08T10:39:33.964042"
+  "last_updated": "2026-07-08T19:23:51.340743"
 }
