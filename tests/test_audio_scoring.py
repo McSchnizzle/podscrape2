@@ -9,8 +9,11 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 from scripts.run_audio import AudioProcessor_Runner  # noqa: E402
 
 
+LONG_TRANSCRIPT = "Sample transcript content for scoring. " * 20
+
+
 class DummyEpisode:
-    def __init__(self, guid: str, title: str, transcript: str = "Sample transcript"):
+    def __init__(self, guid: str, title: str, transcript: str = LONG_TRANSCRIPT):
         self.episode_guid = guid
         self.title = title
         self.transcript_content = transcript
@@ -58,6 +61,13 @@ def _build_runner(episode_repo, scorer):
     runner.content_scorer = scorer
     runner.score_threshold = 0.5
     runner.dry_run = False
+    runner.youtube_stats = {
+        "attempted": 0,
+        "transcript_api_success": 0,
+        "ytdlp_subtitle_success": 0,
+        "ytdlp_audio_success": 0,
+        "failed": 0,
+    }
     return runner
 
 

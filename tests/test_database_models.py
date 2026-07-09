@@ -8,7 +8,10 @@ import pytest
 pytest.importorskip("sqlalchemy", reason="SQLAlchemy is required for database integration tests")
 
 from datetime import datetime, date, timedelta, UTC
+from pathlib import Path
+
 from src.database.models import Episode, Feed, Digest
+from src.database.sqlalchemy_models import Digest as DigestModel
 
 
 class TestFeedRepository:
@@ -289,6 +292,8 @@ class TestDigestRepository:
         assert retrieved_digest is not None
         assert retrieved_digest.topic == sample_digest.topic
         assert retrieved_digest.digest_date == sample_digest.digest_date
+        assert retrieved_digest.digest_timestamp is not None
+        assert retrieved_digest.status == 'draft'
 
         # Retrieve by topic and date
         retrieved_by_topic_date = digest_repo.get_by_topic_date(
@@ -296,6 +301,33 @@ class TestDigestRepository:
         )
         assert retrieved_by_topic_date is not None
         assert retrieved_by_topic_date.id == digest_id
+
+    def test_digest_timestamp_schema_contract_is_migrated(self):
+        """Regression guard for kanban #2710's digest_timestamp schema drift."""
+        digest_columns = DigestModel.__table__.c
+        assert "digest_timestamp" in digest_columns
+        assert not digest_columns["digest_timestamp"].nullable
+        assert "status" in digest_columns
+
+        unique_constraints = {
+            constraint.name: tuple(column.name for column in constraint.columns)
+            for constraint in DigestModel.__table__.constraints
+            if constraint.name
+        }
+        assert unique_constraints["uq_digests_topic_date_timestamp"] == (
+            "topic",
+            "digest_date",
+            "digest_timestamp",
+        )
+
+        project_root = Path(__file__).resolve().parents[1]
+        migration_path = project_root / (
+            "alembic/versions/l8h9i0j1k2l3_add_digest_timestamp_and_status.py"
+        )
+        migration = migration_path.read_text()
+        assert "op.add_column" in migration
+        assert "'digest_timestamp'" in migration
+        assert "'status'" in migration
 
     def test_get_by_date(self, digest_repo):
         """Test retrieving all digests for a specific date"""
