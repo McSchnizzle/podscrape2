@@ -1,12 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
-    DATABASE_URL: process.env.DATABASE_URL,
-    SUPABASE_URL: process.env.SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE: process.env.SUPABASE_SERVICE_ROLE,
-    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
-    WEBUI_SECRET: process.env.WEBUI_SECRET,
-    // Build-time information for footer
+    // next.config.js `env` values get inlined into ANY bundle that
+    // references them, including client bundles -- unlike NEXT_PUBLIC_*,
+    // there's no scoping. Only list values here that are meant to be
+    // client-visible. Server code (API routes, utils/supabase.ts,
+    // utils/db.ts) reads secrets via process.env directly at runtime and
+    // does not need them listed here (kanban #2846 codex review).
+    //
+    // Build-time information for the footer (components/Footer.tsx, a
+    // client component) -- not secrets, safe to inline.
     BUILD_TIME: process.env.BUILD_TIME || new Date().toISOString(),
     VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
     GITHUB_SHA: process.env.GITHUB_SHA,

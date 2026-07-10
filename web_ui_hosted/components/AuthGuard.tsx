@@ -8,11 +8,11 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { user, loading } = useAuth()
+  const { authorized, loading } = useAuth()
   const pathname = usePathname()
 
-  // Don't apply auth guard to login page and auth callback
-  const publicPaths = ['/login', '/auth/callback']
+  // Don't apply auth guard to the login page itself
+  const publicPaths = ['/login']
   const isPublicPath = publicPaths.includes(pathname)
 
   if (isPublicPath) {
@@ -34,7 +34,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
     )
   }
 
-  if (!user) {
+  if (!authorized) {
     // Will be redirected to login by AuthProvider
     return null
   }

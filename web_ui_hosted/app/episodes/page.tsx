@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { EPISODE_STATUSES } from '@/utils/supabase';
+import { EPISODE_STATUSES } from '@/lib/constants';
 
 interface Episode {
   id: number;

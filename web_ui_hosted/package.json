@@ -15,7 +15,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/postgrest-js": "^1.15.0",
-    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.45.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -26,6 +25,7 @@
     "pg": "^8.22.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.5.0"
   },

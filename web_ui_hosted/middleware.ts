@@ -1,29 +1,62 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { updateSession } from '@/utils/supabase/middleware'
+import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/session'
+
+// Exact-match public paths.
+const PUBLIC_PATHS = new Set([
+  '/login',
+  '/api/auth/login',
+  '/api/health',
+  // Has its own CRON_SECRET / x-vercel-cron check (app/api/heartbeat/route.ts)
+  // and a live 5-min caller (systemd podcast-heartbeat.timer) that doesn't
+  // hold a session cookie -- the session guard would otherwise block it
+  // before its own auth ever runs.
+  '/api/heartbeat',
+  '/daily-digest.xml',
+  '/ai-tech-digest.xml',
+  '/favicon.ico',
+])
+
+// Prefix-match public paths.
+const PUBLIC_PREFIXES = ['/api/rss/', '/_next/']
+
+const STATIC_ASSET = /\.(?:svg|png|jpg|jpeg|gif|webp|ico)$/
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_PATHS.has(pathname)) return true
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true
+  if (STATIC_ASSET.test(pathname)) return true
+  return false
+}
 
 export async function middleware(request: NextRequest) {
-  console.log('Middleware processing path:', request.nextUrl.pathname)
+  const { pathname } = request.nextUrl
 
-  try {
-    // Update session and handle token refresh
-    return await updateSession(request)
-  } catch (error) {
-    console.error('Middleware error:', error)
-    // Don't block requests on middleware errors, just log them
+  if (isPublicPath(pathname)) {
     return NextResponse.next()
   }
+
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const authorized = await verifySessionToken(token)
+
+  if (authorized) {
+    return NextResponse.next()
+  }
+
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('next', pathname)
+  return NextResponse.redirect(loginUrl)
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - api (API routes) - EXCLUDED to prevent multiple client instances
-     * Feel free to modify this pattern to include more paths.
+     * Run on everything except Next's static/image internals, which are
+     * cheap to serve and never carry admin data.
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/|daily-digest.xml|ai-tech-digest.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image).*)',
   ],
 }

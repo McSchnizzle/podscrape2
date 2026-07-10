@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase as sharedSupabase } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { createLogger } from '@/lib/logger'
 
@@ -7,11 +7,11 @@ const log = createLogger('api/recurring-topics/topics')
 
 export const dynamic = 'force-dynamic'
 
+// Server-only client against the local PostgREST stack (kanban #2846).
+// Kept as a function (not a direct import at call sites) to avoid
+// touching the existing getSupabaseClient() call sites in this file.
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE!
-  )
+  return sharedSupabase
 }
 
 // Create a new episode topic
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to include episode_title
-    const topics = data?.map(topic => ({
+    const topics = data?.map((topic: any) => ({
       ...topic,
       episode_title: topic.episodes?.title || 'Unknown Episode'
     })) || []

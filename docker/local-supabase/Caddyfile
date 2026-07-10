@@ -1,0 +1,7 @@
+:5471 {
+	handle /rest/v1/* {
+		uri strip_prefix /rest/v1
+		reverse_proxy postgrest:3000
+	}
+	respond 404
+}
