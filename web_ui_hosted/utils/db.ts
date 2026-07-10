@@ -6,6 +6,7 @@
  * query it directly with pg; the Supabase-backed admin routes remain parked
  * until the admin UI gets a new auth + data backend.
  */
+import 'server-only'
 import { Pool } from 'pg'
 
 let pool: Pool | null = null

@@ -3,6 +3,24 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+/**
+ * Constrain the post-login redirect to a same-origin relative path.
+ * `next` comes from an unauthenticated query param (middleware.ts sets it
+ * when redirecting, but anyone can also link straight to /login?next=...),
+ * so reject protocol-relative ("//evil.com"), absolute, and anything else
+ * that doesn't resolve to this origin before handing it to router.push.
+ */
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith('/')) return '/'
+  try {
+    const resolved = new URL(raw, 'http://localhost')
+    if (resolved.origin !== 'http://localhost') return '/'
+    return resolved.pathname + resolved.search + resolved.hash
+  } catch {
+    return '/'
+  }
+}
+
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -29,7 +47,7 @@ function LoginForm() {
         return
       }
 
-      const next = searchParams.get('next') || '/'
+      const next = safeNextPath(searchParams.get('next'))
       router.push(next)
       router.refresh()
     } catch (err) {

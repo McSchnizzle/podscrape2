@@ -6,6 +6,11 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/api/auth/login',
   '/api/health',
+  // Has its own CRON_SECRET / x-vercel-cron check (app/api/heartbeat/route.ts)
+  // and a live 5-min caller (systemd podcast-heartbeat.timer) that doesn't
+  // hold a session cookie -- the session guard would otherwise block it
+  // before its own auth ever runs.
+  '/api/heartbeat',
   '/daily-digest.xml',
   '/ai-tech-digest.xml',
   '/favicon.ico',

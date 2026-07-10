@@ -10,7 +10,15 @@ import { test, expect } from '@playwright/test';
  * SUPABASE_URL, SUPABASE_SERVICE_ROLE, DATABASE_URL).
  */
 
-const PUBLIC_GET_PATHS = ['/login', '/api/health', '/api/rss/daily-digest', '/api/rss/ai-tech-digest'];
+const PUBLIC_GET_PATHS = [
+  '/login',
+  '/api/health',
+  '/api/rss/daily-digest',
+  '/api/rss/ai-tech-digest',
+  // Has its own CRON_SECRET check and a live systemd-timer caller with no
+  // session cookie -- must stay reachable without one (codex review, #2846).
+  '/api/heartbeat',
+];
 
 const ADMIN_PAGE_PATHS = ['/dashboard', '/settings', '/topics'];
 
@@ -77,4 +85,36 @@ test('correct password sets a session cookie that unlocks admin routes', async (
 
   const adminApiResponse = await request.get('/api/tasks/stats');
   expect(adminApiResponse.status()).not.toBe(401);
+});
+
+test.describe('login next= param is constrained to same-origin relative paths', () => {
+  const password = process.env.ADMIN_PASSWORD;
+
+  const OPEN_REDIRECT_ATTEMPTS = ['https://evil.example.com', '//evil.example.com', '/\\evil.example.com'];
+
+  for (const nextParam of OPEN_REDIRECT_ATTEMPTS) {
+    test(`next=${nextParam} does not redirect off-origin`, async ({ page }) => {
+      test.skip(!password, 'ADMIN_PASSWORD not set in the test environment');
+
+      await page.goto(`/login?next=${encodeURIComponent(nextParam)}`);
+      const expectedOrigin = new URL(page.url()).origin;
+
+      await page.getByLabel('Password').fill(password!);
+      await page.getByRole('button', { name: /sign in/i }).click();
+      await page.waitForURL((url) => url.pathname !== '/login', { timeout: 10_000 });
+
+      expect(new URL(page.url()).origin, `next=${nextParam} should not escape the app origin`).toBe(
+        expectedOrigin
+      );
+    });
+  }
+
+  test('next=/dashboard (a legitimate same-origin path) is honored', async ({ page }) => {
+    test.skip(!password, 'ADMIN_PASSWORD not set in the test environment');
+
+    await page.goto('/login?next=%2Fdashboard');
+    await page.getByLabel('Password').fill(password!);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+  });
 });
