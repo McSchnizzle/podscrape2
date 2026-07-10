@@ -2,24 +2,20 @@
 # Wrapper for scripts/research_desk.py — used by et01 cron.
 # Activates venv, loads env, runs the weekly research desk injector.
 #
-# Locking: the patrol cron-wrapper already flocks scheduled runs by job
-# name, but this script can also be invoked directly/manually. The ledger
-# is atomically written per-entry but is still a read-modify-write across
-# a run, so two concurrent runs racing on it could interleave lost updates.
-# Take our own lock here too, and exit cleanly (not an error) if held.
+# Locking: research_desk.py's main() takes its own non-blocking flock on
+# data/.research_desk.lock around the whole run, covering this wrapper AND
+# any direct `python3 scripts/research_desk.py` invocation from one choke
+# point. Deliberately NOT duplicated here -- flock is per open-file-
+# description, so a second independent lock attempt on the SAME path from
+# this wrapper would self-conflict with the child python3 process's own
+# lock attempt (blocks/fails against its own parent rather than recognizing
+# common ownership), turning every wrapper-invoked run into a false
+# "another run holds the lock" no-op.
 
 set -euo pipefail
 
 PROJECT_ROOT="/srv/projects/podcast"
 cd "$PROJECT_ROOT"
-
-LOCK_FILE="$PROJECT_ROOT/data/.research_desk.lock"
-mkdir -p "$PROJECT_ROOT/data"
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
-    echo "run_research_desk: another run already holds $LOCK_FILE, exiting" >&2
-    exit 0
-fi
 
 # shellcheck source=/dev/null
 source "$PROJECT_ROOT/.venv/bin/activate"

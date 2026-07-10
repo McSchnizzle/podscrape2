@@ -35,6 +35,7 @@ scripts/run_research_desk.sh). Idempotency + durability:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import ipaddress
 import json
@@ -94,6 +95,7 @@ INJECTION_WINDOW_DAYS = 7
 DEFAULT_MODEL = "gpt-5.2"
 
 DEFAULT_LEDGER_PATH = Path(__file__).resolve().parent.parent / "data" / "research_desk_ledger.json"
+DEFAULT_LOCK_PATH = Path(__file__).resolve().parent.parent / "data" / ".research_desk.lock"
 
 # Fetch safety
 MAX_REDIRECTS = 5
@@ -414,15 +416,35 @@ def triage_candidate(client, model: str, candidate: Candidate) -> TriageVerdict:
 # Fetch safety (SSRF guard) + article extraction
 # ---------------------------------------------------------------------------
 
-def _resolve_and_check_public(host: str) -> None:
-    """Raise UnsafeUrlError if `host` resolves to a private/loopback/
-    link-local/reserved/multicast address."""
+def _require_https_host(url: str) -> str:
+    """Validate scheme is https and a host is present; return the hostname."""
+    parts = urlsplit(url)
+    if parts.scheme != "https":
+        raise UnsafeUrlError(f"Refusing non-https URL: {url}")
+    host = parts.hostname
+    if not host:
+        raise UnsafeUrlError(f"URL has no host: {url}")
+    return host
+
+
+def _resolve_and_pin(host: str) -> List[str]:
+    """Resolve `host` ONCE and validate every returned address is public.
+    Returns the vetted IP address list; the caller must connect to one of
+    these EXACT addresses rather than letting httpx (or anything else)
+    re-resolve the hostname independently. Validating a resolution and then
+    connecting via a fresh, separate lookup is a DNS-rebinding hole: a
+    hostile domain can hand back a public IP to this check and a different,
+    private/loopback IP to the connection a moment later (TTL=0 or two
+    genuinely different answers). Pinning to the addresses from this one
+    lookup closes that window."""
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as e:
         raise UnsafeUrlError(f"DNS resolution failed for {host}: {e}")
     if not infos:
         raise UnsafeUrlError(f"DNS resolution returned no addresses for {host}")
+
+    addresses: List[str] = []
     for info in infos:
         ip_str = info[4][0]
         try:
@@ -432,35 +454,50 @@ def _resolve_and_check_public(host: str) -> None:
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved \
                 or ip.is_multicast or ip.is_unspecified:
             raise UnsafeUrlError(f"{host} resolves to a non-public address ({ip_str}); refusing to fetch")
+        if ip_str not in addresses:
+            addresses.append(ip_str)
 
-
-def _validate_https_url(url: str) -> None:
-    parts = urlsplit(url)
-    if parts.scheme != "https":
-        raise UnsafeUrlError(f"Refusing non-https URL: {url}")
-    host = parts.hostname
-    if not host:
-        raise UnsafeUrlError(f"URL has no host: {url}")
-    _resolve_and_check_public(host)
+    if not addresses:
+        raise UnsafeUrlError(f"DNS resolution for {host} returned no usable addresses")
+    return addresses
 
 
 def fetch_article_text(url: str, timeout: float = 15.0) -> Optional[FetchResult]:
     """Fetch `url` and extract main text. https-only, manually follows
-    redirects (capped, each hop re-validated against the SSRF guard rather
-    than trusting httpx's own follow_redirects), and caps response size via
-    streaming so a malicious/huge body can't be fully buffered first."""
+    redirects (capped), and pins every connection to an address already
+    vetted by _resolve_and_pin() -- the request is sent directly to that IP
+    (Host header + TLS SNI/cert verification still target the real
+    hostname via the sni_hostname request extension) so httpx never gets a
+    chance to re-resolve the hostname itself and reopen the DNS-rebinding
+    window. Response size is capped via streaming so a malicious/huge body
+    can't be fully buffered first."""
     try:
         current_url = url
         with httpx.Client(follow_redirects=False, timeout=timeout,
                            headers={"User-Agent": FETCH_USER_AGENT}) as client:
             for _hop in range(MAX_REDIRECTS + 1):
-                _validate_https_url(current_url)
-                with client.stream("GET", current_url) as resp:
+                host = _require_https_host(current_url)
+                pinned_ip = _resolve_and_pin(host)[0]
+
+                parsed = urlsplit(current_url)
+                pinned_url = httpx.URL(current_url).copy_with(host=pinned_ip)
+                host_header = host if not parsed.port else f"{host}:{parsed.port}"
+
+                request = client.build_request(
+                    "GET", pinned_url,
+                    headers={"Host": host_header},
+                    extensions={"sni_hostname": host},
+                )
+                resp = client.send(request, stream=True)
+                try:
                     if resp.is_redirect:
                         location = resp.headers.get("location")
                         if not location:
                             logger.warning(f"Redirect from {current_url} had no Location header")
                             return None
+                        # Resolve relative redirects against the real
+                        # (unpinned) URL, not the IP-literal one we just
+                        # connected to, so relative paths land on the real host.
                         current_url = str(httpx.URL(current_url).join(location))
                         continue
                     resp.raise_for_status()
@@ -481,8 +518,12 @@ def fetch_article_text(url: str, timeout: float = 15.0) -> Optional[FetchResult]
 
                     html_bytes = b"".join(chunks)
                     html_text = html_bytes.decode(resp.encoding or "utf-8", errors="replace")
-                    final_url = normalize_url(str(resp.url))
+                    # final_url is our own tracked (real-hostname) URL, not
+                    # resp.url -- resp.url would show the pinned IP literal.
+                    final_url = normalize_url(current_url)
                     return FetchResult(final_url=final_url, text=extract_main_text(html_text))
+                finally:
+                    resp.close()
             logger.warning(f"Too many redirects (> {MAX_REDIRECTS}) fetching {url}")
             return None
     except UnsafeUrlError as e:
@@ -820,32 +861,68 @@ def run(
 
     qualifying = [(c, v) for c, v in judged if v.score >= TRIAGE_THRESHOLD]
     qualifying.sort(key=lambda cv: cv[1].score, reverse=True)
-    top = qualifying[:remaining_budget]
 
     if dry_run:
+        # Preview mode never commits anything, so a fixed top-N slice is
+        # fine here -- no backfill needed since nothing gets consumed.
+        top = qualifying[:remaining_budget]
         _print_dry_run(judged, top)
+        for candidate, verdict in top:
+            fetch_result = fetch_article_text(candidate.url)
+            source = "full-article"
+            body = fetch_result.text if fetch_result else None
+            if fetch_result and fetch_result.final_url and fetch_result.final_url != candidate.url:
+                candidate = replace(candidate, url=fetch_result.final_url)
+            if not body or len(body) < MIN_TRANSCRIPT_CHARS:
+                padded = pad_summary(candidate)
+                if len(padded) >= MIN_TRANSCRIPT_CHARS:
+                    body, source = padded, "summary-fallback"
+                else:
+                    stats.skipped.append((candidate.title, "article text and padded summary both under 1000 chars"))
+                    continue
+            transcript = build_transcript(candidate, body)
+            print(f"--- DRY RUN transcript preview: {candidate.title} ({source}, "
+                  f"{len(transcript)} chars) ---")
+            print(transcript[:2000])
+            print()
+            stats.injected += 1
+        _log_summary(stats)
+        return stats
 
-    feed_id = None
-    episode_repo = None
-    if not dry_run:
-        feed_repo = get_feed_repo(db_manager)
-        episode_repo = get_episode_repo(db_manager)
-        feed_id = ensure_pseudo_feed(feed_repo)
+    feed_repo = get_feed_repo(db_manager)
+    episode_repo = get_episode_repo(db_manager)
+    feed_id = ensure_pseudo_feed(feed_repo)
 
-    for candidate, verdict in top:
+    # Identities actually committed (ledger-written) THIS run. Deliberately
+    # separate from the pre-triage `seen_this_run` set above, which only
+    # records "appeared somewhere in this run's raw search results" -- reusing
+    # that set here would falsely skip a candidate whenever its post-redirect
+    # URL happened to coincide with some OTHER, unrelated, possibly-unselected
+    # search result, even though nothing was ever actually injected under it.
+    injected_this_run: set = set()
+    budget_left = remaining_budget
+
+    for candidate, verdict in qualifying:
+        if budget_left <= 0:
+            break
+
         fetch_result = fetch_article_text(candidate.url)
         source = "full-article"
         body = fetch_result.text if fetch_result else None
 
         if fetch_result and fetch_result.final_url and fetch_result.final_url != candidate.url:
-            # Canonical identity shifts to the post-redirect URL. Re-check
-            # dedupe now, since the redirect target may already be ledgered
-            # under a different tracking link than the one search returned.
+            # Canonical identity shifts to the post-redirect URL.
             candidate = replace(candidate, url=fetch_result.final_url)
-            if candidate.url in seen_urls or candidate.url in seen_this_run:
-                stats.skipped.append((candidate.title, "post-redirect canonical URL already ledgered/injected"))
-                continue
-            seen_this_run.add(candidate.url)
+
+        # Dedupe against durable identity (ledger, growing as we inject) and
+        # this run's actual commits -- NOT the raw search-result set, so a
+        # coincidental URL collision skips only this one candidate. Any
+        # budget it would have used rolls over to the next qualifying
+        # candidate below (backfill), since budget_left is only decremented
+        # on an actual successful injection.
+        if candidate.url in seen_urls or candidate.url in injected_this_run:
+            stats.skipped.append((candidate.title, "canonical URL already ledgered/injected this run"))
+            continue
 
         if not body or len(body) < MIN_TRANSCRIPT_CHARS:
             padded = pad_summary(candidate)
@@ -857,14 +934,6 @@ def run(
                 continue
 
         transcript = build_transcript(candidate, body)
-
-        if dry_run:
-            print(f"--- DRY RUN transcript preview: {candidate.title} ({source}, "
-                  f"{len(transcript)} chars) ---")
-            print(transcript[:2000])
-            print()
-            stats.injected += 1
-            continue
 
         # Ledger-first: write the ledger entry BEFORE the DB insert. If the
         # process crashes between these two lines, the ledger already marks
@@ -878,6 +947,7 @@ def run(
         }
         append_ledger(ledger_path, ledger_entry)
         seen_urls.add(candidate.url)
+        injected_this_run.add(candidate.url)
 
         try:
             episode_id, created = inject_candidate(episode_repo, feed_id, candidate, transcript)
@@ -891,6 +961,7 @@ def run(
 
         if created:
             stats.injected += 1
+            budget_left -= 1
             logger.info(f"Injected episode {episode_id} ({source}): {candidate.title}")
         else:
             stats.skipped.append((candidate.title, "episode_guid already existed (DB-level dedupe)"))
@@ -910,6 +981,29 @@ def _non_negative_int(value: str) -> int:
     return ivalue
 
 
+def _acquire_lock(lock_path: Path):
+    """Non-blocking exclusive flock on `lock_path`, covering every way this
+    script can be invoked (the cron wrapper, a direct `python3
+    scripts/research_desk.py` call, or any other future caller of main()) --
+    a single choke point rather than duplicating the lock in the shell
+    wrapper too (which would self-conflict: flock is per open-file-
+    description, so a second independent open() of the SAME path, even from
+    a child process that inherited the first descriptor, blocks/fails
+    against its own parent's lock rather than recognizing common ownership).
+
+    Returns the open file handle (keep it referenced for the run's duration
+    -- closing it releases the lock) or None if another run already holds it.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "w")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -924,22 +1018,32 @@ def main(argv: Optional[List[str]] = None) -> int:
                              f"window, not per run (default {DEFAULT_MAX_INJECT})")
     parser.add_argument("--model", default=os.getenv("RESEARCH_DESK_MODEL", DEFAULT_MODEL),
                         help=f"Search-capable OpenAI model (default {DEFAULT_MODEL})")
+    parser.add_argument("--lock-path", type=Path, default=DEFAULT_LOCK_PATH,
+                        help=argparse.SUPPRESS)  # override for tests
     args = parser.parse_args(argv)
 
-    if not os.getenv("OPENAI_API_KEY"):
-        logger.error("OPENAI_API_KEY not set; cannot run research desk search")
-        return 1
-
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    db_manager = get_database_manager()
+    lock_fh = _acquire_lock(args.lock_path)
+    if lock_fh is None:
+        logger.info(f"Another research_desk run already holds {args.lock_path}; exiting cleanly")
+        return 0
 
     try:
-        stats = run(db_manager=db_manager, client=client, model=args.model,
-                    max_inject=args.max_inject, dry_run=args.dry_run)
-    except ValueError as e:
-        logger.error(str(e))
-        return 1
-    return 1 if stats.fatal else 0
+        if not os.getenv("OPENAI_API_KEY"):
+            logger.error("OPENAI_API_KEY not set; cannot run research desk search")
+            return 1
+
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        db_manager = get_database_manager()
+
+        try:
+            stats = run(db_manager=db_manager, client=client, model=args.model,
+                        max_inject=args.max_inject, dry_run=args.dry_run)
+        except ValueError as e:
+            logger.error(str(e))
+            return 1
+        return 1 if stats.fatal else 0
+    finally:
+        lock_fh.close()
 
 
 if __name__ == "__main__":
