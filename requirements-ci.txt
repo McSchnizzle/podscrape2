@@ -38,6 +38,7 @@ feedgen>=0.9.0
 # Web & Network
 aiohttp>=3.8.0
 httpx>=0.24.0
+beautifulsoup4>=4.12.0
 Flask>=2.3.0
 feedparser>=6.0.10
 

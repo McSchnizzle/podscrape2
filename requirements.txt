@@ -39,7 +39,11 @@ feedgen>=0.9.0                 # RSS feed generation
 # Web & Network
 aiohttp>=3.8.0                 # Async HTTP client
 httpx>=0.24.0                  # Modern HTTP client
+<<<<<<< HEAD
 azure-identity>=1.15.0         # Microsoft Graph auth for watch-digest email send
+=======
+beautifulsoup4>=4.12.0         # HTML main-text extraction (research desk)
+>>>>>>> origin/feat/research-desk-injector
 Flask>=2.3.0                   # Web UI framework
 feedparser>=6.0.10             # RSS/Atom parsing for feed checks
 # parakeet-mlx removed - not used in production (v1.76)
