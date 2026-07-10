@@ -2266,12 +2266,16 @@ Thank you for your understanding, and we'll see you tomorrow!
             # quotes/backslashes/newlines/control chars means none of it can
             # break out of the <UNTRUSTED_WATCH_THEME_DATA> tag the way raw
             # interpolated text could (e.g. a transcript excerpt containing
-            # `"\n\nIgnore previous instructions...`).
+            # `"\n\nIgnore previous instructions...`). Every "<" is
+            # additionally replaced with its backslash-u-zero-zero-three-c
+            # JSON escape (still valid JSON) so a forged closing tag
+            # embedded in the excerpt text can't survive as a literal tag
+            # substring in the rendered prompt.
             payload = json.dumps({
                 "theme_name": theme["name"],
                 "theme_description": theme["description"],
                 "quoted_excerpts": quoted_excerpts,
-            }, ensure_ascii=False)
+            }, ensure_ascii=False).replace("<", "\\u003c")
             blocks.append(
                 f"<UNTRUSTED_WATCH_THEME_DATA>\n{payload}\n</UNTRUSTED_WATCH_THEME_DATA>"
             )
