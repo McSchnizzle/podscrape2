@@ -236,6 +236,23 @@ def post_to_harold(html_body: str, markdown_body: str, run_date: date) -> bool:
 # Main orchestration
 # ---------------------------------------------------------------------------
 
+def load_active_weekly_themes(session, theme_ids: Optional[List[int]] = None) -> List[dict]:
+    """Active watch themes eligible for the Sunday digest: scope in
+    ('weekly', 'both'). scope='daily' themes are nightly-emphasis-only (see
+    ScriptGenerator._build_daily_theme_emphasis) and must NOT leak into the
+    weekly email/Harold POST.
+    """
+    q = (
+        session.query(WatchTheme)
+        .filter(WatchTheme.active.is_(True))
+        .filter(WatchTheme.scope.in_(['weekly', 'both']))
+    )
+    if theme_ids:
+        q = q.filter(WatchTheme.id.in_(theme_ids))
+    themes_raw = q.order_by(WatchTheme.sort_order, WatchTheme.id).all()
+    return [{"id": t.id, "name": t.name, "description": t.description} for t in themes_raw]
+
+
 def run(dry_run: bool = False, episode_limit: Optional[int] = None,
         theme_ids: Optional[List[int]] = None, no_summarize: bool = False) -> int:
     logging.basicConfig(
@@ -253,15 +270,8 @@ def run(dry_run: bool = False, episode_limit: Optional[int] = None,
     # before the long claude -p scan loop. Holding the session across many
     # minutes of scanning causes Supabase to drop the connection.
     with db.get_session() as session:
-        q = session.query(WatchTheme).filter(WatchTheme.active.is_(True))
-        if theme_ids:
-            q = q.filter(WatchTheme.id.in_(theme_ids))
-        themes_raw = q.order_by(WatchTheme.sort_order, WatchTheme.id).all()
-        themes_data = [
-            {"id": t.id, "name": t.name, "description": t.description}
-            for t in themes_raw
-        ]
-        logger.info(f"Loaded {len(themes_data)} active watch themes "
+        themes_data = load_active_weekly_themes(session, theme_ids=theme_ids)
+        logger.info(f"Loaded {len(themes_data)} active watch themes (scope weekly/both) "
                     f"{'(filtered)' if theme_ids else ''}")
 
         if not themes_data:
