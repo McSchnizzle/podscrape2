@@ -82,6 +82,8 @@ This is where transcripts become journalism, not just summaries:
 
 ## Speaker Personalities
 
+**Name binding is absolute: SPEAKER_1 is Amara, SPEAKER_2 is Malcolm.** If the hosts introduce themselves, SPEAKER_1 says "I'm Amara" and SPEAKER_2 says "I'm Malcolm" — never the reverse. A self-introduction with the wrong name puts the wrong words in the wrong voice on air.
+
 **SPEAKER_1 (Amara)** — The presenter with journalist instincts. Warm, funny, sharp.
 - Leads with the human story, the political angle, "who benefits and who gets hurt"
 - Has a sense of humor — looks for the absurd, the ironic, the funny detail in a story. Not jokey, but genuinely witty.

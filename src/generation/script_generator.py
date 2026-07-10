@@ -1239,6 +1239,10 @@ Follow ALL rules in the system prompt exactly, especially:
                 logger.warning(f"Auto-corrected dialogue format issues in generated script")
                 char_count = len(script_content)  # Update char count after fixes
 
+            # Repair swapped on-air self-introductions (Ep 691 guard)
+            script_content, _name_repairs = self._enforce_speaker_name_binding(
+                script_content, instruction.voice_config)
+
             # Apply anti-AI writing cleanup (v3.22 - mechanical fixes for patterns LLMs resist)
             script_content = self._apply_anti_ai_cleanup(script_content, skip_variety_pass=skip_variety_pass)
             char_count = len(script_content)
@@ -1264,6 +1268,54 @@ Follow ALL rules in the system prompt exactly, especially:
         except Exception as e:
             logger.error(f"{self.ai_model} error for dialogue script {topic}: {e}")
             raise ScriptGenerationError(f"Failed to generate dialogue script with {self.ai_model}: {e}")
+
+    def _enforce_speaker_name_binding(self, script: str,
+                                      voice_config: Optional[Dict[str, Any]]) -> Tuple[str, int]:
+        """Fix on-air self-introductions that use the OTHER host's name.
+
+        Ep 691 (2026-07-09) aired with the voices introducing themselves
+        swapped: SPEAKER_2 (Malcolm's voice) said "I'm Amara" and vice versa.
+        The speaker->voice mapping is fixed by voice_config, so a
+        self-introduction on a SPEAKER_N line using the other speaker's name
+        is always wrong and always safe to repair deterministically.
+
+        Only self-intro phrases ("I'm <name>", "I am <name>") are touched;
+        hosts referring to EACH OTHER by name are left alone.
+
+        Returns:
+            (script, number_of_repairs)
+        """
+        import re
+
+        if not voice_config:
+            return script, 0
+        names = {}
+        for key, cfg in voice_config.items():
+            m = re.match(r"(?i)speaker[_ ]?([12])", key)
+            if m and isinstance(cfg, dict) and cfg.get('name'):
+                names[m.group(1)] = cfg['name']
+        if set(names) != {'1', '2'}:
+            return script, 0
+
+        other = {'1': names['2'], '2': names['1']}
+        repairs = 0
+        fixed_lines = []
+        for line in script.split('\n'):
+            m = re.match(r"^SPEAKER_([12]):", line)
+            if m:
+                n = m.group(1)
+                pattern = rf"\b(I'm|I am)\s+{re.escape(other[n])}\b"
+                new_line, count = re.subn(pattern, rf"\1 {names[n]}", line)
+                if count:
+                    repairs += count
+                    line = new_line
+            fixed_lines.append(line)
+        if repairs:
+            logger.warning(
+                f"Speaker name binding repaired: {repairs} self-introduction(s) "
+                f"used the other host's name (SPEAKER_1={names['1']}, SPEAKER_2={names['2']})"
+            )
+        return '\n'.join(fixed_lines), repairs
 
     def _validate_and_fix_dialogue_format(self, script: str) -> Tuple[str, bool]:
         """
