@@ -9,7 +9,7 @@ set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="/home/pbrown/logs/podcast-cron.log"
+LOG_FILE="${LOG_FILE:-/home/pbrown/logs/podcast-cron.log}"
 TEMP_LOG=$(mktemp)
 START_TIME=$(date +%s)
 
