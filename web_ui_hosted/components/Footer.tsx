@@ -20,23 +20,19 @@ export default function Footer() {
   }
 
   return (
-    <footer className="mt-auto border-t border-gray-200 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-600">
-          <div className="flex items-center space-x-4">
-            <span className="font-medium">RSS Podcast Digest System</span>
-            <span className="text-gray-400">|</span>
+    <footer className="mt-auto border-t border-border bg-surface-1">
+      <div className="mx-auto max-w-7xl px-[var(--space-6)] py-[var(--space-4)]">
+        <div className="flex flex-col items-center justify-between gap-[var(--space-2)] text-ink-subtle sm:flex-row" style={{ font: 'var(--t-small)' }}>
+          <div className="flex items-center gap-[var(--space-3)]">
+            <span className="font-medium text-ink-muted">RSS Podcast Digest System</span>
+            <span className="text-ink-faint">|</span>
             <span>v{buildInfo.version}</span>
           </div>
 
-          <div className="flex items-center space-x-4 mt-2 sm:mt-0">
-            <span className="text-gray-500">
-              Build: {buildInfo.commit}
-            </span>
-            <span className="text-gray-400">|</span>
-            <span className="text-gray-500" title={buildInfo.buildTime}>
-              {buildInfo.buildDate}
-            </span>
+          <div className="flex items-center gap-[var(--space-3)]">
+            <span className="font-mono text-ink-faint">{buildInfo.commit}</span>
+            <span className="text-ink-faint">|</span>
+            <span title={buildInfo.buildTime}>{buildInfo.buildDate}</span>
           </div>
         </div>
       </div>

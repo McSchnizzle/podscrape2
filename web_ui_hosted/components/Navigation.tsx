@@ -1,152 +1,183 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Rss,
+  Tags,
+  Eye,
+  Repeat,
+  GitBranch,
+  FlaskConical,
+  Radio,
+  ScrollText,
+  Wrench,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Disc3,
+} from 'lucide-react'
 import { useAuth } from './AuthProvider'
+import { ThemeToggle } from './ThemeToggle'
 
-export function Navigation() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { authorized, signOut } = useAuth()
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard }
+type NavGroup = { label: string; items: NavItem[] }
 
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Content',
+    items: [
+      { href: '/episodes', label: 'Episodes', icon: Rss },
+      { href: '/digests', label: 'Digests', icon: Disc3 },
+      { href: '/feeds', label: 'Feeds', icon: Radio },
+      { href: '/topics', label: 'Topics', icon: Tags },
+      { href: '/watch-themes', label: 'Watch Themes', icon: Eye },
+      { href: '/recurring-topics', label: 'Recurring Topics', icon: Repeat },
+      { href: '/story-arcs', label: 'Story Arcs', icon: GitBranch },
+    ],
+  },
+  {
+    label: 'Production',
+    items: [
+      { href: '/script-lab', label: 'Script Lab', icon: FlaskConical },
+      { href: '/publishing', label: 'Publishing', icon: Radio },
+      { href: '/logs', label: 'Logs', icon: ScrollText },
+      { href: '/maintenance', label: 'Maintenance', icon: Wrench },
+    ],
+  },
+  {
+    label: 'System',
+    items: [{ href: '/settings', label: 'Settings', icon: Settings }],
+  },
+]
+
+function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
+  const pathname = usePathname()
+  const active = pathname === item.href || pathname?.startsWith(`${item.href}/`)
+  const Icon = item.icon
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center space-x-8">
-            <div className="flex-shrink-0">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900">
-                Podcast Digest Admin
-              </h1>
-            </div>
-            <div className="hidden md:flex items-center space-x-4">
-              <a href="/dashboard" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Dashboard
-              </a>
-              <a href="/feeds" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Feeds
-              </a>
-              <a href="/topics" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Topics
-              </a>
-              <a href="/script-lab" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Script Lab
-              </a>
-              <a href="/episodes" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Episodes
-              </a>
-              <a href="/publishing" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Publishing
-              </a>
-              <a href="/story-arcs" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Story Arcs
-              </a>
-              <a href="/settings" className="text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
-                Settings
-              </a>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            {authorized && (
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={signOut}
-                  className="text-sm text-gray-500 hover:text-red-600 px-3 py-1 rounded border border-gray-300 hover:border-red-300"
-                >
-                  Sign Out
-                </button>
-              </div>
-            )}
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden ml-3 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-            >
-              <span className="sr-only">Open main menu</span>
-              {/* Hamburger icon */}
-              <svg
-                className={`${mobileMenuOpen ? 'hidden' : 'block'} h-6 w-6`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              {/* Close icon */}
-              <svg
-                className={`${mobileMenuOpen ? 'block' : 'hidden'} h-6 w-6`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+    <a
+      href={item.href}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={`group flex items-center gap-[var(--space-3)] rounded-sm px-[var(--space-3)] py-[var(--space-2)] text-[13px] font-medium transition-colors duration-fast ease-house ${
+        active
+          ? 'bg-accent-soft text-accent'
+          : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
+      }`}
+    >
+      <Icon
+        size={16}
+        strokeWidth={active ? 2.25 : 2}
+        className={active ? 'text-accent' : 'text-ink-faint group-hover:text-ink-muted'}
+      />
+      {item.label}
+    </a>
+  )
+}
 
-        {/* Mobile menu */}
-        <div className={`${mobileMenuOpen ? 'block' : 'hidden'} md:hidden`}>
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200">
-            <a
-              href="/dashboard"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Dashboard
-            </a>
-            <a
-              href="/feeds"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Feeds
-            </a>
-            <a
-              href="/topics"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Topics
-            </a>
-            <a
-              href="/script-lab"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Script Lab
-            </a>
-            <a
-              href="/episodes"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Episodes
-            </a>
-            <a
-              href="/publishing"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Publishing
-            </a>
-            <a
-              href="/story-arcs"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Story Arcs
-            </a>
-            <a
-              href="/settings"
-              className="text-gray-900 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Settings
-            </a>
-          </div>
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { signOut } = useAuth()
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-[var(--space-3)] px-[var(--space-5)] py-[var(--space-6)]">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-sm"
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+        >
+          <Disc3 size={18} />
+        </div>
+        <div>
+          <div style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Podcast Digest</div>
+          <div className="micro">Admin</div>
         </div>
       </div>
-    </nav>
+
+      <nav className="flex-1 overflow-y-auto px-[var(--space-4)] pb-[var(--space-4)]">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mb-[var(--space-5)]">
+            <div className="micro mb-[var(--space-2)] px-[var(--space-3)]">{group.label}</div>
+            <div className="flex flex-col gap-[2px]">
+              {group.items.map((item) => (
+                <NavLink key={item.href} item={item} onClick={onNavigate} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="flex items-center justify-between gap-[var(--space-3)] border-t border-border px-[var(--space-4)] py-[var(--space-4)]">
+        <ThemeToggle />
+        <button
+          onClick={signOut}
+          className="btn btn-ghost btn-sm text-ink-subtle hover:text-danger"
+        >
+          <LogOut size={14} />
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function Navigation() {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] border-r border-border bg-surface-1 md:block">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-surface-1 px-[var(--space-4)] py-[var(--space-3)] shadow-sm md:hidden">
+        <div className="flex items-center gap-[var(--space-2)]">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-sm"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          >
+            <Disc3 size={16} />
+          </div>
+          <span style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Podcast Digest</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="btn btn-ghost btn-sm"
+        >
+          <Menu size={18} />
+        </button>
+      </div>
+
+      {/* Mobile off-canvas menu */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0"
+            style={{ background: 'var(--scrim)' }}
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 w-[280px] bg-surface-1 shadow-lg">
+            <div className="flex justify-end p-[var(--space-3)]">
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+                className="btn btn-ghost btn-sm"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </div>
+        </div>
+      )}
+    </>
   )
 }

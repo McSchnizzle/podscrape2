@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: ['selector', '[data-theme="dark"]'],
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -7,40 +8,75 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // House design tokens (~/.claude/design/tokens.css, vendored as
+      // app/tokens.css). Components use ONLY these -- no raw hex. Values are
+      // CSS custom properties so light/dark both resolve through one class.
       colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          900: '#1e3a8a',
+        bg: 'var(--bg)',
+        surface: {
+          1: 'var(--surface-1)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
+        },
+        border: {
+          DEFAULT: 'var(--border)',
+          strong: 'var(--border-strong)',
+        },
+        ink: {
+          DEFAULT: 'var(--text)',
+          muted: 'var(--text-muted)',
+          subtle: 'var(--text-subtle)',
+          faint: 'var(--text-faint)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+          soft: 'var(--accent-soft)',
+        },
+        'on-accent': 'var(--on-accent)',
+        warm: {
+          DEFAULT: 'var(--warm)',
+          soft: 'var(--warm-soft)',
         },
         success: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
+          DEFAULT: 'var(--success)',
+          soft: 'var(--success-soft)',
         },
         warning: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          500: '#f59e0b',
-          600: '#d97706',
-          700: '#b45309',
+          DEFAULT: 'var(--warning)',
+          soft: 'var(--warning-soft)',
+          on: 'var(--on-warning)',
         },
-        error: {
-          50: '#fef2f2',
-          100: '#fee2e2',
-          200: '#fecaca',
-          500: '#ef4444',
-          600: '#dc2626',
-          700: '#b91c1c',
+        danger: {
+          DEFAULT: 'var(--danger)',
+          soft: 'var(--danger-soft)',
         },
+        live: 'var(--live)',
+      },
+      fontFamily: {
+        serif: 'var(--font-serif)',
+        sans: 'var(--font-sans)',
+        mono: 'var(--font-mono)',
+      },
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        DEFAULT: 'var(--radius)',
+        lg: 'var(--radius-lg)',
+        full: 'var(--radius-full)',
+      },
+      boxShadow: {
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        none: 'none',
+      },
+      transitionTimingFunction: {
+        house: 'var(--ease)',
+      },
+      transitionDuration: {
+        fast: 'var(--dur-fast)',
+        DEFAULT: 'var(--dur)',
+        slow: 'var(--dur-slow)',
       },
     },
   },

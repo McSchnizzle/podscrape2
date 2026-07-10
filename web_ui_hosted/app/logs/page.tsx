@@ -1,6 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import {
+  RefreshCw,
+  Search,
+  Headphones,
+  FileText,
+  Mic,
+  Radio,
+  Trash2,
+  Settings2,
+  AlertTriangle,
+  XCircle,
+} from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
 
 interface RunSummary {
   runId: string
@@ -21,15 +35,15 @@ interface LogEntry {
   runId: string
 }
 
-const phaseIcon = (phase: string) => {
+const PhaseIcon = ({ phase }: { phase: string }) => {
   switch (phase) {
-    case 'discovery': return '🔍'
-    case 'audio': return '🎧'
-    case 'digest': return '📝'
-    case 'tts': return '🎙️'
-    case 'publishing': return '📡'
-    case 'retention': return '🧹'
-    default: return '⚙️'
+    case 'discovery': return <Search size={14} />
+    case 'audio': return <Headphones size={14} />
+    case 'digest': return <FileText size={14} />
+    case 'tts': return <Mic size={14} />
+    case 'publishing': return <Radio size={14} />
+    case 'retention': return <Trash2 size={14} />
+    default: return <Settings2 size={14} />
   }
 }
 
@@ -85,87 +99,99 @@ export default function LogsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Pipeline Logs</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Review recent pipeline runs and phase-level events captured in Supabase.
-        </p>
-      </div>
+    <div>
+      <PageHeader title="Pipeline Logs" description="Review recent pipeline runs and phase-level events captured in Supabase." />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-3">
         <div className="card lg:col-span-1">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-medium text-gray-900">Recent Runs</h2>
-            <button onClick={fetchRuns} className="btn-secondary text-sm">Refresh</button>
+          <div className="mb-[var(--space-3)] flex items-center justify-between">
+            <h2 style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Recent Runs</h2>
+            <button onClick={fetchRuns} className="btn btn-secondary btn-sm">
+              <RefreshCw size={12} /> Refresh
+            </button>
           </div>
           {loadingRuns ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-[var(--space-3)]">
               {[...Array(3)].map((_, idx) => (
-                <div key={idx} className="h-16 animate-pulse bg-gray-100 rounded-md" />
+                <div key={idx} className="card h-16 animate-pulse" />
               ))}
             </div>
           ) : runs.length ? (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-[var(--space-2)]">
               {runs.map((run) => (
                 <button
                   key={run.runId}
                   onClick={() => selectRun(run)}
-                  className={`w-full text-left border rounded-md px-3 py-2 transition ${
+                  className={`w-full rounded-sm border px-[var(--space-3)] py-[var(--space-2)] text-left transition-colors ${
                     selectedRun?.runId === run.runId
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border hover:border-border-strong hover:bg-surface-2'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-sm text-gray-800">
+                  <div className="flex items-center justify-between text-ink" style={{ font: 'var(--t-small)' }}>
                     <span className="font-semibold">Run {run.runId}</span>
-                    <span className="text-xs text-gray-500">{run.durationSeconds ? `${Math.round(run.durationSeconds / 60)} min` : '—'}</span>
+                    <span className="text-ink-subtle">{run.durationSeconds ? `${Math.round(run.durationSeconds / 60)} min` : '—'}</span>
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">Started {formatDate(run.startedAt)}</div>
-                  <div className="mt-1 text-xs text-gray-500 flex gap-3">
-                    <span className="text-amber-600">⚠️ {run.warnings}</span>
-                    <span className={run.errors > 0 ? 'text-red-600' : 'text-gray-500'}>❌ {run.errors}</span>
+                  <div className="mt-[var(--space-1)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+                    Started {formatDate(run.startedAt)}
+                  </div>
+                  <div className="mt-[var(--space-1)] flex gap-[var(--space-3)]" style={{ font: 'var(--t-small)' }}>
+                    <span className="flex items-center gap-[4px]" style={{ color: 'var(--warning)' }}>
+                      <AlertTriangle size={12} /> {run.warnings}
+                    </span>
+                    <span
+                      className="flex items-center gap-[4px]"
+                      style={{ color: run.errors > 0 ? 'var(--danger)' : 'var(--text-subtle)' }}
+                    >
+                      <XCircle size={12} /> {run.errors}
+                    </span>
                   </div>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-gray-500">No pipeline runs recorded.</div>
+            <div className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>No pipeline runs recorded.</div>
           )}
         </div>
 
         <div className="card lg:col-span-2">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-medium text-gray-900">Run Timeline</h2>
+          <div className="mb-[var(--space-3)] flex items-center justify-between">
+            <h2 style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Run Timeline</h2>
             {selectedRun && (
-              <span className="text-xs text-gray-500">Run {selectedRun.runId}</span>
+              <span className="micro">Run {selectedRun.runId}</span>
             )}
           </div>
 
           {loadingLogs ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-[var(--space-3)]">
               {[...Array(5)].map((_, idx) => (
-                <div key={idx} className="h-12 animate-pulse bg-gray-100 rounded-md" />
+                <div key={idx} className="card h-12 animate-pulse" />
               ))}
             </div>
           ) : logs.length ? (
-            <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-1">
+            <div className="flex max-h-[32rem] flex-col gap-[var(--space-3)] overflow-y-auto pr-[var(--space-1)]">
               {logs.slice().reverse().map((log) => (
-                <div key={log.id} className="flex items-start space-x-3 border border-gray-100 rounded-md px-3 py-2">
-                  <span>{phaseIcon(log.phase)}</span>
-                  <div className="flex-1 text-sm text-gray-700">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-800 capitalize">{log.phase}</span>
-                      <span className="text-xs text-gray-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                <div key={log.id} className="flex items-start gap-[var(--space-3)] rounded-sm border border-border px-[var(--space-3)] py-[var(--space-2)]">
+                  <span className="mt-[2px] text-ink-faint"><PhaseIcon phase={log.phase} /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-[var(--space-2)]">
+                      <Pill tone="accent">{log.phase}</Pill>
+                      <span className="text-ink-faint" style={{ font: 'var(--t-small)' }}>
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
                     </div>
-                    <div className="text-xs text-gray-600" title={log.message}>{log.message}</div>
-                    <div className="text-xs text-gray-400 mt-1">Level {log.level}</div>
+                    <div className="mt-[var(--space-1)] text-ink-muted" style={{ font: 'var(--t-small)' }} title={log.message}>
+                      {log.message}
+                    </div>
+                    <div className="mt-[var(--space-1)] text-ink-faint" style={{ font: 'var(--t-small)' }}>
+                      Level {log.level}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-gray-500">Select a pipeline run to view its timeline.</div>
+            <div className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>Select a pipeline run to view its timeline.</div>
           )}
         </div>
       </div>

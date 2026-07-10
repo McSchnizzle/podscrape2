@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { RefreshCw, Play, CheckCircle2, XCircle } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill, type PillTone } from '@/components/ui/Pill'
 
 interface DigestRecord {
   id: number
@@ -27,6 +30,11 @@ interface PipelineRunRecord {
   trigger?: string
   started_at?: string
   finished_at?: string
+}
+
+const CONCLUSION_TONE: Record<string, PillTone> = {
+  success: 'success',
+  failure: 'danger',
 }
 
 export default function PublishingPage() {
@@ -110,149 +118,162 @@ export default function PublishingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Publishing</h1>
-        <p className="mt-1 text-gray-600">
-          Monitor digests ready for publishing, review Supabase pipeline runs, and trigger the GitHub publishing workflow.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Publishing"
+        description="Monitor digests ready for publishing, review Supabase pipeline runs, and trigger the GitHub publishing workflow."
+      />
 
       {message && (
-        <div className={`p-4 rounded-md ${
-          message.type === 'success'
-            ? 'bg-success-50 text-success-700 border border-success-200'
-            : 'bg-error-50 text-error-700 border border-error-200'
-        }`}>
+        <div
+          className="mb-[var(--space-5)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+          style={{
+            background: message.type === 'success' ? 'var(--success-soft)' : 'var(--danger-soft)',
+            color: message.type === 'success' ? 'var(--success)' : 'var(--danger)',
+            font: 'var(--t-small)',
+          }}
+        >
           {message.text}
         </div>
       )}
 
-      <div className="card">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-lg font-medium text-gray-900">Trigger Publishing Workflow</h2>
-            <p className="text-sm text-gray-600">Dispatch the GitHub publishing-only workflow using existing MP3 assets.</p>
+      <div className="flex flex-col gap-[var(--space-6)]">
+        <div className="card">
+          <div className="flex flex-col gap-[var(--space-4)] md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Trigger Publishing Workflow</h2>
+              <p className="mt-[var(--space-1)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+                Dispatch the GitHub publishing-only workflow using existing MP3 assets.
+              </p>
+            </div>
+            <div className="flex flex-col gap-[var(--space-3)] sm:flex-row sm:items-end">
+              <div>
+                <label className="field-label">Days back</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={daysBack}
+                  onChange={(e) => setDaysBack(e.target.value)}
+                  className="input w-28"
+                />
+              </div>
+              <button
+                onClick={triggerPublishing}
+                disabled={triggering}
+                className="btn btn-primary"
+              >
+                <Play size={14} /> {triggering ? 'Dispatching…' : 'Run Publishing'}
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <label className="flex flex-col text-sm text-gray-700">
-              Days back
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={daysBack}
-                onChange={(e) => setDaysBack(e.target.value)}
-                className="input mt-1 w-28"
-              />
-            </label>
-            <button
-              onClick={triggerPublishing}
-              disabled={triggering}
-              className="btn btn-primary"
-            >
-              {triggering ? 'Dispatching...' : 'Run Publishing'}
+        </div>
+
+        <div className="card">
+          <div className="mb-[var(--space-4)] flex items-center justify-between">
+            <h2 style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Recent Digests</h2>
+            <button onClick={loadOverview} className="btn btn-secondary btn-sm">
+              <RefreshCw size={12} /> Refresh
             </button>
           </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Recent Digests</h2>
-          <button
-            onClick={loadOverview}
-            className="btn-secondary text-sm"
-          >
-            Refresh
-          </button>
-        </div>
-        {loading ? (
-          <div className="py-10 text-center text-gray-500">Loading digests...</div>
-        ) : digests.length === 0 ? (
-          <div className="py-10 text-center text-gray-500">No digests found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Date</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Topic</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Episodes Included</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Duration</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Asset</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {digests.map((digest) => (
-                  <tr key={digest.id} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{formatDate(digest.generated_at || digest.digest_date)}</td>
-                    <td className="px-3 py-2 font-medium text-gray-800">{digest.topic}</td>
-                    <td className="px-3 py-2 max-w-md">
-                      {digest.episodes && digest.episodes.length > 0 ? (
-                        <div className="text-xs text-gray-700">
-                          <div className="mb-1"><strong>{digest.episode_count} episodes:</strong></div>
-                          {digest.episodes.map((episode, idx) => (
-                            <div key={idx} className="mb-1">• {episode}</div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-500 text-xs">No episodes</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">{formatDuration(digest.mp3_duration_seconds)}</td>
-                    <td className="px-3 py-2">
-                      {digest.mp3_path ? (
-                        <span className="text-green-700">Present</span>
-                      ) : (
-                        <span className="text-red-700">Missing</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <button className="text-blue-700 text-xs mr-2">Publish/Ensure</button>
-                      <button className="text-red-700 text-xs">Unpublish</button>
-                    </td>
+          {loading ? (
+            <div className="py-[var(--space-6)] text-center text-ink-subtle">Loading digests…</div>
+          ) : digests.length === 0 ? (
+            <div className="py-[var(--space-6)] text-center text-ink-subtle">No digests found.</div>
+          ) : (
+            <div className="table-shell overflow-x-auto">
+              <table className="house-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Topic</th>
+                    <th>Episodes Included</th>
+                    <th>Duration</th>
+                    <th>Asset</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Supabase Pipeline Runs</h2>
-          <button onClick={loadOverview} className="btn-secondary text-sm">Refresh</button>
+                </thead>
+                <tbody>
+                  {digests.map((digest) => (
+                    <tr key={digest.id}>
+                      <td className="text-ink-muted">
+                        <span className="font-mono text-xs">{formatDate(digest.generated_at || digest.digest_date)}</span>
+                      </td>
+                      <td className="font-medium text-ink">{digest.topic}</td>
+                      <td className="max-w-md">
+                        {digest.episodes && digest.episodes.length > 0 ? (
+                          <div className="text-ink-muted" style={{ font: 'var(--t-small)' }}>
+                            <div className="mb-[var(--space-1)] font-semibold text-ink">{digest.episode_count} episodes:</div>
+                            {digest.episodes.map((episode, idx) => (
+                              <div key={idx} className="mb-[2px]">&bull; {episode}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-ink-faint" style={{ font: 'var(--t-small)' }}>No episodes</span>
+                        )}
+                      </td>
+                      <td className="text-ink-muted">{formatDuration(digest.mp3_duration_seconds)}</td>
+                      <td>
+                        <Pill tone={digest.mp3_path ? 'success' : 'danger'}>
+                          {digest.mp3_path ? 'Present' : 'Missing'}
+                        </Pill>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-[var(--space-3)]">
+                          <button className="text-xs hover:underline" style={{ color: 'var(--accent)' }}>
+                            Publish/Ensure
+                          </button>
+                          <button className="text-xs hover:underline" style={{ color: 'var(--danger)' }}>
+                            Unpublish
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-        {pipelineRuns.length === 0 ? (
-          <div className="py-6 text-gray-500 text-center text-sm">No pipeline runs recorded yet.</div>
-        ) : (
-          <div className="space-y-3">
-            {pipelineRuns.map((run) => (
-              <div key={run.id} className="border border-gray-200 rounded-md p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-800">{run.workflow_name || 'Pipeline Run'}</span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    run.conclusion === 'success'
-                      ? 'bg-success-100 text-success-700'
-                      : run.conclusion === 'failure'
-                        ? 'bg-error-100 text-error-700'
-                        : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {run.conclusion || run.status || 'unknown'}
-                  </span>
-                </div>
-                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
-                  <div>Trigger: {run.trigger || 'manual'}</div>
-                  <div>Started: {formatDate(run.started_at)}</div>
-                  <div>Finished: {formatDate(run.finished_at)}</div>
-                </div>
-              </div>
-            ))}
+
+        <div className="card">
+          <div className="mb-[var(--space-4)] flex items-center justify-between">
+            <h2 style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>Supabase Pipeline Runs</h2>
+            <button onClick={loadOverview} className="btn btn-secondary btn-sm">
+              <RefreshCw size={12} /> Refresh
+            </button>
           </div>
-        )}
+          {pipelineRuns.length === 0 ? (
+            <div className="py-[var(--space-5)] text-center text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+              No pipeline runs recorded yet.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-[var(--space-3)]">
+              {pipelineRuns.map((run) => (
+                <div key={run.id} className="rounded-sm border border-border p-[var(--space-3)]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-ink" style={{ font: 'var(--t-small)' }}>
+                      {run.workflow_name || 'Pipeline Run'}
+                    </span>
+                    <Pill tone={CONCLUSION_TONE[run.conclusion || ''] || 'neutral'}>
+                      {run.conclusion === 'success' ? (
+                        <CheckCircle2 size={11} />
+                      ) : run.conclusion === 'failure' ? (
+                        <XCircle size={11} />
+                      ) : null}
+                      {run.conclusion || run.status || 'unknown'}
+                    </Pill>
+                  </div>
+                  <div className="mt-[var(--space-2)] grid grid-cols-1 gap-[var(--space-1)] text-ink-subtle md:grid-cols-3" style={{ font: 'var(--t-small)' }}>
+                    <div>Trigger: {run.trigger || 'manual'}</div>
+                    <div>Started: {formatDate(run.started_at)}</div>
+                    <div>Finished: {formatDate(run.finished_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

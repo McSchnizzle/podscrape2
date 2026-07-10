@@ -2,6 +2,8 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Disc3, Lock, Loader2 } from 'lucide-react'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 /**
  * Constrain the post-login redirect to a same-origin relative path.
@@ -58,33 +60,44 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="mx-auto h-12 w-12 flex items-center justify-center bg-blue-600 rounded-lg">
-            <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
+    <div className="relative flex min-h-screen items-center justify-center bg-bg px-[var(--space-5)] py-[var(--space-8)]">
+      <div className="absolute right-[var(--space-5)] top-[var(--space-5)]">
+        <ThemeToggle />
+      </div>
+
+      <div className="w-full max-w-[400px]">
+        <div className="mb-[var(--space-6)] flex flex-col items-center text-center">
+          <div
+            className="mb-[var(--space-4)] flex h-14 w-14 items-center justify-center rounded-lg shadow-md"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          >
+            <Disc3 size={28} />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Podcast Digest Admin
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Restricted access - authorized users only
+          <h1 style={{ font: 'var(--t-h1)', color: 'var(--text)' }}>Podcast Digest Admin</h1>
+          <p className="mt-[var(--space-2)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+            Restricted access — authorized users only
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="card">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md">
-              <p className="text-sm">{error}</p>
+            <div
+              className="mb-[var(--space-4)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+              style={{ background: 'var(--danger-soft)', color: 'var(--danger)', font: 'var(--t-small)' }}
+              role="alert"
+            >
+              {error}
             </div>
           )}
 
-          <div>
-            <label htmlFor="password" className="sr-only">
-              Password
-            </label>
+          <label htmlFor="password" className="field-label">
+            Password
+          </label>
+          <div className="relative">
+            <Lock
+              size={16}
+              className="pointer-events-none absolute left-[var(--space-3)] top-1/2 -translate-y-1/2 text-ink-faint"
+            />
             <input
               id="password"
               name="password"
@@ -94,36 +107,29 @@ function LoginForm() {
               autoFocus
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Password"
+              className="input pl-[36px]"
+              placeholder="Enter password"
             />
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading || password.length === 0}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <div className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading || password.length === 0}
+            className="btn btn-primary mt-[var(--space-5)] w-full justify-center"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Signing in…
+              </>
+            ) : (
+              'Sign in'
+            )}
+          </button>
 
-          <div className="text-center">
-            <p className="text-xs text-gray-500">
-              This application is restricted to authorized users only.
-            </p>
-          </div>
+          <p className="field-hint mt-[var(--space-5)] text-center">
+            This application is restricted to authorized users only.
+          </p>
         </form>
       </div>
     </div>
@@ -132,14 +138,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-bg">
+          <Loader2 size={28} className="animate-spin text-accent" />
         </div>
-      </div>
-    }>
+      }
+    >
       <LoginForm />
     </Suspense>
   )

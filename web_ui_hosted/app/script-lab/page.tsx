@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AlertTriangle, Loader2, Sparkles, Save, Eye } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 interface Topic {
   name: string;
@@ -141,38 +143,45 @@ export default function ScriptLabPage() {
 
   if (topics.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
-          No topics configured. Please configure topics first.
+      <div>
+        <PageHeader title="Script Lab" description="Tune digest voice, tone, and pace per topic, then preview and save instructions." />
+        <div
+          className="flex items-center gap-[var(--space-2)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+          style={{ background: 'var(--warning-soft)', color: 'var(--warning)', font: 'var(--t-small)' }}
+        >
+          <AlertTriangle size={16} /> No topics configured. Please configure topics first.
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="bg-white shadow rounded p-6">
-        <h2 className="text-xl font-medium mb-4">Script Lab</h2>
+    <div>
+      <PageHeader title="Script Lab" description="Tune digest voice, tone, and pace per topic, then preview and save instructions." />
 
+      <div className="card">
         {/* Message Display */}
         {message && (
-          <div className={`px-4 py-3 rounded mb-4 ${
-            message.type === 'success'
-              ? 'bg-green-100 border border-green-400 text-green-700'
-              : 'bg-red-100 border border-red-400 text-red-700'
-          }`}>
+          <div
+            className="mb-[var(--space-4)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+            style={{
+              background: message.type === 'success' ? 'var(--success-soft)' : 'var(--danger-soft)',
+              color: message.type === 'success' ? 'var(--success)' : 'var(--danger)',
+              font: 'var(--t-small)',
+            }}
+          >
             {message.text}
           </div>
         )}
 
         {/* Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end mb-4">
+        <div className="mb-[var(--space-5)] grid grid-cols-1 items-end gap-[var(--space-3)] md:grid-cols-12">
           <div className="md:col-span-3">
-            <label className="block text-xs text-gray-600 mb-1">Topic</label>
+            <label className="field-label">Topic</label>
             <select
               value={selectedTopic}
               onChange={(e) => setSelectedTopic(e.target.value)}
-              className="border rounded w-full px-3 py-2"
+              className="select"
             >
               {topics.map((topic) => (
                 <option key={topic.name} value={topic.name}>
@@ -183,11 +192,11 @@ export default function ScriptLabPage() {
           </div>
 
           <div className="md:col-span-3">
-            <label className="block text-xs text-gray-600 mb-1">Type of Show</label>
+            <label className="field-label">Type of Show</label>
             <select
               value={scriptData.type_of_show}
               onChange={(e) => updateScriptData('type_of_show', e.target.value)}
-              className="border rounded w-full px-3 py-2"
+              className="select"
             >
               {typeOfShowOptions.map((option) => (
                 <option key={option} value={option}>
@@ -197,12 +206,12 @@ export default function ScriptLabPage() {
             </select>
           </div>
 
-          <div className="md:col-span-3">
-            <label className="block text-xs text-gray-600 mb-1">Voice</label>
+          <div className="md:col-span-2">
+            <label className="field-label">Voice</label>
             <select
               value={scriptData.voice_label}
               onChange={(e) => updateScriptData('voice_label', e.target.value)}
-              className="border rounded w-full px-3 py-2"
+              className="select"
             >
               {voiceLabelOptions.map((option) => (
                 <option key={option} value={option}>
@@ -212,12 +221,12 @@ export default function ScriptLabPage() {
             </select>
           </div>
 
-          <div className="md:col-span-1">
-            <label className="block text-xs text-gray-600 mb-1">Tone</label>
+          <div className="md:col-span-2">
+            <label className="field-label">Tone</label>
             <select
               value={scriptData.tone}
               onChange={(e) => updateScriptData('tone', e.target.value)}
-              className="border rounded w-full px-3 py-2"
+              className="select"
             >
               {toneOptions.map((option) => (
                 <option key={option} value={option}>
@@ -228,11 +237,11 @@ export default function ScriptLabPage() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs text-gray-600 mb-1">Pace</label>
+            <label className="field-label">Pace</label>
             <select
               value={scriptData.pace}
               onChange={(e) => updateScriptData('pace', e.target.value)}
-              className="border rounded w-full px-3 py-2"
+              className="select"
             >
               {paceOptions.map((option) => (
                 <option key={option} value={option}>
@@ -242,76 +251,84 @@ export default function ScriptLabPage() {
             </select>
           </div>
 
-          <div className="md:col-span-12 flex gap-2">
+          <div className="flex flex-wrap gap-[var(--space-2)] md:col-span-12">
             <button
               onClick={() => handleAction('rewrite')}
               disabled={loading}
-              className="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 disabled:opacity-50"
+              className="btn btn-secondary"
             >
-              {loading ? 'Processing...' : 'Apply Knobs'}
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Processing…
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} /> Apply Knobs
+                </>
+              )}
             </button>
             <button
               onClick={() => handleAction('save')}
               disabled={loading}
-              className="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 disabled:opacity-50"
+              className="btn btn-secondary"
             >
-              Save Instructions
+              <Save size={14} /> Save Instructions
             </button>
             <button
               onClick={() => handleAction('preview')}
               disabled={loading}
-              className="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-gray-800 border-gray-300 disabled:opacity-50"
+              className="btn btn-secondary"
             >
-              Generate Preview Script
+              <Eye size={14} /> Generate Preview Script
             </button>
           </div>
         </div>
 
         {/* Content Areas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Digest Instructions (Markdown)
-            </label>
+            <label className="field-label">Digest Instructions (Markdown)</label>
             <textarea
               value={scriptData.content}
               onChange={(e) => updateScriptData('content', e.target.value)}
               rows={24}
-              className="w-full border rounded p-2 font-mono text-xs"
+              className="textarea min-h-[26rem] font-mono text-xs"
               placeholder="Enter digest instructions in Markdown format..."
             />
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium">Preview Script</label>
+            <div className="mb-[var(--space-1)] flex items-center justify-between">
+              <label className="field-label mb-0">Preview Script</label>
               {previewStats && (
-                <div className="text-xs text-gray-600 space-x-3">
+                <div className="flex flex-wrap gap-x-[var(--space-3)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                   {previewStats.mode && (
                     <span className="font-mono">
-                      Mode: <span className="font-semibold">{previewStats.mode}</span>
+                      Mode: <span className="font-semibold text-ink-muted">{previewStats.mode}</span>
                     </span>
                   )}
                   {previewStats.episode_count !== undefined && (
                     <span className="font-mono">
-                      Episodes: <span className="font-semibold">{previewStats.episode_count}</span>
+                      Episodes: <span className="font-semibold text-ink-muted">{previewStats.episode_count}</span>
                     </span>
                   )}
                   {previewStats.char_count !== undefined && (
                     <span className="font-mono">
-                      Chars: <span className="font-semibold">{previewStats.char_count.toLocaleString()}</span>
+                      Chars: <span className="font-semibold text-ink-muted">{previewStats.char_count.toLocaleString()}</span>
                     </span>
                   )}
                   {previewStats.word_count !== undefined && (
                     <span className="font-mono">
-                      Words: <span className="font-semibold">{previewStats.word_count.toLocaleString()}</span>
+                      Words: <span className="font-semibold text-ink-muted">{previewStats.word_count.toLocaleString()}</span>
                     </span>
                   )}
                 </div>
               )}
             </div>
-            <pre className="w-full border rounded p-2 bg-gray-50 text-xs overflow-auto"
-                 style={{ minHeight: '26rem', whiteSpace: 'pre-wrap' }}>
+            <pre
+              className="w-full overflow-auto rounded-sm border border-border bg-surface-2 p-[var(--space-3)] font-mono text-xs text-ink"
+              style={{ minHeight: '26rem', whiteSpace: 'pre-wrap' }}
+            >
               {preview || '—'}
             </pre>
           </div>

@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { X, RotateCcw, Undo2, Loader2 } from 'lucide-react';
 import { EPISODE_STATUSES } from '@/lib/constants';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Pill, type PillTone } from '@/components/ui/Pill';
 
 interface Episode {
   id: number;
@@ -24,6 +27,16 @@ const sortByOptions = [
   { value: 'title', label: 'Title' },
   { value: 'status', label: 'Status' }
 ];
+
+const STATUS_TONE: Record<string, PillTone> = {
+  pending: 'neutral',
+  processing: 'accent',
+  transcribed: 'accent',
+  scored: 'accent',
+  digested: 'success',
+  not_relevant: 'neutral',
+  failed: 'danger',
+};
 
 function EpisodesContent() {
   const router = useRouter();
@@ -248,40 +261,42 @@ function EpisodesContent() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="bg-white shadow rounded p-6">
-        <h2 className="text-xl font-medium mb-4">Episodes</h2>
+    <div>
+      <PageHeader title="Episodes" description="Source episodes moving through discovery, scoring, and digest inclusion." />
 
-        {/* Message Display */}
+      <div className="card">
         {message && (
-          <div className={`px-4 py-3 rounded mb-4 ${
-            message.type === 'success'
-              ? 'bg-green-100 border border-green-400 text-green-700'
-              : 'bg-red-100 border border-red-400 text-red-700'
-          }`}>
+          <div
+            className="mb-[var(--space-4)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+            style={{
+              background: message.type === 'success' ? 'var(--success-soft)' : 'var(--danger-soft)',
+              color: message.type === 'success' ? 'var(--success)' : 'var(--danger)',
+              font: 'var(--t-small)',
+            }}
+          >
             {message.text}
           </div>
         )}
 
         {/* Filters */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+        <div className="mb-[var(--space-4)] grid grid-cols-1 items-end gap-[var(--space-3)] md:grid-cols-12">
           <div className="md:col-span-5">
-            <label className="block text-xs text-gray-600 mb-1">Search</label>
+            <label className="field-label">Search</label>
             <input
               type="text"
               value={filters.q}
               onChange={(e) => handleFilterChange('q', e.target.value)}
               placeholder="Search episode or feed title"
-              className="border px-3 py-2 rounded w-full"
+              className="input"
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs text-gray-600 mb-1">Status</label>
+            <label className="field-label">Status</label>
             <select
               value={filters.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="border px-2 py-2 rounded w-full"
+              className="select"
             >
               <option value="">Any</option>
               {statusOptions.slice(1).map((status) => (
@@ -293,11 +308,11 @@ function EpisodesContent() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-xs text-gray-600 mb-1">Sort By</label>
+            <label className="field-label">Sort by</label>
             <select
               value={filters.sortBy}
               onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-              className="border px-2 py-2 rounded w-full"
+              className="select"
             >
               {sortByOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -308,28 +323,22 @@ function EpisodesContent() {
           </div>
 
           <div className="md:col-span-1">
-            <label className="block text-xs text-gray-600 mb-1">Dir</label>
+            <label className="field-label">Dir</label>
             <select
               value={filters.sortDir}
               onChange={(e) => handleFilterChange('sortDir', e.target.value)}
-              className="border px-2 py-2 rounded w-full"
+              className="select"
             >
               <option value="desc">Desc</option>
               <option value="asc">Asc</option>
             </select>
           </div>
 
-          <div className="md:col-span-2 flex gap-2">
-            <button
-              onClick={applyFilters}
-              className="flex-1 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 text-sm font-medium"
-            >
+          <div className="flex gap-[var(--space-2)] md:col-span-2">
+            <button onClick={applyFilters} className="btn btn-primary flex-1 justify-center">
               Apply
             </button>
-            <button
-              onClick={resetFilters}
-              className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm font-medium"
-            >
+            <button onClick={resetFilters} className="btn btn-secondary flex-1 justify-center">
               Reset
             </button>
           </div>
@@ -337,111 +346,75 @@ function EpisodesContent() {
 
         {/* Active Filter Chips */}
         {hasActiveFilters && (
-          <div className="mb-4 flex flex-wrap gap-2 items-center">
-            <span className="text-sm text-gray-500">Active filters:</span>
+          <div className="mb-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
+            <span className="micro">Active filters:</span>
             {filters.q && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                Search: {filters.q}
-                <button
-                  onClick={() => removeFilter('q')}
-                  className="ml-1 hover:text-primary-600"
-                  aria-label="Remove search filter"
-                >
-                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </span>
+              <button onClick={() => removeFilter('q')} className="pill pill-accent" aria-label="Remove search filter">
+                Search: {filters.q} <X size={12} />
+              </button>
             )}
             {filters.status && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                Status: {filters.status}
-                <button
-                  onClick={() => removeFilter('status')}
-                  className="ml-1 hover:text-green-600"
-                  aria-label="Remove status filter"
-                >
-                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </span>
+              <button onClick={() => removeFilter('status')} className="pill pill-success" aria-label="Remove status filter">
+                Status: {filters.status} <X size={12} />
+              </button>
             )}
             {filters.sortBy !== 'scored_at' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                Sort: {sortByOptions.find(o => o.value === filters.sortBy)?.label}
-                <button
-                  onClick={() => removeFilter('sortBy')}
-                  className="ml-1 hover:text-gray-600"
-                  aria-label="Remove sort filter"
-                >
-                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </span>
+              <button onClick={() => removeFilter('sortBy')} className="pill" aria-label="Remove sort filter">
+                Sort: {sortByOptions.find(o => o.value === filters.sortBy)?.label} <X size={12} />
+              </button>
             )}
             {filters.sortDir !== 'desc' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                Direction: Asc
-                <button
-                  onClick={() => removeFilter('sortDir')}
-                  className="ml-1 hover:text-gray-600"
-                  aria-label="Remove direction filter"
-                >
-                  <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </span>
+              <button onClick={() => removeFilter('sortDir')} className="pill" aria-label="Remove direction filter">
+                Direction: Asc <X size={12} />
+              </button>
             )}
           </div>
         )}
 
         {/* Episodes Table */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="table-shell overflow-x-auto">
+          <table className="house-table">
             <thead>
-              <tr className="text-left border-b">
-                <th className="py-2 pr-4">Title</th>
-                <th className="py-2 pr-4">Feed</th>
-                <th className="py-2 pr-4">Published</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Scores</th>
-                <th className="py-2 pr-4">Included In</th>
-                <th className="py-2 pr-4">Actions</th>
+              <tr>
+                <th>Title</th>
+                <th>Feed</th>
+                <th>Published</th>
+                <th>Status</th>
+                <th>Scores</th>
+                <th>Included in</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-4 text-center text-gray-500">
-                    Loading episodes...
+                  <td colSpan={7} className="py-[var(--space-6)] text-center text-ink-subtle">
+                    <Loader2 size={16} className="mr-2 inline animate-spin" /> Loading episodes…
                   </td>
                 </tr>
               ) : episodes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-4 text-center text-gray-500">
+                  <td colSpan={7} className="py-[var(--space-6)] text-center text-ink-subtle">
                     No episodes found
                   </td>
                 </tr>
               ) : (
                 episodes.map((episode) => (
-                  <tr key={episode.id} className="border-b align-top">
-                    <td className="py-2 pr-4">{episode.title}</td>
-                    <td className="py-2 pr-4 text-gray-600">
+                  <tr key={episode.id}>
+                    <td className="max-w-[280px]">{episode.title}</td>
+                    <td className="text-ink-muted">
                       <span className="font-mono text-xs">{episode.feed_title_display}</span>
                     </td>
-                    <td className="py-2 pr-4 text-gray-600">
+                    <td className="text-ink-muted">
                       <span className="font-mono text-xs">{formatDate(episode.published_date)}</span>
                     </td>
-                    <td className="py-2 pr-4">
-                      <span className="font-mono text-xs">{episode.status}</span>
+                    <td>
+                      <Pill tone={STATUS_TONE[episode.status] || 'neutral'}>{episode.status}</Pill>
                     </td>
-                    <td className="py-2 pr-4 text-gray-700">
+                    <td className="text-ink-muted">
                       <span className="font-mono text-xs">{episode.score_labels}</span>
                     </td>
-                    <td className="py-2 pr-4 text-gray-700">
+                    <td className="text-ink-muted">
                       {episode.included.length > 0 ? (
                         <span className="font-mono text-xs">
                           {/* Show most recent digest for multi-digest episodes */}
@@ -454,25 +427,28 @@ function EpisodesContent() {
                           })()}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-500">—</span>
+                        <span className="text-xs text-ink-faint">—</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4">
-                      <button
-                        onClick={() => handleEpisodeAction(episode.id, 'undigest')}
-                        className="text-blue-700 text-xs hover:underline"
-                        title="Reset to scored and restore transcript if archived"
-                      >
-                        Reset to Scored
-                      </button>
-                      <span className="text-gray-400 text-xs mx-1">|</span>
-                      <button
-                        onClick={() => handleEpisodeAction(episode.id, 'reset_to_pending')}
-                        className="text-orange-700 text-xs hover:underline"
-                        title="Reset to pending status, clear scores, and remove from digests"
-                      >
-                        Reset to Pending
-                      </button>
+                    <td>
+                      <div className="flex flex-col items-start gap-[var(--space-2)]">
+                        <button
+                          onClick={() => handleEpisodeAction(episode.id, 'undigest')}
+                          className="flex items-center gap-1 whitespace-nowrap text-xs hover:underline"
+                          style={{ color: 'var(--accent)' }}
+                          title="Reset to scored and restore transcript if archived"
+                        >
+                          <Undo2 size={12} /> Reset to Scored
+                        </button>
+                        <button
+                          onClick={() => handleEpisodeAction(episode.id, 'reset_to_pending')}
+                          className="flex items-center gap-1 whitespace-nowrap text-xs hover:underline"
+                          style={{ color: 'var(--warm)' }}
+                          title="Reset to pending status, clear scores, and remove from digests"
+                        >
+                          <RotateCcw size={12} /> Reset to Pending
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -483,11 +459,11 @@ function EpisodesContent() {
 
         {/* Pagination Controls */}
         {!loading && episodes.length > 0 && (
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+          <div className="mt-[var(--space-4)] flex items-center justify-between">
+            <div className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>
               Showing {currentPage * pageSize + 1} - {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} episodes
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-[var(--space-2)]">
               <button
                 onClick={() => {
                   const newPage = Math.max(0, currentPage - 1);
@@ -496,11 +472,11 @@ function EpisodesContent() {
                   loadEpisodesWithFilters({ ...filters, page: newPage });
                 }}
                 disabled={currentPage === 0}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="btn btn-secondary btn-sm"
               >
                 Previous
               </button>
-              <span className="px-3 py-1 text-sm">
+              <span className="flex items-center px-[var(--space-2)] text-ink-muted" style={{ font: 'var(--t-small)' }}>
                 Page {currentPage + 1} of {totalPages}
               </span>
               <button
@@ -511,7 +487,7 @@ function EpisodesContent() {
                   loadEpisodesWithFilters({ ...filters, page: newPage });
                 }}
                 disabled={currentPage >= totalPages - 1}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="btn btn-secondary btn-sm"
               >
                 Next
               </button>
@@ -526,14 +502,9 @@ function EpisodesContent() {
 export default function EpisodesPage() {
   return (
     <Suspense fallback={
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-white shadow rounded p-6">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-          </div>
-        </div>
+      <div>
+        <PageHeader title="Episodes" description="Source episodes moving through discovery, scoring, and digest inclusion." />
+        <div className="card h-64 animate-pulse" />
       </div>
     }>
       <EpisodesContent />

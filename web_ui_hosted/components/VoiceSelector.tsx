@@ -53,24 +53,20 @@ export default function VoiceSelector({
   const selectedVoice = voices.find(v => v.voice_id === value)
 
   return (
-    <div className="space-y-2">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700">
-          {label}
-        </label>
-      )}
+    <div className="flex flex-col gap-[var(--space-2)]">
+      {label && <label className="field-label">{label}</label>}
 
       {loading ? (
-        <div className="text-sm text-gray-500">Loading voices...</div>
+        <div className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>Loading voices...</div>
       ) : error ? (
-        <div className="text-sm text-error-600">{error}</div>
+        <div style={{ font: 'var(--t-small)', color: 'var(--danger)' }}>{error}</div>
       ) : (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-[var(--space-2)]">
           <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
-            className="input w-full"
+            className="select"
           >
             <option value="">{placeholder}</option>
             {voices.map((voice) => (
@@ -81,13 +77,13 @@ export default function VoiceSelector({
           </select>
 
           {selectedVoice && (
-            <div className="text-xs text-gray-500 space-y-1">
+            <div className="flex flex-col gap-[var(--space-1)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
               <div>
-                <span className="font-medium">Voice ID:</span> {selectedVoice.voice_id}
+                <span style={{ fontWeight: 600 }}>Voice ID:</span> {selectedVoice.voice_id}
               </div>
               {selectedVoice.description && (
                 <div>
-                  <span className="font-medium">Description:</span> {selectedVoice.description}
+                  <span style={{ fontWeight: 600 }}>Description:</span> {selectedVoice.description}
                 </div>
               )}
             </div>
