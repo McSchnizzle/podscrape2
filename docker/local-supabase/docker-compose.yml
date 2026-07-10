@@ -1,0 +1,38 @@
+# Local Supabase-compatible data layer for the podcast admin UI (kanban #2846).
+#
+# This stack is PostgREST + Caddy only -- podcast-db (the existing Postgres
+# container) is NOT managed here and is never started/stopped by this file.
+# It is reached over the external "podcast-net" docker network; see the
+# operator runbook for the one-time `docker network create` / `connect`
+# steps.
+#
+# Usage: copy .env.example to .env next to this file, fill in secrets, then
+#   docker compose -f docker/local-supabase/docker-compose.yml up -d
+services:
+  postgrest:
+    image: postgrest/postgrest
+    environment:
+      PGRST_DB_URI: "postgresql://authenticator:${AUTHENTICATOR_PASSWORD}@${PODCAST_DB_CONTAINER:-podcast-db}:5432/${POSTGRES_DB:-podcast}"
+      PGRST_DB_SCHEMAS: "public"
+      PGRST_DB_ANON_ROLE: "anon"
+      PGRST_JWT_SECRET: "${JWT_SECRET}"
+      PGRST_DB_EXTRA_SEARCH_PATH: "public"
+    networks:
+      - podcast-net
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:5471:5471"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - postgrest
+    networks:
+      - podcast-net
+    restart: unless-stopped
+
+networks:
+  podcast-net:
+    external: true

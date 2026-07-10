@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase as sharedSupabase } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { createLogger } from '@/lib/logger'
 
@@ -7,11 +7,11 @@ const log = createLogger('api/story-arcs/arcs/merge')
 
 export const dynamic = 'force-dynamic'
 
+// Server-only client against the local PostgREST stack (kanban #2846).
+// Kept as a function (not a direct import at call sites) to avoid
+// touching the existing getSupabaseClient() call sites in this file.
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE!
-  )
+  return sharedSupabase
 }
 
 // Merge duplicate arcs into a primary arc
@@ -115,8 +115,8 @@ export async function POST(request: NextRequest) {
       .select('source_feed_id, event_date')
       .eq('story_arc_id', primary_id)
 
-    const uniqueSources = new Set(events?.map(e => e.source_feed_id).filter(Boolean))
-    const dates = events?.map(e => new Date(e.event_date).getTime()) || []
+    const uniqueSources = new Set(events?.map((e: any) => e.source_feed_id).filter(Boolean))
+    const dates = events?.map((e: any) => new Date(e.event_date).getTime()) || []
 
     const { count: coverageCount } = await supabase
       .from('story_arc_coverage')

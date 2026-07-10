@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase as sharedSupabase } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { createLogger } from '@/lib/logger'
 
@@ -7,11 +7,11 @@ const log = createLogger('api/recurring-topics/stats')
 
 export const dynamic = 'force-dynamic'
 
+// Server-only client against the local PostgREST stack (kanban #2846).
+// Kept as a function (not a direct import at call sites) to avoid
+// touching the existing getSupabaseClient() call sites in this file.
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE!
-  )
+  return sharedSupabase
 }
 
 export async function GET() {
@@ -37,7 +37,7 @@ export async function GET() {
 
     let avgNoveltyScore = 0
     if (!noveltyError && noveltyData && noveltyData.length > 0) {
-      const sum = noveltyData.reduce((acc, row) => acc + (row.novelty_score || 0), 0)
+      const sum = noveltyData.reduce((acc: number, row: any) => acc + (row.novelty_score || 0), 0)
       avgNoveltyScore = sum / noveltyData.length
     }
 
@@ -48,7 +48,7 @@ export async function GET() {
 
     const topicsByType: Record<string, number> = {}
     if (!typeError && typeData) {
-      typeData.forEach(row => {
+      typeData.forEach((row: any) => {
         const type = row.topic_type || 'unknown'
         topicsByType[type] = (topicsByType[type] || 0) + 1
       })
@@ -61,7 +61,7 @@ export async function GET() {
 
     const topicsByDigest: Record<string, number> = {}
     if (!digestError && digestData) {
-      digestData.forEach(row => {
+      digestData.forEach((row: any) => {
         const digest = row.digest_topic || 'unknown'
         topicsByDigest[digest] = (topicsByDigest[digest] || 0) + 1
       })

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabase as sharedSupabase } from '@/utils/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { createLogger } from '@/lib/logger'
 
@@ -7,11 +7,11 @@ const log = createLogger('api/story-arcs/arcs')
 
 export const dynamic = 'force-dynamic'
 
+// Server-only client against the local PostgREST stack (kanban #2846).
+// Kept as a function (not a direct import at call sites) to avoid
+// touching the existing getSupabaseClient() call sites in this file.
 function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE!
-  )
+  return sharedSupabase
 }
 
 // List all story arcs with optional filters
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Sort events by date descending within each arc
-    const arcs = data?.map(arc => ({
+    const arcs = data?.map((arc: any) => ({
       ...arc,
       events: arc.story_arc_events?.sort((a: { event_date: string }, b: { event_date: string }) =>
         new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
