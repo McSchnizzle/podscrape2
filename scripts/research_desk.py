@@ -321,7 +321,7 @@ def search_web(client, model: str, angle_label: str, angle_query: str):
         tools=[{"type": "web_search", "search_context_size": "medium"}],
         tool_choice="required",
         reasoning={"effort": get_reasoning_effort(model)},
-        max_output_tokens=4000,
+        max_output_tokens=16000,  # reasoning models spend output tokens on reasoning first; 4k starved the JSON (live dry-run 2026-07-10)
         text={"format": SEARCH_TEXT_FORMAT},
     )
 
@@ -404,7 +404,7 @@ def triage_candidate(client, model: str, candidate: Candidate) -> TriageVerdict:
             )},
         ],
         reasoning={"effort": get_reasoning_effort(model)},
-        max_output_tokens=500,
+        max_output_tokens=4000,  # 500 was fully consumed by reasoning -> empty triage verdicts (live dry-run 2026-07-10)
         text={"format": TRIAGE_TEXT_FORMAT},
     )
     raw = _strip_code_fence(response.output_text)
