@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import glob
-import html
 import logging
 import os
 import re
@@ -27,6 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(Path(__file__).resolve().parent.parent / '.env')
+
+from src.watch import email_render  # noqa: E402
 
 logger = logging.getLogger("summarize_watch_digest")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -159,31 +160,84 @@ def render_summarized_markdown(raw_date_header: str, summaries: List[tuple[str, 
     return "\n".join(lines)
 
 
+_ALSO_THIS_WEEK_SPLIT = re.compile(r'\n\*\*Also this week:\*\*\n')
+_HEADLINE_RE = re.compile(r'^\*\*(.+?)\*\*\s*\n+(.*)', re.DOTALL)
+_NO_COVERAGE_PREFIXES = ("No significant coverage", "_Summarization")
+
+
+def parse_summary_markdown(summary: str) -> dict:
+    """Parse one theme's shape-C summary (see SYNTHESIS_PROMPT) into parts
+    the Harold UI email renderer can lay out distinctly: a bold headline,
+    narrative paragraph(s), and an optional "Also this week" bullet list.
+
+    Recognizes the two "nothing to report" shapes produced by
+    summarize_theme(): the literal "No significant coverage this week."
+    and the "_Summarization ..." error fallback.
+    """
+    stripped = summary.strip()
+    if not stripped or stripped.startswith(_NO_COVERAGE_PREFIXES):
+        return {"no_match": True, "detail": "no significant coverage this week"}
+
+    rest = stripped
+    headline = ""
+    m = _HEADLINE_RE.match(stripped)
+    if m:
+        headline = m.group(1).strip()
+        rest = m.group(2).strip()
+
+    body_part, *bullet_parts = _ALSO_THIS_WEEK_SPLIT.split(rest, maxsplit=1)
+    bullets: List[str] = []
+    if bullet_parts:
+        bullets = [
+            line[2:].strip() for line in bullet_parts[0].splitlines()
+            if line.strip().startswith("- ")
+        ]
+
+    body_paragraphs = [p.strip() for p in body_part.strip().split("\n\n") if p.strip()]
+
+    return {
+        "no_match": False,
+        "headline": headline,
+        "body_paragraphs": body_paragraphs,
+        "bullets": bullets,
+    }
+
+
 def render_summarized_html(raw_date_header: str, summaries: List[tuple[str, str]]) -> str:
-    """Render HTML view of the summarized digest."""
-    import markdown as md_lib  # type: ignore
-    parts = [
-        "<!DOCTYPE html>",
-        '<html><head><meta charset="utf-8">',
-        f"<title>Watch Themes — {html.escape(raw_date_header)}</title>",
-        "<style>body{font-family:-apple-system,system-ui,sans-serif;",
-        "max-width:720px;margin:24px auto;padding:0 16px;line-height:1.6;color:#222;}",
-        "h1{font-size:24px;margin-bottom:4px}",
-        "h2{font-size:18px;margin-top:28px;border-bottom:1px solid #ddd;padding-bottom:4px}",
-        "p{margin:12px 0}", "ul{padding-left:24px}", "li{margin:6px 0}",
-        "em{color:#555}", "strong{color:#111}",
-        "</style></head><body>",
-        f'<h1>{html.escape(raw_date_header)}</h1>',
-        '<p style="color:#666;font-size:13px">summarized</p>',
+    """Render the Harold UI (Warm Cream / Forest, light) watch-digest email.
+
+    Themes with a summary go into a full card (heading + headline callout +
+    narrative + bullets); themes with no coverage collapse into a single
+    muted line so the empty state doesn't compete visually with real
+    content. This is the DEFAULT delivery path (v3.41+); the same HTML
+    string is sent to both the Graph email and the Harold dashboard POST
+    (see run_watch_digest.py::_summarize / post_to_harold).
+    """
+    date_match = re.search(r'week of\s+([\d-]+)', raw_date_header, re.IGNORECASE)
+    eyebrow = f"WEEK OF {date_match.group(1)}" if date_match else raw_date_header.upper()
+
+    parsed = [(name, parse_summary_markdown(summary)) for name, summary in summaries]
+    matched = [(name, p) for name, p in parsed if not p["no_match"]]
+    unmatched = [(name, p) for name, p in parsed if p["no_match"]]
+
+    body_parts = [
+        email_render.render_theme_card_summary(
+            name, p["headline"], p["body_paragraphs"], p["bullets"],
+        )
+        for name, p in matched
     ]
-    for theme_name, summary in summaries:
-        parts.append(f"<h2>{html.escape(theme_name)}</h2>")
-        try:
-            parts.append(md_lib.markdown(summary))
-        except Exception:
-            parts.append(f"<pre>{html.escape(summary)}</pre>")
-    parts.append("</body></html>")
-    return "\n".join(parts)
+    body_parts += [
+        email_render.render_no_match_line(name, detail=p["detail"])
+        for name, p in unmatched
+    ]
+
+    return email_render.render_shell(
+        eyebrow=eyebrow,
+        masthead="Watch Themes",
+        subtitle=f"{len(matched)} of {len(summaries)} themes had coverage this week",
+        body_html="".join(body_parts),
+        footer_note="Watch Themes · generated automatically from your podcast transcripts",
+    )
 
 
 def next_version(base_name: str) -> int:
@@ -231,13 +285,9 @@ def main(argv: List[str]) -> int:
     out_md.write_text(md_body)
     logger.info(f"Wrote {out_md} ({len(md_body):,} chars)")
 
-    try:
-        html_body = render_summarized_html(date_header, summaries)
-        out_html.write_text(html_body)
-        logger.info(f"Wrote {out_html} ({len(html_body):,} chars)")
-    except ImportError:
-        logger.warning("python-markdown not installed; skipping HTML render. "
-                       "pip install markdown for HTML output.")
+    html_body = render_summarized_html(date_header, summaries)
+    out_html.write_text(html_body)
+    logger.info(f"Wrote {out_html} ({len(html_body):,} chars)")
 
     print(f"\nSummary: {out_md}")
     return 0
