@@ -568,6 +568,9 @@ class WatchTheme(Base):
     description = Column(Text, nullable=False)
     active = Column(Boolean, nullable=False, default=True, server_default='true')
     sort_order = Column(Integer, nullable=False, default=100, server_default='100')
+    # 'weekly' (Sunday watch-digest only), 'daily' (nightly emphasis only),
+    # or 'both'. Default preserves the original 4 themes' weekly-only behavior.
+    scope = Column(String(16), nullable=False, default='weekly', server_default='weekly')
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False,
@@ -577,6 +580,7 @@ class WatchTheme(Base):
     __table_args__ = (
         Index('ix_watch_themes_active', 'active'),
         Index('ix_watch_themes_sort_order', 'sort_order'),
+        Index('ix_watch_themes_scope', 'scope'),
     )
 
 

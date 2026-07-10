@@ -16,11 +16,9 @@ and re-POSTs to Harold. Harold should upsert on `date` to avoid dupes.
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import logging
 import os
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, date
@@ -42,13 +40,14 @@ from src.database.sqlalchemy_models import (  # noqa: E402
     Episode, WatchTheme, WatchDigestRun,
 )
 from src.utils.timezone import get_pacific_now  # noqa: E402
+from src.watch.theme_scan import scan_episode_for_theme  # noqa: E402
+from src.watch import email_render  # noqa: E402
 
 logger = logging.getLogger("watch_digest")
 
 TOPIC = "AI and Technology"
 SCORE_THRESHOLD = 0.65
 WINDOW_DAYS = 7
-CLAUDE_TIMEOUT_SECONDS = 300
 
 
 # ---------------------------------------------------------------------------
@@ -97,137 +96,38 @@ def compute_window(now_pt: Optional[datetime] = None) -> tuple[datetime, datetim
 
 
 # ---------------------------------------------------------------------------
-# Claude -p wrapper — per-episode theme scan
-# ---------------------------------------------------------------------------
-
-_SCAN_SYSTEM_PROMPT = """\
-You are scanning a podcast transcript for excerpts that match a specific
-user-defined theme. You will receive:
-1. THEME: the user's description of what they care about
-2. TRANSCRIPT: one episode's transcript
-
-Return a JSON array of matching excerpts. Each excerpt object has:
-  - "excerpt": verbatim text from the transcript, 50–400 chars, trimmed cleanly
-  - "note": 1 short sentence explaining why this excerpt matches the theme
-
-Return only genuinely strong matches. It is OK to return an empty array if
-the episode does not meaningfully discuss the theme. Prefer quality over
-quantity — 0–3 excerpts per episode is typical.
-
-Do NOT paraphrase. Only return verbatim quotes from the transcript.
-
-Output ONLY the JSON array. No preamble, no explanation, no markdown fence.
-"""
-
-
-def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int) -> str:
-    claude_path = os.path.expanduser("~/.local/bin/claude")
-    if not os.path.exists(claude_path):
-        claude_path = "claude"
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)
-    env.pop("ANTHROPIC_API_KEY", None)
-    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-    result = subprocess.run(
-        [claude_path, "-p", "--model", "sonnet", "--effort", "low",
-         "--tools", "", "--no-session-persistence", "-"],
-        input=full_prompt,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=env,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude -p failed ({result.returncode}): {result.stderr[:300]}")
-    return result.stdout.strip()
-
-
-def scan_episode_for_theme(
-    transcript: str,
-    theme_name: str,
-    theme_description: str,
-    episode_title: str,
-) -> List[dict]:
-    """Return list of {excerpt, note} dicts from claude -p."""
-    max_transcript = 60_000
-    trimmed = transcript[:max_transcript]
-    user_prompt = (
-        f"## THEME: {theme_name}\n\n"
-        f"{theme_description}\n\n"
-        f"## TRANSCRIPT: {episode_title}\n\n"
-        f"{trimmed}\n\n---\n\n"
-        f"Return the JSON array of matches now."
-    )
-    try:
-        raw = _call_claude_p(_SCAN_SYSTEM_PROMPT, user_prompt, CLAUDE_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Theme scan timeout: {theme_name} / {episode_title[:50]}")
-        return []
-    except Exception as e:
-        logger.warning(f"Theme scan failed: {theme_name} / {episode_title[:50]}: {e}")
-        return []
-
-    # Strip common wrappers the model sometimes adds
-    if raw.startswith("```"):
-        raw = raw.strip("`").lstrip("json").strip()
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return [m for m in parsed
-                    if isinstance(m, dict) and m.get("excerpt")]
-    except json.JSONDecodeError:
-        logger.warning(f"Non-JSON response from theme scan: {raw[:200]}")
-    return []
-
-
-# ---------------------------------------------------------------------------
 # HTML/markdown rendering
 # ---------------------------------------------------------------------------
 
 def render_html(run_date: date, theme_results: List[ThemeResult]) -> str:
-    parts = [
-        "<!DOCTYPE html>",
-        '<html><head><meta charset="utf-8">',
-        f"<title>Watch Themes — week of {run_date.isoformat()}</title>",
-        "<style>body{font-family:-apple-system,system-ui,sans-serif;",
-        "max-width:720px;margin:24px auto;padding:0 16px;line-height:1.5;color:#222;}",
-        "h1{font-size:24px;margin-bottom:4px}",
-        "h2{font-size:18px;margin-top:28px;border-bottom:1px solid #ddd;padding-bottom:4px}",
-        ".meta{color:#666;font-size:13px;margin-bottom:16px}",
-        ".match{margin:12px 0;padding:10px 12px;background:#f7f7fa;border-left:3px solid #7c8aff;border-radius:4px}",
-        ".excerpt{margin:0;font-style:italic}",
-        ".src{display:block;margin-top:6px;font-size:12px;color:#555}",
-        ".note{margin-top:4px;font-size:13px;color:#444}",
-        ".none{color:#888;font-style:italic}",
-        "</style></head><body>",
-        f"<h1>Watch Themes digest</h1>",
-        f'<div class="meta">Week ending {run_date.isoformat()} · '
-        f"{sum(len(t.matches) for t in theme_results)} matches across "
-        f"{len(theme_results)} themes</div>",
-    ]
+    """Render the raw (un-summarized) digest as a Harold UI email.
+
+    Used for --dry-run inspection and the --no-summarize delivery path.
+    Shares the same email shell as the default summarized delivery (see
+    scripts/summarize_watch_digest.py::render_summarized_html) so both
+    variants are visually one product.
+    """
+    total_matches = sum(len(t.matches) for t in theme_results)
+    body_parts = []
     for tr in theme_results:
-        parts.append(f"<h2>{html.escape(tr.theme_name)}</h2>")
         if tr.error:
-            parts.append(f'<p class="none">Scan error: {html.escape(tr.error)}</p>')
+            body_parts.append(email_render.render_no_match_line(
+                tr.theme_name, detail=f"scan error: {tr.error}"))
             continue
         if not tr.matches:
-            parts.append(
-                f'<p class="none">No matches this week '
-                f"(scanned {tr.episodes_scanned} episodes).</p>"
-            )
+            body_parts.append(email_render.render_no_match_line(
+                tr.theme_name,
+                detail=f"no matches this week (scanned {tr.episodes_scanned} episodes)"))
             continue
-        for m in tr.matches:
-            parts.append('<div class="match">')
-            parts.append(f'<p class="excerpt">&ldquo;{html.escape(m.excerpt)}&rdquo;</p>')
-            if m.relevance_note:
-                parts.append(f'<div class="note">{html.escape(m.relevance_note)}</div>')
-            parts.append(
-                f'<span class="src">— {html.escape(m.episode_title)} '
-                f"({m.episode_date.isoformat()})</span>"
-            )
-            parts.append("</div>")
-    parts.append("</body></html>")
-    return "\n".join(parts)
+        body_parts.append(email_render.render_theme_card_raw(tr.theme_name, tr.matches))
+
+    return email_render.render_shell(
+        eyebrow=f"WEEK OF {run_date.isoformat()}",
+        masthead="Watch Themes",
+        subtitle=f"{total_matches} matches across {len(theme_results)} themes (raw excerpts)",
+        body_html="".join(body_parts),
+        footer_note="Watch Themes · generated automatically from your podcast transcripts",
+    )
 
 
 def render_markdown(run_date: date, theme_results: List[ThemeResult]) -> str:
