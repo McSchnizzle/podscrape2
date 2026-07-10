@@ -708,7 +708,13 @@ def main():
         skip_audio=args.skip_audio
     )
 
-    orchestrator.run_pipeline()
+    result = orchestrator.run_pipeline()
+
+    # run_pipeline() always logs failures loudly, but previously left the
+    # process exit code at the Python default (0) regardless of outcome.
+    # Callers (the cron wrapper, in particular) rely on the exit code alone
+    # to detect a failed run, so propagate it here.
+    sys.exit(0 if result.get('success') else 1)
 
 if __name__ == '__main__':
     main()
