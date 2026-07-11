@@ -31,11 +31,30 @@ from dataclasses import dataclass
 
 from src.config.config_manager import ConfigManager
 from src.config.web_config import WebConfigManager, SettingsKeys
+from src.scoring.harold_rnd import HAROLD_RND_SCORE_KEY
 
 # Environment variables expected to be loaded by calling script via src.config.env
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────
+# PROVIDER SELECTION (kanban #2856 root-cause fix)
+#
+# There is exactly ONE live scoring path: claude -p via subprocess
+# (`_score_with_claude_p` / `_call_claude_p`). It is unconditional -- there
+# is no runtime flag, web_setting, or model name that switches this class to
+# calling OpenAI. The `web_config` "ai_content_scoring.model"/"max_tokens"
+# settings below are read but ONLY feed `self.ai_model`/`self.max_tokens`,
+# which are legacy bookkeeping kept for the dead OpenAI methods further down
+# (`_create_scoring_prompt`, `_create_json_schema`) -- those methods are
+# never called (this class never constructs an OpenAI client: there is no
+# `self.client`), so changing "ai_content_scoring.model" in the Web UI has
+# NO effect on which provider scores episodes. `test_content_scorer.py`
+# asserts `not hasattr(ContentScorer(...), "client")` to keep that
+# guarantee enforced, not just documented.
+# ─────────────────────────────────────────────────────────────────────────
+SCORING_PROVIDER = "claude-p"
 
 @dataclass
 class ScoringResult:
@@ -45,15 +64,22 @@ class ScoringResult:
     processing_time: float
     success: bool
     error_message: Optional[str] = None
+    # Harold R&D-applicability rating (kanban #2855), 0.0-1.0 or None if the
+    # model omitted it / parsing failed. NOT included in `scores` above --
+    # callers that want it persisted must merge it into the stored dict
+    # themselves under harold_rnd.HAROLD_RND_SCORE_KEY, keeping `scores`
+    # (used for podcast-relevance gating) free of the reserved key.
+    harold_applicability: Optional[float] = None
 
 class ContentScorer:
     """
-    GPT-5-mini powered content scorer for podcast transcripts.
-    
+    Content scorer for podcast transcripts, scoring via claude -p (see
+    SCORING_PROVIDER above -- this is the only live path).
+
     Evaluates transcripts against topic relevancy using structured JSON output
     with 0.0-1.0 scoring scale for each configured topic.
     """
-    
+
     def __init__(self, config_path: str = None, config_manager: ConfigManager = None, web_config: Any = None):
         """
         Initialize content scorer with topic configuration.
@@ -81,7 +107,23 @@ class ContentScorer:
 
         self.config_manager = config_manager or ConfigManager(config_dir=config_dir or 'config', web_config=self.web_config)
 
-        # Load topics and score threshold via ConfigManager
+        # Load topics and score threshold via ConfigManager. `self.topics` is
+        # refreshed on every score_transcript() call (see refresh_topics()
+        # below) -- it is set here too so callers that only construct a
+        # ContentScorer to read `.topics`/`.score_threshold` without ever
+        # scoring (e.g. rescore_episodes.py logging active topics) still see
+        # current data without an extra call.
+        #
+        # Root cause (kanban #2856): before this fix, `self.topics` was
+        # loaded ONCE at __init__ and never refreshed. ContentScorer is
+        # constructed once per `run_audio.py` process
+        # (scripts/run_audio.py's AudioProcessor.__init__), and that process
+        # can run for up to 2 hours (podcast-audio cron, 7200s timeout)
+        # scoring many episodes sequentially. Any topic edited via the Web
+        # UI mid-run (name, description, or active/inactive flip) would be
+        # invisible to every score_transcript() call for the rest of that
+        # process's life -- episodes would be scored, and their prompts
+        # built, against stale topic text that no longer matches the DB.
         self.topics = self.config_manager.get_topics()
         self.score_threshold = self.config_manager.get_score_threshold()
 
@@ -159,6 +201,14 @@ class ContentScorer:
 Return ONLY a valid JSON object with one key per topic and a float score. No markdown, no explanation.
 Rubric: 0.0-0.3 not relevant, 0.4-0.6 somewhat relevant, 0.7-0.8 highly relevant, 0.9-1.0 central topic."""
 
+    # Key the scoring prompt asks the model to return the Harold R&D
+    # applicability rating under. Deliberately NOT `HAROLD_RND_SCORE_KEY`
+    # ("_harold_rnd") -- that reserved key is an internal storage detail of
+    # `episodes.scores`, not something we want to teach the model to
+    # produce verbatim (keeps the two concerns -- "what the model returns"
+    # vs. "how we persist it" -- decoupled).
+    _HAROLD_APPLICABILITY_JSON_KEY = "harold_applicability"
+
     def _build_claude_p_scoring_prompt(self, transcript: str, topics: List[dict]) -> str:
         """Build prompt for claude -p scoring."""
         skill_content = self._load_scoring_skill()
@@ -172,16 +222,40 @@ Rubric: 0.0-0.3 not relevant, 0.4-0.6 somewhat relevant, 0.7-0.8 highly relevant
         if len(transcript) > 6000:
             excerpt += "..."
 
+        harold_applicability_instructions = (
+            "## Additional Rating: Harold R&D Applicability\n\n"
+            "In the SAME JSON object, alongside the topic score keys above, "
+            f'also include a key "{self._HAROLD_APPLICABILITY_JSON_KEY}" with '
+            "a float 0.0-1.0 rating of how applicable this episode's content "
+            "is to research and development for Harold, a personal AI "
+            "assistant/agent system. Score high for concrete techniques, "
+            "tools, or open-source projects covering: agent orchestration, "
+            "memory systems, TTS/STT, e-ink/reMarkable integrations, local "
+            "models, MCP/tool protocols, workflow automation, or "
+            "self-improvement loops. Score low for content that is purely "
+            "news, opinion, or unrelated to building agent systems, even if "
+            "it is otherwise a strong AI and Technology story.\n"
+        )
+
         return (
             f"{skill_content}\n\n"
             f"## Topics to Score\n\n"
             f"{topic_lines}\n\n"
+            f"{harold_applicability_instructions}\n"
             f"## Transcript\n\n"
             f"{excerpt}"
         )
 
-    def _score_with_claude_p(self, transcript: str, topics: List[dict]) -> Dict[str, float]:
-        """Score transcript via claude -p, returns {topic_name: score} dict."""
+    def _score_with_claude_p(self, transcript: str, topics: List[dict]) -> Tuple[Dict[str, float], Optional[float]]:
+        """Score transcript via claude -p.
+
+        Returns (topic_scores, harold_applicability):
+          - topic_scores: {topic_name: score} dict, one entry per active topic
+          - harold_applicability: 0.0-1.0 rating, or None if the model
+            omitted it or it failed to parse as a number (fails open --
+            harold_applicability is a bonus signal, never allowed to fail
+            the whole scoring call).
+        """
         prompt = self._build_claude_p_scoring_prompt(transcript, topics)
         raw = self._call_claude_p(prompt)
 
@@ -203,7 +277,21 @@ Rubric: 0.0-0.3 not relevant, 0.4-0.6 somewhat relevant, 0.7-0.8 highly relevant
                 score = max(0.0, min(1.0, score))
             result[name] = score
 
-        return result
+        harold_applicability = None
+        raw_applicability = scores.get(self._HAROLD_APPLICABILITY_JSON_KEY)
+        if raw_applicability is not None:
+            try:
+                harold_applicability = float(raw_applicability)
+                if not (0.0 <= harold_applicability <= 1.0):
+                    logger.warning(
+                        f"harold_applicability {harold_applicability} outside [0,1], clamping"
+                    )
+                    harold_applicability = max(0.0, min(1.0, harold_applicability))
+            except (TypeError, ValueError):
+                logger.warning(f"Non-numeric harold_applicability in response: {raw_applicability!r}")
+                harold_applicability = None
+
+        return result, harold_applicability
 
     # ┌─────────────────────────────────────────────────────────────────────┐
     # │ LEGACY: _create_scoring_prompt and _create_json_schema (OpenAI)    │
@@ -295,35 +383,57 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
         
         return cleaned
 
+    def refresh_topics(self) -> List[dict]:
+        """Re-fetch active topics from the DB-first ConfigManager and update
+        `self.topics` in place.
+
+        Called at the top of every score_transcript() so a long-lived
+        ContentScorer (one instance per run_audio.py process, which can run
+        for hours) always builds prompts from the CURRENT topics table
+        instead of whatever was active when the process started (kanban
+        #2856 root cause). `ConfigManager._get_database_topics` already
+        queries the DB fresh on every call -- the bug was that ContentScorer
+        only ever called it once, in __init__, and cached the result.
+        """
+        self.topics = self.config_manager.get_topics()
+        return self.topics
+
     def score_transcript(self, transcript: str, episode_id: str = None) -> ScoringResult:
         """
         Score a single transcript against all active topics.
-        
+
         Args:
             transcript: The podcast transcript text
             episode_id: Optional episode identifier for logging
-            
+
         Returns:
             ScoringResult with scores and metadata
         """
         start_time = datetime.now()
 
+        # Refresh topics from the DB before every scoring call -- see
+        # refresh_topics() docstring for why this matters for long-lived
+        # processes.
+        self.refresh_topics()
+
         # Clean transcript to remove advertisements and sponsor content
         cleaned_transcript = self._clean_transcript(transcript)
 
         try:
-            scores = self._score_with_claude_p(cleaned_transcript, self.topics)
+            scores, harold_applicability = self._score_with_claude_p(cleaned_transcript, self.topics)
 
             processing_time = (datetime.now() - start_time).total_seconds()
             label = f"episode {episode_id}" if episode_id else "transcript"
             logger.info(f"Scored {label} via claude -p in {processing_time:.2f}s: "
-                        f"{', '.join(f'{k}={v:.2f}' for k, v in scores.items())}")
+                        f"{', '.join(f'{k}={v:.2f}' for k, v in scores.items())}"
+                        + (f", harold_applicability={harold_applicability:.2f}" if harold_applicability is not None else ""))
 
             return ScoringResult(
                 episode_id=episode_id or "unknown",
                 scores=scores,
                 processing_time=processing_time,
-                success=True
+                success=True,
+                harold_applicability=harold_applicability
             )
 
         except Exception as e:
