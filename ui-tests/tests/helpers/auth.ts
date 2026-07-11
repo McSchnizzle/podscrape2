@@ -6,12 +6,21 @@ import { Page, test } from '@playwright/test';
  * any spec that navigates to an admin page must call this first (or it
  * just observes the /login redirect and every assertion fails).
  *
- * Skips the test (not fails) when ADMIN_PASSWORD isn't set in the test
- * environment, matching the pattern already used in auth-middleware.spec.ts.
+ * FAILS (does not skip) when ADMIN_PASSWORD isn't set, so a misconfigured
+ * run can't silently green-light regressions (codex review, #2846 Phase 2).
+ * Set PLAYWRIGHT_ALLOW_SKIP_AUTH=1 for deliberate password-less local runs.
  */
 export async function loginAsAdmin(page: Page): Promise<void> {
   const password = process.env.ADMIN_PASSWORD;
-  test.skip(!password, 'ADMIN_PASSWORD not set in the test environment');
+  if (!password) {
+    if (process.env.PLAYWRIGHT_ALLOW_SKIP_AUTH === '1') {
+      test.skip(true, 'ADMIN_PASSWORD not set; skip explicitly allowed');
+    }
+    throw new Error(
+      'ADMIN_PASSWORD is not set in the test environment. Authenticated specs ' +
+      'require it (set PLAYWRIGHT_ALLOW_SKIP_AUTH=1 to skip deliberately).'
+    );
+  }
 
   await page.goto('/login');
   await page.getByLabel('Password').fill(password!);

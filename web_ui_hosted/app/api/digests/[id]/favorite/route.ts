@@ -21,7 +21,10 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const isFavorite = Boolean(body.is_favorite)
+    if (typeof body?.is_favorite !== 'boolean') {
+      return NextResponse.json({ error: 'is_favorite must be a boolean' }, { status: 400 })
+    }
+    const isFavorite: boolean = body.is_favorite
 
     const db = DatabaseClient.getInstance()
     await db.setDigestFavorite(id, isFavorite)

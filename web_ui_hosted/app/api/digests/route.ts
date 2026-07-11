@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(Number(searchParams.get('limit')) || 50, 200)
+    const rawLimit = searchParams.get('limit')
+    const limit = rawLimit === null ? 50 : Number(rawLimit)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return NextResponse.json({ error: 'limit must be an integer between 1 and 200' }, { status: 400 })
+    }
 
     const db = DatabaseClient.getInstance()
     const digests = await db.getDigests(limit)
