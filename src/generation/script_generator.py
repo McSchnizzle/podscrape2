@@ -1193,7 +1193,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a dialogue-style digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Every transcript below is complete and self-supporting — pre-generation dedup already stripped repeated background against prior digests while preserving each episode's own thesis and the evidence it needs to stand on its own. Discuss each episode in the depth its content allows; do not claim you lack access to any transcript.
 
 """
 
@@ -1668,7 +1668,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a narrative digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Every transcript below is complete and self-supporting — pre-generation dedup already stripped repeated background against prior digests while preserving each episode's own thesis and the evidence it needs to stand on its own. Discuss each episode in the depth its content allows; do not claim you lack access to any transcript.
 
 """
 
@@ -2411,6 +2411,11 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Dedup the full pool against prior digests
         original_episodes = list(episodes)
         deduped_transcript_cache = {}  # episode.id -> deduped transcript
+        # kanban #2861: episode IDs the dedup safety net dropped for having
+        # zero novel content (not a stub -- genuinely nothing new). Marked
+        # digested below once the digest is confirmed created, so they
+        # don't resurface tomorrow only to be deduped to nothing again.
+        dropped_episode_ids: List[int] = []
         try:
             from src.generation.transcript_dedup import dedup_episode_batch
             from src.database.sqlalchemy_models import Digest as DigestModel
@@ -2434,17 +2439,28 @@ Thank you for your understanding, and we'll see you tomorrow!
                     timeout_per_episode=300,
                 )
 
-                # Cache deduped transcripts for all episodes
+                # Cache deduped transcripts for all episodes. By construction
+                # dedup_transcript() guarantees deduped_transcript is either
+                # "" (dropped, zero novel content) or >= the safety-net floor
+                # (kept as-is or restored from the original) -- never a
+                # below-floor stub (kanban #2861).
                 for ep, result in zip(all_available_episodes, dedup_results):
                     if not result.skipped and result.deduped_transcript:
                         deduped_transcript_cache[ep.id] = result.deduped_transcript
+                        action_note = (
+                            f", {result.below_floor_action} via safety net"
+                            if result.below_floor_action
+                            else ""
+                        )
                         logger.info(
                             f"Pre-gen dedup: '{ep.title[:40]}' "
                             f"{result.original_chars:,} -> {result.deduped_chars:,} chars "
-                            f"({result.reduction_pct:.0%} removed)"
+                            f"({result.reduction_pct:.0%} removed{action_note})"
                         )
                     elif result.deduped_chars == 0 and not result.skipped:
                         deduped_transcript_cache[ep.id] = ""  # fully redundant
+                        if ep.id is not None:
+                            dropped_episode_ids.append(ep.id)
 
                 # Apply deduped transcripts to the initial episode set
                 for ep in episodes:
@@ -2461,6 +2477,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         except Exception as e:
             logger.warning(f"Pre-gen transcript dedup failed ({e}), using original transcripts")
             episodes = original_episodes
+            dropped_episode_ids = []
 
         # Watch-theme daily emphasis (Tier B, Paul 2026-07-10): scan active
         # daily/both watch themes against this digest's (deduped) episodes
@@ -2612,6 +2629,21 @@ Thank you for your understanding, and we'll see you tomorrow!
         if episodes:  # Only if we actually used episodes
             logger.info(f"Marking {len(episodes)} episodes as digested")
             self.mark_digest_episodes_as_digested(digest)
+
+        # kanban #2861: episodes the dedup safety net dropped for having zero
+        # novel content are covered by sibling episodes in this digest --
+        # mark them digested too (they're not linked to the digest content,
+        # just excluded from the writer input) so they don't resurface
+        # tomorrow only to be re-deduped to nothing again.
+        if dropped_episode_ids:
+            logger.info(
+                f"Marking {len(dropped_episode_ids)} fully-redundant episode(s) "
+                f"as digested (dropped from writer input, covered by siblings)"
+            )
+            for ep_id in dropped_episode_ids:
+                dropped_ep = self.episode_repo.get_by_id(ep_id)
+                if dropped_ep:
+                    self.mark_episode_as_digested(dropped_ep)
 
         # Mark story arcs that were covered in this digest
         if digest.id and script_content:

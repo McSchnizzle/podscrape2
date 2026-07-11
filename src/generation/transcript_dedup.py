@@ -39,6 +39,23 @@ logger = logging.getLogger(__name__)
 # leaves plenty of room for prior_content + the system prompt.
 MAX_CHUNK_CHARS = 30_000
 
+# kanban #2861: safety-net floor. Dedup must never hand the script writer a
+# below-floor stub -- a fragment so thin the writer can only reference it as
+# "we don't have the detail." If a NON-empty dedup result falls below this
+# many chars (or below MIN_RETENTION_PCT of the original), we restore a
+# bounded excerpt of the ORIGINAL transcript instead of the over-stripped
+# output. A genuinely empty result (all chunks [NO_NEW_CONTENT]) is not a
+# stub -- it means the episode really has nothing new, so it is dropped
+# from the writer input instead of restored. See dedup_transcript().
+MIN_DEDUPED_CHARS = 500
+MIN_RETENTION_PCT = 0.15
+
+# Cap for the restored excerpt (kanban #2861 safety net). Bounded so a
+# restore doesn't reintroduce full-transcript duplication against sibling
+# episodes -- just enough for the episode's own thesis + supporting
+# reasoning to stand on its own.
+RESTORE_EXCERPT_CAP_CHARS = 3_000
+
 # Sentence-end pattern: ., !, ? followed by whitespace. Catches the vast
 # majority of natural break points in podcast transcripts (which are
 # typically punctuated prose from whisper-style transcription). The
@@ -121,6 +138,11 @@ class TranscriptDedupResult:
     deduped_transcript: str
     skipped: bool = False
     skip_reason: Optional[str] = None
+    # kanban #2861 safety net: None (no action), "dropped" (deduped_chars==0,
+    # genuinely no new content -- excluded from writer input), or "restored"
+    # (dedup output fell below the floor, so deduped_transcript was replaced
+    # with a bounded excerpt of the ORIGINAL transcript).
+    below_floor_action: Optional[str] = None
 
     @property
     def reduction_pct(self) -> float:
@@ -140,13 +162,32 @@ already heard.
 
 Your task: Return a CLEANED version of the transcript with the following removed:
 - Paragraphs or sentences that restate facts, statistics, or claims already \
-present in the PRIOR CONTENT.
+present in the PRIOR CONTENT, when those facts are pure background recitation \
+and are NOT being used to build this episode's own point.
 - Background explanations for stories already covered (e.g., "Project Glasswing \
 is a coalition of...").
 - Repeated benchmark numbers, partner lists, or other specific data points \
-that appear in the PRIOR CONTENT.
+that appear in the PRIOR CONTENT — UNLESS this episode is using them as \
+evidence for its own distinct verdict or conclusion (see CRITICAL rule below).
+
+CRITICAL — NEVER reduce an episode to an unsupported claim:
+- If the transcript states this episode's own thesis, evaluation, or verdict \
+on a topic — especially a take that DIFFERS from or CONTRADICTS how prior \
+digests framed the same topic (e.g., a negative review of something prior \
+episodes praised) — you MUST keep that verdict AND the minimum supporting \
+facts, reasoning, or evidence it depends on, even when those specific facts \
+(benchmark numbers, data points) also appear in PRIOR CONTENT.
+- A distinctive or contrarian opinion is high-value content precisely because \
+it disagrees. Stripping the evidence out from under it leaves a bare assertion \
+the audience can't evaluate — that is worse than leaving in a duplicate fact.
+- Test before removing a fact: "if I strip this, does the episode's own \
+conclusion still make sense standing on its own?" If not, keep it.
+- Only strip evidence that is pure duplicate recitation NOT doing any work \
+for this episode's own argument.
 
 KEEP:
+- The episode's central thesis/evaluation/verdict and its supporting reasoning \
+(per the CRITICAL rule above), even when built on facts covered elsewhere.
 - Any genuinely NEW information, angles, reactions, or data not in PRIOR CONTENT.
 - A new source's perspective on a familiar story (different host/guest opinion).
 - New consequences, reversals, or developments of a known story.
@@ -156,7 +197,8 @@ Just remove the redundant parts and leave the rest intact.
 
 If almost everything in the transcript is redundant, return only the novel \
 parts, even if that's just a few sentences. If the transcript has NOTHING \
-new, return the single line: [NO_NEW_CONTENT]
+new — no distinct thesis, no novel angle, nothing beyond a restatement of \
+what prior digests already said — return the single line: [NO_NEW_CONTENT]
 
 Output ONLY the cleaned transcript. No commentary, no headers, no notes.
 """
@@ -218,6 +260,12 @@ def _build_dedup_prompt(
             f"what's new about it, REMOVE the paragraph entirely\n"
             f"- A mention like 'the Mythos story we've been tracking' is fine — "
             f"re-explaining what Mythos is is NOT\n\n"
+            f"**This aggressive stripping is SUBORDINATE to the CRITICAL rule "
+            f"above:** even on a saturated topic, never strip the specific "
+            f"evidence this episode needs to support its OWN distinct verdict "
+            f"or conclusion. 'Familiar background' means re-explained context "
+            f"and re-listed facts nobody is using to argue anything new — it "
+            f"does NOT mean the facts this episode is standing its argument on.\n\n"
         )
 
     return (
@@ -346,6 +394,30 @@ def detect_evergreen_topics(
     for t in topics:
         logger.info(f"  - {t}")
     return topics
+
+
+def _restore_bounded_excerpt(
+    original: str,
+    cap: int = RESTORE_EXCERPT_CAP_CHARS,
+) -> str:
+    """Return a sentence-trimmed excerpt of ``original``, capped at ``cap`` chars.
+
+    kanban #2861 safety net: when dedup over-strips a distinctive episode
+    below the floor, we fall back to a bounded slice of the ORIGINAL
+    transcript (not the over-stripped output) so the writer gets coherent,
+    self-supporting content instead of a fragment. Reuses the same
+    sentence-boundary logic as ``split_transcript_into_chunks`` so the
+    excerpt ends cleanly rather than mid-sentence.
+    """
+    if len(original) <= cap:
+        return original
+
+    window = original[:cap]
+    last_boundary_end = -1
+    for m in _SENTENCE_END_RE.finditer(window):
+        last_boundary_end = m.end()
+
+    return original[:last_boundary_end] if last_boundary_end > 0 else window
 
 
 def dedup_transcript(
@@ -518,12 +590,41 @@ def dedup_transcript(
         )
 
     deduped_chars = len(cleaned)
+    retained_pct = (deduped_chars / original_chars) if original_chars else 0.0
     if original_chars > 0:
         logger.info(
             f"Pre-gen dedup: '{episode_title[:50]}' "
             f"{original_chars:,} -> {deduped_chars:,} chars "
-            f"({deduped_chars/original_chars:.0%} retained)"
+            f"({retained_pct:.0%} retained)"
         )
+
+    # kanban #2861 safety net: dedup must never hand the writer a
+    # below-floor stub it can only reference as "we don't have the detail."
+    below_floor_action: Optional[str] = None
+    if deduped_chars == 0:
+        # Genuinely nothing new (every chunk returned [NO_NEW_CONTENT], or
+        # the model emptied the transcript outright). This is NOT a stub --
+        # it's a real "fully redundant" result, so it stays empty and the
+        # caller drops the episode from writer input.
+        below_floor_action = "dropped"
+        logger.info(
+            f"Pre-gen dedup safety net: '{episode_title[:50]}' fully "
+            f"redundant (0% retained) -- dropping from writer input"
+        )
+    elif deduped_chars < MIN_DEDUPED_CHARS or retained_pct < MIN_RETENTION_PCT:
+        # Dedup found SOME novel content but stripped too much of its
+        # support to stand alone -- restore a bounded excerpt of the
+        # ORIGINAL transcript instead of handing the writer a fragment.
+        restored = _restore_bounded_excerpt(transcript)
+        logger.warning(
+            f"Pre-gen dedup safety net: '{episode_title[:50]}' over-stripped "
+            f"to {deduped_chars:,} chars ({retained_pct:.0%} retained, below "
+            f"floor of {MIN_DEDUPED_CHARS} chars / {MIN_RETENTION_PCT:.0%}) "
+            f"-- restoring {len(restored):,}-char original excerpt"
+        )
+        cleaned = restored
+        deduped_chars = len(cleaned)
+        below_floor_action = "restored"
 
     return TranscriptDedupResult(
         episode_id=episode_id,
@@ -531,6 +632,7 @@ def dedup_transcript(
         original_chars=original_chars,
         deduped_chars=deduped_chars,
         deduped_transcript=cleaned,
+        below_floor_action=below_floor_action,
     )
 
 
@@ -609,13 +711,17 @@ def dedup_episode_batch(
     total_original = sum(r.original_chars for r in results)
     total_deduped = sum(r.deduped_chars for r in results)
     skipped = sum(1 for r in results if r.skipped)
+    # kanban #2861: "empty" already covers every below-floor DROP -- the
+    # safety net only ever drops (vs. restores) when deduped_chars == 0.
     empty = sum(1 for r in results if r.deduped_chars == 0 and not r.skipped)
+    restored = sum(1 for r in results if r.below_floor_action == "restored")
 
     logger.info(
         f"Pre-gen dedup batch complete: {len(results)} episodes, "
         f"{total_original:,} -> {total_deduped:,} chars "
         f"({total_deduped/total_original:.0%} retained), "
-        f"{skipped} skipped, {empty} fully redundant"
+        f"{skipped} skipped, {empty} fully redundant/dropped, "
+        f"{restored} restored (below-floor safety net)"
     )
 
     return results, combined
