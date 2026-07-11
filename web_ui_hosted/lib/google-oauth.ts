@@ -85,13 +85,20 @@ function base64UrlToBytes(b64url: string): Uint8Array | null {
 }
 
 /** Mint a signed, time-boxed CSRF state token carrying the post-login redirect. */
-export async function signState(next: string): Promise<string> {
-  const state: OAuthState = { nonce: randomNonce(), ts: Date.now(), next }
+export async function signState(next: string): Promise<{ token: string; nonce: string }> {
+  const nonce = randomNonce()
+  const state: OAuthState = { nonce, ts: Date.now(), next }
   const payload = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(state)))
   const key = await importHmacKey(getSessionSecret(), ['sign'])
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
-  return `${payload}.${toHex(signature)}`
+  return { token: `${payload}.${toHex(signature)}`, nonce }
 }
+
+/** Cookie that binds the OAuth state to the initiating browser (codex review,
+ *  #2846 Phase 3): the callback requires state.nonce === this cookie's value
+ *  and clears it on use, so a signed state token cannot be replayed from
+ *  another browser or reused within its validity window. */
+export const OAUTH_NONCE_COOKIE = 'podcast_oauth_nonce'
 
 /** Verify a state token from the OAuth callback. Returns null for missing/expired/tampered tokens. */
 export async function verifyState(token: string | null | undefined): Promise<OAuthState | null> {

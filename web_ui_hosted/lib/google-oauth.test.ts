@@ -50,7 +50,7 @@ describe('safeNextPath', () => {
 
 describe('signState / verifyState', () => {
   test('round-trips a freshly signed state', async () => {
-    const token = await signState('/settings')
+    const { token } = await signState('/settings')
     const state = await verifyState(token)
     assert.ok(state)
     assert.equal(state?.next, '/settings')
@@ -59,8 +59,8 @@ describe('signState / verifyState', () => {
   })
 
   test('two signed states have different nonces', async () => {
-    const a = await verifyState(await signState('/dashboard'))
-    const b = await verifyState(await signState('/dashboard'))
+    const a = await verifyState((await signState('/dashboard')).token)
+    const b = await verifyState((await signState('/dashboard')).token)
     assert.notEqual(a?.nonce, b?.nonce)
   })
 
@@ -76,7 +76,7 @@ describe('signState / verifyState', () => {
   })
 
   test('rejects a tampered signature', async () => {
-    const token = await signState('/dashboard')
+    const { token } = await signState('/dashboard')
     const [payload, signature] = token.split('.')
     const flipped = signature[0] === 'a' ? 'b' : 'a'
     const tampered = `${payload}.${flipped}${signature.slice(1)}`
@@ -84,7 +84,7 @@ describe('signState / verifyState', () => {
   })
 
   test('rejects a tampered payload', async () => {
-    const token = await signState('/dashboard')
+    const { token } = await signState('/dashboard')
     const [, signature] = token.split('.')
     const tampered = `${Buffer.from(JSON.stringify({ nonce: 'x', ts: Date.now(), next: '/settings' })).toString('base64url')}.${signature}`
     assert.equal(await verifyState(tampered), null)
@@ -94,7 +94,7 @@ describe('signState / verifyState', () => {
     const originalNow = Date.now
     try {
       Date.now = () => 1_000_000_000_000
-      const token = await signState('/dashboard')
+      const { token } = await signState('/dashboard')
       Date.now = () => 1_000_000_000_000 + 11 * 60 * 1000 // 11 minutes later
       assert.equal(await verifyState(token), null)
     } finally {
@@ -106,7 +106,7 @@ describe('signState / verifyState', () => {
     const originalNow = Date.now
     try {
       Date.now = () => 1_000_000_000_000
-      const token = await signState('/dashboard')
+      const { token } = await signState('/dashboard')
       Date.now = () => 1_000_000_000_000 + 9 * 60 * 1000 // 9 minutes later
       assert.ok(await verifyState(token))
     } finally {

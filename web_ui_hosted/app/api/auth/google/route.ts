@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   GOOGLE_AUTH_ENDPOINT,
+  OAUTH_NONCE_COOKIE,
   getGoogleRedirectUri,
   isGoogleOAuthConfigured,
   safeNextPath,
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   const next = safeNextPath(request.nextUrl.searchParams.get('next'))
-  const state = await signState(next)
+  const { token: state, nonce } = await signState(next)
 
   const url = new URL(GOOGLE_AUTH_ENDPOINT)
   url.searchParams.set('client_id', clientId)
@@ -34,5 +35,15 @@ export async function GET(request: NextRequest) {
   url.searchParams.set('prompt', 'select_account')
   url.searchParams.set('state', state)
 
-  return NextResponse.redirect(url.toString())
+  const response = NextResponse.redirect(url.toString())
+  // Browser-bind the state: the callback requires this cookie to match
+  // state.nonce and consumes it (see callback route).
+  response.cookies.set(OAUTH_NONCE_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: request.headers.get('x-forwarded-proto') === 'https',
+    path: '/api/auth',
+    maxAge: 600,
+  })
+  return response
 }
