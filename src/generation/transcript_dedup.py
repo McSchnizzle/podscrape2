@@ -420,7 +420,15 @@ def _restore_bounded_excerpt(
     short opening line like "Done.") must never win over the floor
     guarantee; that would silently recreate the exact below-floor stub this
     function exists to prevent (codex review, kanban #2861).
+
+    Callers pass the module defaults for ``cap``/``floor`` in production;
+    this function does not rely on that. If a caller ever passes
+    ``cap < floor``, clamp ``cap`` up to ``floor`` so the >= floor guarantee
+    holds regardless of caller (codex review round 3).
     """
+    if cap < floor:
+        cap = floor
+
     if len(original) <= cap:
         return original
 
@@ -432,8 +440,8 @@ def _restore_bounded_excerpt(
         last_boundary_end = m.end()
 
     # No sentence boundary at/after the floor within [floor, cap] -- hard
-    # cut at the cap. cap > floor by construction (RESTORE_EXCERPT_CAP_CHARS
-    # > MIN_DEDUPED_CHARS), so this is always >= floor.
+    # cut at the cap. cap >= floor is now guaranteed (see clamp above), so
+    # this is always >= floor.
     return original[:last_boundary_end] if last_boundary_end > 0 else window
 
 

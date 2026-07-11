@@ -494,6 +494,26 @@ def test_restore_bounded_excerpt_uses_boundary_at_or_after_floor():
     assert text.startswith(excerpt)
 
 
+def test_restore_bounded_excerpt_clamps_cap_below_floor(monkeypatch):
+    """codex review round 3: the helper doesn't literally guarantee >=floor
+    for a caller that passes cap < floor. Clamp cap up to floor internally
+    so the >= floor guarantee holds regardless of caller, rather than
+    relying on every current/future caller to pass a sane cap."""
+    text = "x" * 10_000
+    # cap (100) is well below floor (500) -- must not silently return a
+    # 100-char (or shorter) excerpt.
+    excerpt = _restore_bounded_excerpt(text, cap=100, floor=500)
+    assert len(excerpt) >= 500
+
+
+def test_restore_bounded_excerpt_default_cap_and_floor_are_module_constants():
+    """Sanity guard: RESTORE_EXCERPT_CAP_CHARS > MIN_DEDUPED_CHARS must hold
+    for the module's own default cap/floor pairing -- the clamp above is a
+    defensive fallback for unusual callers, not a substitute for keeping
+    the production defaults sane."""
+    assert RESTORE_EXCERPT_CAP_CHARS > MIN_DEDUPED_CHARS
+
+
 # ---------------------------------------------------------------------------
 # dedup_transcript() floor/restore/drop behavior
 # ---------------------------------------------------------------------------

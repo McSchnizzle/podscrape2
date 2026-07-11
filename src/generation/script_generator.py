@@ -2411,10 +2411,20 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Dedup the full pool against prior digests
         original_episodes = list(episodes)
         deduped_transcript_cache = {}  # episode.id -> deduped transcript
-        # kanban #2861: episode IDs the dedup safety net dropped for having
-        # zero novel content (not a stub -- genuinely nothing new). Marked
+        # kanban #2861 (codex round 3, P2): episode IDs the dedup safety net
+        # dropped where dedup actually RAN and established zero novel
+        # content (below_floor_action=="dropped" AND skipped=False --
+        # genuinely redundant against prior digests/siblings). Marked
         # digested below once the digest is confirmed created, so they
         # don't resurface tomorrow only to be deduped to nothing again.
+        # Deliberately does NOT include the too-short-ORIGINAL case
+        # (skipped=True, dedup never ran): redundancy was never
+        # established there, so marking it digested would permanently
+        # lose a possibly-unique episode whose transcript just happened to
+        # be short (often a failed/partial transcription). That case is
+        # still excluded from THIS digest's writer input via
+        # deduped_transcript_cache below, but left 'scored' for
+        # reconsideration/retry -- see the loop just below.
         dropped_episode_ids: List[int] = []
         try:
             from src.generation.transcript_dedup import dedup_episode_batch
@@ -2455,10 +2465,17 @@ Thank you for your understanding, and we'll see you tomorrow!
                 # cached" and keep their original, unmodified transcript --
                 # a real, presumably substantial transcript that just failed
                 # to process, not an inherently-thin one.
+                #
+                # dropped_episode_ids (below) is deliberately narrower than
+                # this exclusion: only genuinely-redundant results (dedup
+                # ran, skipped=False) get marked digested. A too-short
+                # ORIGINAL (skipped=True) is excluded from writer input here
+                # but must NOT be added to dropped_episode_ids -- see its
+                # comment above (codex round 3, P2).
                 for ep, result in zip(all_available_episodes, dedup_results):
                     if result.below_floor_action == "dropped":
                         deduped_transcript_cache[ep.id] = ""
-                        if ep.id is not None:
+                        if ep.id is not None and not result.skipped:
                             dropped_episode_ids.append(ep.id)
                     elif not result.skipped and result.deduped_transcript:
                         deduped_transcript_cache[ep.id] = result.deduped_transcript
@@ -2641,11 +2658,15 @@ Thank you for your understanding, and we'll see you tomorrow!
             logger.info(f"Marking {len(episodes)} episodes as digested")
             self.mark_digest_episodes_as_digested(digest)
 
-        # kanban #2861: episodes the dedup safety net dropped for having zero
-        # novel content are covered by sibling episodes in this digest --
-        # mark them digested too (they're not linked to the digest content,
-        # just excluded from the writer input) so they don't resurface
-        # tomorrow only to be re-deduped to nothing again.
+        # kanban #2861: episodes the dedup safety net dropped where dedup
+        # actually RAN and established zero novel content are covered by
+        # sibling episodes in this digest -- mark them digested too
+        # (they're not linked to the digest content, just excluded from the
+        # writer input) so they don't resurface tomorrow only to be
+        # re-deduped to nothing again. dropped_episode_ids deliberately
+        # excludes too-short-ORIGINAL episodes (dedup never ran, so
+        # redundancy was never established) -- see its declaration comment
+        # above (codex round 3, P2): those stay 'scored' for reconsideration.
         if dropped_episode_ids:
             logger.info(
                 f"Marking {len(dropped_episode_ids)} fully-redundant episode(s) "
