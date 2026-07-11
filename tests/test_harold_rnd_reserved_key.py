@@ -85,7 +85,15 @@ def test_digest_selection_never_selects_reserved_key_as_a_topic(episode_repo, se
     querying "_harold_rnd" itself as a topic name (which no legitimate
     caller does, since topic names always come from the topics table) must
     return nothing, proving there is no code path where the reserved key
-    could be mistaken for a topic."""
+    could be mistaken for a topic.
+
+    Status is deliberately "scored" (not "not_relevant") here: with
+    exclude_digested=False, get_scored_episodes_for_topic's status filter
+    is status.in_(['scored', 'digested']) -- a not_relevant episode would
+    be excluded by THAT filter regardless of the topic-name guard, which
+    would make the reserved-key assertion below pass for the wrong reason
+    and mask a regression in the guard itself.
+    """
     episode_repo.create(Episode(
         episode_guid="ep-reserved-key-test",
         feed_id=seeded_feed_id,
@@ -94,7 +102,7 @@ def test_digest_selection_never_selects_reserved_key_as_a_topic(episode_repo, se
         audio_url="https://example.com/audio.mp3",
         transcript_content="transcript",
         scores={"AI and Technology": 0.2, HAROLD_RND_SCORE_KEY: 0.95},
-        status="not_relevant",
+        status="scored",
     ))
 
     qualifying = episode_repo.get_scored_episodes_for_topic(

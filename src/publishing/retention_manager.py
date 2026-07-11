@@ -248,18 +248,26 @@ class RetentionManager:
                     # Filtering is done in Python (not a JSON SQL predicate) to
                     # stay database-agnostic, matching
                     # EpisodeRepository.get_scored_episodes_for_topic's convention.
-                    candidate_episodes = session.query(EpisodeModel).filter(
+                    # Projects only id + scores -- deciding exempt-vs-delete
+                    # needs neither transcript_content nor any other column,
+                    # and transcript_content is exactly the large field this
+                    # whole exemption exists to protect, so hydrating it here
+                    # for every expiring episode just to throw it away would
+                    # be the retention sweep's biggest avoidable cost.
+                    candidate_rows = session.query(
+                        EpisodeModel.id, EpisodeModel.scores
+                    ).filter(
                         EpisodeModel.published_date < episode_cutoff
                     ).all()
 
                     exempt_ids = []
                     delete_ids = []
-                    for ep in candidate_episodes:
-                        rnd_score = (ep.scores or {}).get(HAROLD_RND_SCORE_KEY)
+                    for episode_id, scores in candidate_rows:
+                        rnd_score = (scores or {}).get(HAROLD_RND_SCORE_KEY)
                         if isinstance(rnd_score, (int, float)) and rnd_score >= harold_rnd_threshold:
-                            exempt_ids.append(ep.id)
+                            exempt_ids.append(episode_id)
                         else:
-                            delete_ids.append(ep.id)
+                            delete_ids.append(episode_id)
 
                     episodes_count = len(delete_ids)
                     if exempt_ids:

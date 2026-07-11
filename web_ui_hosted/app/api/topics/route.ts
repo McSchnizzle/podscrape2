@@ -84,6 +84,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Each topic must have a name' }, { status: 400 })
       }
 
+      // kanban #2855: names starting with "_" are reserved for internal
+      // keys stored inside episodes.scores (e.g. "_harold_rnd", the Harold
+      // R&D-applicability rating) -- never a real, user-created topic. A
+      // topic actually named "_harold_rnd" would let a scoring blob's
+      // reserved key alias a real topic and defeat the reserved-namespace
+      // guard in EpisodeRepository.get_scored_episodes_for_topic.
+      if (topic.name.trim().startsWith('_')) {
+        return NextResponse.json(
+          { error: `Topic name cannot start with "_" (reserved): ${topic.name}` },
+          { status: 400 }
+        )
+      }
+
       const slug = topic.slug || slugify(topic.name)
       seenSlugs.add(slug)
 

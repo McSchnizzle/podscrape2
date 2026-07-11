@@ -45,6 +45,7 @@ from .sqlalchemy_models import (
 )
 from src.config.env import require_database_url
 from src.config.web_config import SettingsKeys, DEFAULTS
+from src.scoring.harold_rnd import is_reserved_score_key
 
 # Note: Valid statuses defined in src.database.episode_status.EpisodeStatus
 # Configure logging
@@ -558,6 +559,15 @@ class EpisodeRepository:
         Returns:
             List of qualifying episodes sorted by score (highest first)
         """
+        # kanban #2855: underscore-prefixed keys inside episodes.scores
+        # (e.g. "_harold_rnd") are reserved storage details, never real
+        # topics. Close the namespace here too, not just at the call
+        # sites that happen to only ever pass real topic names today --
+        # a future caller (or a typo) must not be able to select episodes
+        # by a reserved key.
+        if is_reserved_score_key(topic):
+            return []
+
         with self.db.get_session() as session:
             # Use database-agnostic JSON filtering
             # Only get episodes that are in 'scored' status (this naturally excludes 'digested' episodes)
