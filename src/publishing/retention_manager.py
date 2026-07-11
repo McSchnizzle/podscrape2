@@ -24,6 +24,7 @@ from .github_publisher import GitHubPublisher, create_github_publisher
 from ..database.models import DatabaseManager
 from ..database.sqlalchemy_models import Episode as EpisodeModel, Digest as DigestModel
 from ..config.web_config import SettingsKeys
+from ..scoring.harold_rnd import HAROLD_RND_SCORE_KEY, HAROLD_RND_RETENTION_THRESHOLD_DEFAULT
 
 logger = get_logger(__name__)
 
@@ -219,10 +220,15 @@ class RetentionManager:
             wc = WebConfigManager()
             episode_retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.EPISODE_RETENTION_DAYS, 14))
             digest_retention_days = int(wc.get_setting(SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.DIGEST_RETENTION_DAYS, 14))
+            harold_rnd_threshold = float(wc.get_setting(
+                SettingsKeys.Retention.CATEGORY, SettingsKeys.Retention.HAROLD_RND_RETENTION_THRESHOLD,
+                HAROLD_RND_RETENTION_THRESHOLD_DEFAULT
+            ))
         except Exception as e:
             logger.warning(f"Could not load retention settings, using defaults: {e}")
             episode_retention_days = 14
             digest_retention_days = 14
+            harold_rnd_threshold = HAROLD_RND_RETENTION_THRESHOLD_DEFAULT
 
         episode_cutoff = datetime.now() - timedelta(days=episode_retention_days)
         digest_cutoff = datetime.now() - timedelta(days=digest_retention_days)
@@ -233,11 +239,42 @@ class RetentionManager:
         try:
             with self.database_manager.get_session() as session:
                 try:
-                    # Count episodes to be deleted (based on published_date, not updated_at)
-                    episodes_query = session.query(EpisodeModel).filter(
+                    # Candidate episodes to be deleted (based on published_date, not
+                    # updated_at). Episodes with a high Harold R&D-applicability
+                    # rating (kanban #2855) are exempt from age-based deletion --
+                    # same pattern as `is_favorite` digests below -- even when the
+                    # episode was marked not_relevant for the podcast itself, so
+                    # the weekly R&D miner can still read their transcript_content.
+                    # Filtering is done in Python (not a JSON SQL predicate) to
+                    # stay database-agnostic, matching
+                    # EpisodeRepository.get_scored_episodes_for_topic's convention.
+                    # Projects only id + scores -- deciding exempt-vs-delete
+                    # needs neither transcript_content nor any other column,
+                    # and transcript_content is exactly the large field this
+                    # whole exemption exists to protect, so hydrating it here
+                    # for every expiring episode just to throw it away would
+                    # be the retention sweep's biggest avoidable cost.
+                    candidate_rows = session.query(
+                        EpisodeModel.id, EpisodeModel.scores
+                    ).filter(
                         EpisodeModel.published_date < episode_cutoff
-                    )
-                    episodes_count = episodes_query.count()
+                    ).all()
+
+                    exempt_ids = []
+                    delete_ids = []
+                    for episode_id, scores in candidate_rows:
+                        rnd_score = (scores or {}).get(HAROLD_RND_SCORE_KEY)
+                        if isinstance(rnd_score, (int, float)) and rnd_score >= harold_rnd_threshold:
+                            exempt_ids.append(episode_id)
+                        else:
+                            delete_ids.append(episode_id)
+
+                    episodes_count = len(delete_ids)
+                    if exempt_ids:
+                        logger.info(
+                            f"Retention: exempting {len(exempt_ids)} episode(s) from age-based "
+                            f"deletion (harold_applicability >= {harold_rnd_threshold})"
+                        )
 
                     # Count digests to be deleted (based on digest_date, not generated_at).
                     # Favorites are exempt from age-based deletion.
@@ -260,9 +297,11 @@ class RetentionManager:
                         stats.episodes_deleted = episodes_count
                         stats.digests_deleted = digests_count + orphan_count
                     else:
-                        # Delete episodes
+                        # Delete episodes (excluding the harold_rnd-exempt set)
                         if episodes_count > 0:
-                            episodes_deleted = episodes_query.delete()
+                            episodes_deleted = session.query(EpisodeModel).filter(
+                                EpisodeModel.id.in_(delete_ids)
+                            ).delete(synchronize_session=False)
                             stats.episodes_deleted = episodes_deleted
                             logger.info(f"Deleted {episodes_deleted} old episodes")
 

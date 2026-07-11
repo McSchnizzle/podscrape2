@@ -43,6 +43,10 @@ class SettingsKeys:
         EPISODE_RETENTION_DAYS = "episode_retention_days"
         DIGEST_RETENTION_DAYS = "digest_retention_days"
         GITHUB_RELEASES_DAYS = "github_releases_days"
+        # kanban #2855: episodes with _harold_rnd >= this threshold are
+        # exempt from age-based deletion so the weekly R&D miner can read
+        # transcript_content even after episode_retention_days has passed.
+        HAROLD_RND_RETENTION_THRESHOLD = "harold_rnd_retention_threshold"
 
     class TopicTracking:
         CATEGORY = "topic_tracking"

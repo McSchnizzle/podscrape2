@@ -40,7 +40,26 @@ from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
 from src.utils.logging_config import setup_phase_logging
 from src.scoring.content_scorer import ContentScorer
+from src.scoring.harold_rnd import HAROLD_RND_SCORE_KEY, is_reserved_score_key
 from src.topic_tracking.topic_extractor import StoryArcExtractor
+
+
+def is_podcast_relevant(scores: Dict[str, float], threshold: float) -> bool:
+    """True if any REAL topic score (never a reserved key like
+    _harold_rnd, kanban #2855) meets `threshold`.
+
+    Reserved keys never count toward podcast relevance -- they gate
+    unrelated things (the R&D miner, retention) and must never flip an
+    episode's relevant/not_relevant status. Extracted to one function so
+    both the sequential and parallel scoring paths below share one
+    definition instead of two copies that could drift.
+    """
+    if not scores:
+        return False
+    return any(
+        score >= threshold
+        for name, score in scores.items() if not is_reserved_score_key(name)
+    )
 
 
 class AudioProcessor_Runner:
@@ -310,7 +329,7 @@ class AudioProcessor_Runner:
                 scores = scoring_outcome.get('scores', {})
 
                 # Step 3: Check relevance against threshold
-                is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
+                is_relevant = is_podcast_relevant(scores, self.score_threshold)
 
                 # Update episode status based on relevance
                 if is_relevant:
@@ -535,7 +554,7 @@ class AudioProcessor_Runner:
                 scores = scoring_outcome.get('scores', {})
 
                 # Check relevance
-                is_relevant = any(score >= self.score_threshold for score in scores.values()) if scores else False
+                is_relevant = is_podcast_relevant(scores, self.score_threshold)
                 
                 # Update status and counts
                 with lock:
@@ -1332,8 +1351,17 @@ class AudioProcessor_Runner:
             )
 
             if scoring_result.success:
-                # Store scores in database
-                self.episode_repo.update_scores(episode_guid, scoring_result.scores)
+                # Persist topic scores plus the Harold R&D-applicability
+                # rating under its reserved key (kanban #2855). This merge
+                # happens ONLY for the DB write -- the `scores` dict
+                # returned below (used by callers for the podcast-relevance
+                # gate) deliberately excludes the reserved key so a
+                # highly-R&D-applicable-but-podcast-irrelevant episode can
+                # never be misclassified as "relevant" for the show.
+                scores_to_store = dict(scoring_result.scores)
+                if scoring_result.harold_applicability is not None:
+                    scores_to_store[HAROLD_RND_SCORE_KEY] = scoring_result.harold_applicability
+                self.episode_repo.update_scores(episode_guid, scores_to_store)
 
                 self.logger.info(
                     f"✓ Scores: {', '.join([f'{topic}: {score:.2f}' for topic, score in scoring_result.scores.items()])}"
@@ -1342,7 +1370,11 @@ class AudioProcessor_Runner:
                 # Extract story arcs for tracking (non-blocking)
                 self._extract_story_arcs_for_tracking(episode_guid, db_episode.transcript_content, scoring_result.scores)
 
-                return {'success': True, 'scores': scoring_result.scores}
+                return {
+                    'success': True,
+                    'scores': scoring_result.scores,
+                    'harold_applicability': scoring_result.harold_applicability,
+                }
 
             error_message = scoring_result.error_message or 'Scoring failed'
             self.logger.error(f"Scoring failed: {error_message}")

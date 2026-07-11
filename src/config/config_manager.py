@@ -6,7 +6,7 @@ Provides centralized access to application configuration.
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from src.database.models import get_topic_repo, TopicRepository, Topic
@@ -83,9 +83,16 @@ class ConfigManager:
         logger.info("Configuration cache invalidated")
 
     def get_topics(self) -> List[Dict[str, Any]]:
-        """Get list of active topics."""
+        """Get list of active topics.
+
+        DB-authoritative: only falls back to topics.json when the DB
+        couldn't be queried at all (see _get_database_topics). A
+        successful query that finds zero active topics returns []
+        directly -- it must NOT fall back, or disabling the last active
+        DB topic would silently resurrect the legacy JSON topic set.
+        """
         db_topics = self._get_database_topics(active_only=True)
-        if db_topics:
+        if db_topics is not None:
             return db_topics
 
         config = self._load_topics_config()
@@ -95,9 +102,10 @@ class ConfigManager:
         """Get list of all topics (including inactive).
 
         For Web UI management screens where inactive topics must be visible.
+        Same DB-authoritative contract as get_topics() above.
         """
         db_topics = self._get_database_topics(active_only=False)
-        if db_topics:
+        if db_topics is not None:
             return db_topics
 
         config = self._load_topics_config()
@@ -171,17 +179,35 @@ class ConfigManager:
             logger.error(f"Failed to save topics config: {e}")
             raise
 
-    def _get_database_topics(self, active_only: bool) -> List[Dict[str, Any]]:
+    def _get_database_topics(self, active_only: bool) -> Optional[List[Dict[str, Any]]]:
+        """Returns None when the DB could not be queried at all (no
+        topic_repo, the query raised, or the topics table itself is
+        missing/unavailable) -- callers should fall back to JSON in that
+        case. Returns a list (possibly empty) when the query SUCCEEDED,
+        including a successful-but-zero-rows result -- an empty list here
+        is DB-authoritative and callers must NOT fall back to JSON, or
+        disabling the last active DB topic would silently resurrect the
+        legacy JSON topic set (kanban #2856 follow-up).
+
+        Passes raise_on_unavailable=True to TopicRepository so a missing
+        topics table (ProgrammingError, normally swallowed into [] for
+        TopicRepository's other callers) propagates here instead of being
+        indistinguishable from "table exists, zero active rows" -- exactly
+        the schema-failure case the JSON fallback exists to protect
+        against.
+        """
         if not self.topic_repo:
-            return []
+            return None
         try:
-            topics = self.topic_repo.get_active_topics() if active_only else self.topic_repo.get_all_topics()
-            if not topics:
-                return []
+            topics = (
+                self.topic_repo.get_active_topics(raise_on_unavailable=True)
+                if active_only
+                else self.topic_repo.get_all_topics(raise_on_unavailable=True)
+            )
             return [self._topic_to_config_dict(topic) for topic in topics if active_only is False or topic.is_active]
         except Exception as exc:
             logger.debug("Falling back to JSON topics due to database error: %s", exc)
-            return []
+            return None
 
     def _topic_to_config_dict(self, topic: Topic) -> Dict[str, Any]:
         """Convert Topic dataclass to legacy config-style dict for compatibility."""

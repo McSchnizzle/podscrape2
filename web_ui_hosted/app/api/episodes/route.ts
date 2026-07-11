@@ -48,9 +48,16 @@ export async function GET(request: NextRequest) {
 
     // Process episodes for display
     const processedEpisodes = result.episodes.map((ep: Episode & { feeds?: { title: string } }) => {
-      // Create score labels
+      // Create score labels. Keys starting with "_" (e.g. "_harold_rnd",
+      // kanban #2855's reserved Harold R&D-applicability rating) are an
+      // internal storage detail of episodes.scores, not a podcast topic --
+      // exclude them from both the display labels and the raw scores this
+      // endpoint returns.
       const scores = ep.scores || {};
-      const scoreLabels = Object.entries(scores)
+      const topicScores = Object.fromEntries(
+        Object.entries(scores).filter(([topic]) => !topic.startsWith('_'))
+      );
+      const scoreLabels = Object.entries(topicScores)
         .map(([topic, score]) => {
           const shortTopic = topic === 'AI and Technology' ? 'Tech'
             : topic === 'Social Movements and Community Organizing' ? 'Organizing'
@@ -68,7 +75,7 @@ export async function GET(request: NextRequest) {
         feed_title_display: ep.feeds?.title || 'Unknown Feed',
         score_labels: scoreLabels,
         included: ep.inclusion || [],
-        scores: ep.scores || {}
+        scores: topicScores
       };
     });
 
