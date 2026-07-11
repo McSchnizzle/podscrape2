@@ -1,7 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import {
+  Pencil,
+  Trash2,
+  X,
+  Plus,
+  Loader2,
+  GitMerge,
+  Sparkles,
+  Hash,
+  TrendingUp,
+  Megaphone,
+  CheckCircle2,
+} from 'lucide-react'
 import { toast } from '@/components/Toast'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill, type PillTone } from '@/components/ui/Pill'
+import { StatCard } from '@/components/ui/StatCard'
 
 interface EpisodeTopic {
   id: number
@@ -44,15 +60,26 @@ interface Stats {
 }
 
 const TOPIC_TYPES = [
-  { value: 'model_release', label: 'Model Release', color: 'bg-blue-100 text-blue-800' },
-  { value: 'use_case', label: 'Use Case', color: 'bg-green-100 text-green-800' },
-  { value: 'personality', label: 'Personality', color: 'bg-purple-100 text-purple-800' },
-  { value: 'research', label: 'Research', color: 'bg-indigo-100 text-indigo-800' },
-  { value: 'company_news', label: 'Company News', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'regulation', label: 'Regulation', color: 'bg-red-100 text-red-800' },
-  { value: 'technique', label: 'Technique', color: 'bg-cyan-100 text-cyan-800' },
-  { value: 'other', label: 'Other', color: 'bg-gray-100 text-gray-800' }
+  { value: 'model_release', label: 'Model Release' },
+  { value: 'use_case', label: 'Use Case' },
+  { value: 'personality', label: 'Personality' },
+  { value: 'research', label: 'Research' },
+  { value: 'company_news', label: 'Company News' },
+  { value: 'regulation', label: 'Regulation' },
+  { value: 'technique', label: 'Technique' },
+  { value: 'other', label: 'Other' },
 ]
+
+const TOPIC_TONE: Record<string, PillTone> = {
+  model_release: 'accent',
+  use_case: 'accent',
+  personality: 'accent',
+  research: 'accent',
+  company_news: 'neutral',
+  regulation: 'danger',
+  technique: 'accent',
+  other: 'neutral',
+}
 
 export default function RecurringTopicsPage() {
   const [topics, setTopics] = useState<EpisodeTopic[]>([])
@@ -142,8 +169,12 @@ export default function RecurringTopicsPage() {
     }
   }
 
-  const getTypeColor = (type: string) => {
-    return TOPIC_TYPES.find(t => t.value === type)?.color || 'bg-gray-100 text-gray-800'
+  const getTypeTone = (type: string): PillTone => {
+    return TOPIC_TONE[type] || 'neutral'
+  }
+
+  const getTypeLabel = (type: string) => {
+    return TOPIC_TYPES.find(t => t.value === type)?.label || type.replace('_', ' ')
   }
 
   const formatDate = (dateString: string) => {
@@ -417,17 +448,12 @@ export default function RecurringTopicsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recurring Topics & Ads</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Track extracted topics and common ad patterns
-          </p>
-        </div>
-        <div>
-          {activeTab === 'ads' && (
+    <div>
+      <PageHeader
+        title="Recurring Topics & Ads"
+        description="Track extracted topics and common ad patterns across episodes."
+        actions={
+          activeTab === 'ads' ? (
             <button
               onClick={() => {
                 setEditingAd(null)
@@ -439,137 +465,111 @@ export default function RecurringTopicsPage() {
                 })
                 setShowAdModal(true)
               }}
-              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+              className="btn btn-primary"
             >
-              Add Ad Pattern
+              <Plus size={14} /> Add ad pattern
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
-      {/* Stats Cards */}
+      {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm font-medium text-gray-500">Total Topics</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{stats.total_topics}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm font-medium text-gray-500">Avg Novelty</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">
-              {stats.avg_novelty_score.toFixed(2)}
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm font-medium text-gray-500">Total Ads</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{stats.total_ads}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm font-medium text-gray-500">Active Ads</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{stats.active_ads}</div>
-          </div>
+        <div className="mb-[var(--space-6)] grid grid-cols-1 gap-[var(--space-4)] sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total topics" value={stats.total_topics} icon={<Hash size={16} />} />
+          <StatCard label="Avg novelty" value={stats.avg_novelty_score.toFixed(2)} icon={<TrendingUp size={16} />} />
+          <StatCard label="Total ads" value={stats.total_ads} icon={<Megaphone size={16} />} />
+          <StatCard label="Active ads" value={stats.active_ads} tone="success" icon={<CheckCircle2 size={16} />} />
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('topics')}
-            className={`${
-              activeTab === 'topics'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Episode Topics ({topics.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('ads')}
-            className={`${
-              activeTab === 'ads'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Common Ads ({ads.length})
-          </button>
-        </nav>
+      <div className="mb-[var(--space-6)] flex gap-[var(--space-6)] border-b border-border">
+        <button
+          onClick={() => setActiveTab('topics')}
+          className={`border-b-2 pb-[var(--space-3)] transition-colors ${
+            activeTab === 'topics'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-subtle hover:border-border hover:text-ink-muted'
+          }`}
+          style={{ font: 'var(--t-small)', fontWeight: 600 }}
+        >
+          Episode Topics ({topics.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('ads')}
+          className={`border-b-2 pb-[var(--space-3)] transition-colors ${
+            activeTab === 'ads'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-subtle hover:border-border hover:text-ink-muted'
+          }`}
+          style={{ font: 'var(--t-small)', fontWeight: 600 }}
+        >
+          Common Ads ({ads.length})
+        </button>
       </div>
 
       {/* Topics Tab */}
       {activeTab === 'topics' && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-[var(--space-5)]">
           {/* Selection Actions */}
           {selectedTopicIds.size > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-              <div className="text-sm text-blue-800">
-                <span className="font-medium">{selectedTopicIds.size}</span> topic(s) selected
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setSelectedTopicIds(new Set())}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Clear Selection
+            <div
+              className="card flex items-center justify-between gap-[var(--space-3)]"
+              style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}
+            >
+              <span style={{ font: 'var(--t-small)', color: 'var(--text)' }}>
+                <strong>{selectedTopicIds.size}</strong> topic{selectedTopicIds.size === 1 ? '' : 's'} selected
+              </span>
+              <div className="flex items-center gap-[var(--space-3)]">
+                <button onClick={() => setSelectedTopicIds(new Set())} className="btn btn-ghost btn-sm">
+                  Clear selection
                 </button>
                 <button
                   onClick={() => setShowMergeModal(true)}
                   disabled={selectedTopicIds.size < 2}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="btn btn-primary btn-sm"
                 >
-                  Merge Selected ({selectedTopicIds.size})
+                  <GitMerge size={14} /> Merge selected ({selectedTopicIds.size})
                 </button>
               </div>
             </div>
           )}
 
           {/* Filters */}
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="card">
+            <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Search
-                </label>
+                <label className="field-label">Search</label>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search topics..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Type
-                </label>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">All Types</option>
+                <label className="field-label">Type</label>
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="select">
+                  <option value="">All types</option>
                   {TOPIC_TYPES.map(type => (
                     <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Digest Topic
-                </label>
+                <label className="field-label">Digest topic</label>
                 <input
                   type="text"
                   value={digestFilter}
                   onChange={(e) => setDigestFilter(e.target.value)}
                   placeholder="e.g., AI and Technology"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Min Novelty
-                </label>
+                <label className="field-label">Min novelty</label>
                 <input
                   type="number"
                   min="0"
@@ -577,7 +577,7 @@ export default function RecurringTopicsPage() {
                   step="0.1"
                   value={minNovelty}
                   onChange={(e) => setMinNovelty(parseFloat(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
             </div>
@@ -585,112 +585,97 @@ export default function RecurringTopicsPage() {
 
           {/* Topics List */}
           {loading ? (
-            <div className="bg-white p-8 rounded-lg shadow text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <p className="mt-2 text-gray-500">Loading topics...</p>
+            <div className="card flex flex-col items-center gap-[var(--space-3)] py-[var(--space-8)] text-center text-ink-subtle">
+              <Loader2 size={20} className="animate-spin" />
+              Loading topics…
             </div>
           ) : topics.length === 0 ? (
-            <div className="bg-white p-8 rounded-lg shadow text-center">
-              <p className="text-gray-500">No topics found</p>
+            <div className="card py-[var(--space-8)] text-center text-ink-subtle">
+              No topics found
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="table-shell overflow-x-auto">
+              <table className="house-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left">
+                    <th>
                       <input
                         type="checkbox"
                         checked={topics.length > 0 && selectedTopicIds.size === topics.length}
                         onChange={handleSelectAllTopics}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        className="h-4 w-4 accent-[var(--accent)]"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Topic
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Novelty
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Episode
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Digest Topic
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th>Topic</th>
+                    <th>Type</th>
+                    <th>Novelty</th>
+                    <th>Episode</th>
+                    <th>Digest Topic</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {topics.map((topic) => (
-                    <tr key={topic.id} className={`hover:bg-gray-50 ${selectedTopicIds.has(topic.id) ? 'bg-blue-50' : ''}`}>
-                      <td className="px-4 py-4">
+                    <tr
+                      key={topic.id}
+                      style={selectedTopicIds.has(topic.id) ? { background: 'var(--accent-soft)' } : undefined}
+                    >
+                      <td>
                         <input
                           type="checkbox"
                           checked={selectedTopicIds.has(topic.id)}
                           onChange={() => handleToggleTopicSelection(topic.id)}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          className="h-4 w-4 accent-[var(--accent)]"
                         />
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {topic.topic_name}
-                          {topic.is_update && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                              UPDATE
-                            </span>
-                          )}
+                      <td className="max-w-[280px]">
+                        <div className="flex items-center gap-[var(--space-2)]">
+                          <span style={{ font: 'var(--t-small)', fontWeight: 600, color: 'var(--text)' }}>
+                            {topic.topic_name}
+                          </span>
+                          {topic.is_update && <Pill tone="accent">Update</Pill>}
                         </div>
                         {topic.key_points.length > 0 && (
-                          <div className="mt-1 text-sm text-gray-500">
+                          <div className="mt-[var(--space-1)] truncate text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                             {topic.key_points[0]}
                             {topic.key_points.length > 1 && ` (+${topic.key_points.length - 1} more)`}
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(topic.topic_type)}`}>
-                          {topic.topic_type}
-                        </span>
+                      <td>
+                        <Pill tone={getTypeTone(topic.topic_type)}>{getTypeLabel(topic.topic_type)}</Pill>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="text-sm font-medium text-gray-900">
+                      <td>
+                        <div className="flex items-center gap-[var(--space-2)]">
+                          <span style={{ font: 'var(--t-small)', fontWeight: 600, color: 'var(--text)' }}>
                             {topic.novelty_score.toFixed(2)}
-                          </div>
-                          <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                          </span>
+                          <div className="h-2 w-16 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
                             <div
-                              className="bg-primary-600 h-2 rounded-full"
-                              style={{ width: `${topic.novelty_score * 100}%` }}
-                            ></div>
+                              className="h-full rounded-full"
+                              style={{ width: `${topic.novelty_score * 100}%`, background: 'var(--accent)' }}
+                            />
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{topic.episode_title}</div>
-                        <div className="text-xs text-gray-500">Score: {topic.relevance_score.toFixed(2)}</div>
+                      <td>
+                        <div className="text-ink" style={{ font: 'var(--t-small)' }}>{topic.episode_title}</div>
+                        <div className="text-ink-faint" style={{ font: 'var(--t-micro)' }}>
+                          Score: {topic.relevance_score.toFixed(2)}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{topic.digest_topic}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEditTopic(topic)}
-                            className="text-primary-600 hover:text-primary-800"
-                          >
-                            Edit
+                      <td className="text-ink-muted" style={{ font: 'var(--t-small)' }}>{topic.digest_topic}</td>
+                      <td>
+                        <div className="flex gap-[var(--space-1)]">
+                          <button onClick={() => handleEditTopic(topic)} className="btn btn-ghost btn-sm" title="Edit">
+                            <Pencil size={13} />
                           </button>
                           <button
                             onClick={() => setDeleteConfirm({ type: 'topic', id: topic.id })}
-                            className="text-red-600 hover:text-red-800"
+                            className="btn btn-ghost btn-sm hover:text-danger"
+                            title="Delete"
                           >
-                            Delete
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -705,85 +690,79 @@ export default function RecurringTopicsPage() {
 
       {/* Ads Tab */}
       {activeTab === 'ads' && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-[var(--space-4)]">
           {loading ? (
-            <div className="bg-white p-8 rounded-lg shadow text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <p className="mt-2 text-gray-500">Loading ads...</p>
+            <div className="card flex flex-col items-center gap-[var(--space-3)] py-[var(--space-8)] text-center text-ink-subtle">
+              <Loader2 size={20} className="animate-spin" />
+              Loading ads…
             </div>
           ) : ads.length === 0 ? (
-            <div className="bg-white p-8 rounded-lg shadow text-center">
-              <p className="text-gray-500">No ads found</p>
-              <button
-                onClick={() => setShowAdModal(true)}
-                className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-              >
-                Add First Ad Pattern
+            <div className="card py-[var(--space-8)] text-center text-ink-subtle">
+              <p>No ads found</p>
+              <button onClick={() => setShowAdModal(true)} className="btn btn-primary mt-[var(--space-4)]">
+                <Plus size={14} /> Add first ad pattern
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-[var(--space-4)] md:grid-cols-2">
               {ads.map((ad) => (
-                <div key={ad.id} className="bg-white p-6 rounded-lg shadow">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">{ad.advertiser_name}</h3>
-                      <div className="mt-1 flex items-center space-x-2">
+                <div key={ad.id} className="card">
+                  <div className="flex items-start justify-between gap-[var(--space-3)]">
+                    <div className="min-w-0">
+                      <h3 className="truncate" style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>
+                        {ad.advertiser_name}
+                      </h3>
+                      <div className="mt-[var(--space-2)] flex flex-wrap items-center gap-[var(--space-2)]">
                         <button
                           onClick={() => handleToggleAdActive(ad)}
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
-                            ad.is_active
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
+                          className={ad.is_active ? 'pill pill-success' : 'pill'}
                         >
                           {ad.is_active ? 'Active' : 'Inactive'}
                         </button>
-                        <span className="text-sm text-gray-500">
-                          Detected: {ad.detection_count} times
+                        <span className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+                          Detected {ad.detection_count} time{ad.detection_count === 1 ? '' : 's'}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleEditAd(ad)}
-                        className="text-primary-600 hover:text-primary-800 text-sm"
-                      >
-                        Edit
+                    <div className="flex shrink-0 items-center gap-[var(--space-1)]">
+                      <button onClick={() => handleEditAd(ad)} className="btn btn-ghost btn-sm" title="Edit">
+                        <Pencil size={13} />
                       </button>
                       <button
                         onClick={() => setDeleteConfirm({ type: 'ad', id: ad.id })}
-                        className="text-red-600 hover:text-red-800 text-sm"
+                        className="btn btn-ghost btn-sm hover:text-danger"
+                        title="Delete"
                       >
-                        Delete
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-3 text-right">
-                    <div className="text-sm text-gray-500">Confidence Threshold</div>
-                    <div className="text-lg font-semibold text-gray-900">
+                  <div
+                    className="mt-[var(--space-4)] flex items-baseline justify-between gap-[var(--space-3)] rounded-sm p-[var(--space-3)]"
+                    style={{ background: 'var(--surface-2)' }}
+                  >
+                    <span className="micro">Confidence threshold</span>
+                    <span style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>
                       {(ad.confidence_threshold * 100).toFixed(0)}%
-                    </div>
+                    </span>
                   </div>
 
-                  <div className="mt-4">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Keywords:</div>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="mt-[var(--space-4)]">
+                    <div className="field-label">Keywords</div>
+                    <div className="flex flex-wrap gap-[var(--space-2)]">
                       {ad.pattern_keywords.map((keyword, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700"
-                        >
-                          {keyword}
-                        </span>
+                        <span key={idx} className="pill">{keyword}</span>
                       ))}
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-                    <div>Created: {formatDate(ad.created_at)}</div>
-                    <div>Updated: {formatDate(ad.updated_at)}</div>
+                  <div
+                    className="mt-[var(--space-4)] flex flex-wrap gap-x-[var(--space-4)] border-t border-border pt-[var(--space-3)] text-ink-faint"
+                    style={{ font: 'var(--t-micro)' }}
+                  >
+                    <span>Created {formatDate(ad.created_at)}</span>
+                    <span>Updated {formatDate(ad.updated_at)}</span>
                   </div>
                 </div>
               ))}
@@ -794,44 +773,38 @@ export default function RecurringTopicsPage() {
 
       {/* Topic Modal */}
       {showTopicModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">
-                {editingTopic ? 'Edit Topic' : 'Create Topic'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]" style={{ background: 'var(--scrim)' }}>
+          <div className="card !p-0 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-border px-[var(--space-5)] py-[var(--space-4)]">
+              <h2 style={{ font: 'var(--t-h2)', color: 'var(--text)' }}>
+                {editingTopic ? 'Edit topic' : 'Create topic'}
               </h2>
             </div>
-            <div className="px-6 py-4 space-y-4">
+            <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-5)] py-[var(--space-4)]">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Topic Name *
-                </label>
+                <label className="field-label">Topic name *</label>
                 <input
                   type="text"
                   value={topicForm.topic_name}
                   onChange={(e) => setTopicForm({ ...topicForm, topic_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Type
-                </label>
+                <label className="field-label">Type</label>
                 <select
                   value={topicForm.topic_type}
                   onChange={(e) => setTopicForm({ ...topicForm, topic_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="select"
                 >
                   {TOPIC_TYPES.map(type => (
                     <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-[var(--space-4)]">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Novelty Score
-                  </label>
+                  <label className="field-label">Novelty score</label>
                   <input
                     type="number"
                     min="0"
@@ -839,13 +812,11 @@ export default function RecurringTopicsPage() {
                     step="0.1"
                     value={topicForm.novelty_score}
                     onChange={(e) => setTopicForm({ ...topicForm, novelty_score: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="input"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Relevance Score
-                  </label>
+                  <label className="field-label">Relevance score</label>
                   <input
                     type="number"
                     min="0"
@@ -853,84 +824,78 @@ export default function RecurringTopicsPage() {
                     step="0.1"
                     value={topicForm.relevance_score}
                     onChange={(e) => setTopicForm({ ...topicForm, relevance_score: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="input"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Digest Topic
-                </label>
+                <label className="field-label">Digest topic</label>
                 <input
                   type="text"
                   value={topicForm.digest_topic}
                   onChange={(e) => setTopicForm({ ...topicForm, digest_topic: e.target.value })}
                   placeholder="e.g., AI and Technology"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Key Points
-                </label>
-                {topicForm.key_points.map((kp, idx) => (
-                  <div key={idx} className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={kp}
-                      onChange={(e) => {
-                        const newKps = [...topicForm.key_points]
-                        newKps[idx] = e.target.value
-                        setTopicForm({ ...topicForm, key_points: newKps })
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                    <button
-                      onClick={() => {
-                        const newKps = topicForm.key_points.filter((_, i) => i !== idx)
-                        setTopicForm({ ...topicForm, key_points: newKps.length > 0 ? newKps : [''] })
-                      }}
-                      className="px-2 py-2 text-red-600 hover:text-red-800"
-                    >
-                      X
-                    </button>
-                  </div>
-                ))}
+                <label className="field-label">Key points</label>
+                <div className="flex flex-col gap-[var(--space-2)]">
+                  {topicForm.key_points.map((kp, idx) => (
+                    <div key={idx} className="flex gap-[var(--space-2)]">
+                      <input
+                        type="text"
+                        value={kp}
+                        onChange={(e) => {
+                          const newKps = [...topicForm.key_points]
+                          newKps[idx] = e.target.value
+                          setTopicForm({ ...topicForm, key_points: newKps })
+                        }}
+                        className="input flex-1"
+                      />
+                      <button
+                        onClick={() => {
+                          const newKps = topicForm.key_points.filter((_, i) => i !== idx)
+                          setTopicForm({ ...topicForm, key_points: newKps.length > 0 ? newKps : [''] })
+                        }}
+                        className="btn btn-ghost btn-sm hover:text-danger"
+                        title="Remove key point"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <button
                   onClick={() => setTopicForm({ ...topicForm, key_points: [...topicForm.key_points, ''] })}
-                  className="text-sm text-primary-600 hover:text-primary-800"
+                  className="mt-[var(--space-2)] inline-flex items-center gap-[4px]"
+                  style={{ font: 'var(--t-small)', color: 'var(--accent)' }}
                 >
-                  + Add Key Point
+                  <Plus size={12} /> Add key point
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Evolution Summary
-                </label>
+                <label className="field-label">Evolution summary</label>
                 <textarea
                   value={topicForm.evolution_summary}
                   onChange={(e) => setTopicForm({ ...topicForm, evolution_summary: e.target.value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="textarea"
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="flex justify-end gap-[var(--space-3)] border-t border-border px-[var(--space-5)] py-[var(--space-4)]">
               <button
                 onClick={() => {
                   setShowTopicModal(false)
                   setEditingTopic(null)
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSaveTopic}
-                disabled={saving || !topicForm.topic_name}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
+              <button onClick={handleSaveTopic} disabled={saving || !topicForm.topic_name} className="btn btn-primary">
+                {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -939,64 +904,62 @@ export default function RecurringTopicsPage() {
 
       {/* Ad Modal */}
       {showAdModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">
-                {editingAd ? 'Edit Ad Pattern' : 'Create Ad Pattern'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]" style={{ background: 'var(--scrim)' }}>
+          <div className="card !p-0 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-border px-[var(--space-5)] py-[var(--space-4)]">
+              <h2 style={{ font: 'var(--t-h2)', color: 'var(--text)' }}>
+                {editingAd ? 'Edit ad pattern' : 'Create ad pattern'}
               </h2>
             </div>
-            <div className="px-6 py-4 space-y-4">
+            <div className="flex flex-col gap-[var(--space-4)] px-[var(--space-5)] py-[var(--space-4)]">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Advertiser Name *
-                </label>
+                <label className="field-label">Advertiser name *</label>
                 <input
                   type="text"
                   value={adForm.advertiser_name}
                   onChange={(e) => setAdForm({ ...adForm, advertiser_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pattern Keywords *
-                </label>
-                {adForm.pattern_keywords.map((kw, idx) => (
-                  <div key={idx} className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={kw}
-                      onChange={(e) => {
-                        const newKws = [...adForm.pattern_keywords]
-                        newKws[idx] = e.target.value
-                        setAdForm({ ...adForm, pattern_keywords: newKws })
-                      }}
-                      placeholder="Enter keyword..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                    <button
-                      onClick={() => {
-                        const newKws = adForm.pattern_keywords.filter((_, i) => i !== idx)
-                        setAdForm({ ...adForm, pattern_keywords: newKws.length > 0 ? newKws : [''] })
-                      }}
-                      className="px-2 py-2 text-red-600 hover:text-red-800"
-                    >
-                      X
-                    </button>
-                  </div>
-                ))}
+                <label className="field-label">Pattern keywords *</label>
+                <div className="flex flex-col gap-[var(--space-2)]">
+                  {adForm.pattern_keywords.map((kw, idx) => (
+                    <div key={idx} className="flex gap-[var(--space-2)]">
+                      <input
+                        type="text"
+                        value={kw}
+                        onChange={(e) => {
+                          const newKws = [...adForm.pattern_keywords]
+                          newKws[idx] = e.target.value
+                          setAdForm({ ...adForm, pattern_keywords: newKws })
+                        }}
+                        placeholder="Enter keyword..."
+                        className="input flex-1"
+                      />
+                      <button
+                        onClick={() => {
+                          const newKws = adForm.pattern_keywords.filter((_, i) => i !== idx)
+                          setAdForm({ ...adForm, pattern_keywords: newKws.length > 0 ? newKws : [''] })
+                        }}
+                        className="btn btn-ghost btn-sm hover:text-danger"
+                        title="Remove keyword"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <button
                   onClick={() => setAdForm({ ...adForm, pattern_keywords: [...adForm.pattern_keywords, ''] })}
-                  className="text-sm text-primary-600 hover:text-primary-800"
+                  className="mt-[var(--space-2)] inline-flex items-center gap-[4px]"
+                  style={{ font: 'var(--t-small)', color: 'var(--accent)' }}
                 >
-                  + Add Keyword
+                  <Plus size={12} /> Add keyword
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Confidence Threshold
-                </label>
+                <label className="field-label">Confidence threshold</label>
                 <input
                   type="number"
                   min="0"
@@ -1004,41 +967,34 @@ export default function RecurringTopicsPage() {
                   step="0.05"
                   value={adForm.confidence_threshold}
                   onChange={(e) => setAdForm({ ...adForm, confidence_threshold: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="field-hint">
                   Minimum confidence required to identify this ad pattern (0.0 - 1.0)
                 </p>
               </div>
-              <div className="flex items-center">
+              <label className="flex items-center gap-[var(--space-2)] text-ink" style={{ font: 'var(--t-small)' }}>
                 <input
                   type="checkbox"
-                  id="is_active"
                   checked={adForm.is_active}
                   onChange={(e) => setAdForm({ ...adForm, is_active: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  className="h-4 w-4 accent-[var(--accent)]"
                 />
-                <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-                  Active (actively filtering this ad pattern)
-                </label>
-              </div>
+                Active (actively filtering this ad pattern)
+              </label>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="flex justify-end gap-[var(--space-3)] border-t border-border px-[var(--space-5)] py-[var(--space-4)]">
               <button
                 onClick={() => {
                   setShowAdModal(false)
                   setEditingAd(null)
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSaveAd}
-                disabled={saving || !adForm.advertiser_name}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
+              <button onClick={handleSaveAd} disabled={saving || !adForm.advertiser_name} className="btn btn-primary">
+                {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -1047,19 +1003,16 @@ export default function RecurringTopicsPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">
-              Confirm Delete
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]" style={{ background: 'var(--scrim)' }}>
+          <div className="card w-full max-w-md">
+            <h2 className="mb-[var(--space-3)]" style={{ font: 'var(--t-h2)', color: 'var(--text)' }}>
+              Confirm delete
             </h2>
-            <p className="text-gray-600 mb-6">
+            <p className="text-ink-muted" style={{ font: 'var(--t-body)' }}>
               Are you sure you want to delete this {deleteConfirm.type}? This action cannot be undone.
             </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
+            <div className="mt-[var(--space-5)] flex justify-end gap-[var(--space-3)]">
+              <button onClick={() => setDeleteConfirm(null)} className="btn btn-secondary">
                 Cancel
               </button>
               <button
@@ -1070,7 +1023,7 @@ export default function RecurringTopicsPage() {
                     handleDeleteAd(deleteConfirm.id)
                   }
                 }}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                className="btn btn-danger"
               >
                 Delete
               </button>
@@ -1081,62 +1034,66 @@ export default function RecurringTopicsPage() {
 
       {/* Merge Topics Modal */}
       {showMergeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">
-                Merge Topics with AI
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]" style={{ background: 'var(--scrim)' }}>
+          <div className="card !p-0 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-border px-[var(--space-5)] py-[var(--space-4)]">
+              <h2 className="flex items-center gap-[var(--space-2)]" style={{ font: 'var(--t-h2)', color: 'var(--text)' }}>
+                <Sparkles size={18} style={{ color: 'var(--accent)' }} /> Merge topics with AI
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-[var(--space-2)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                 The AI will analyze the selected topics and create a unified topic that combines the most important information.
               </p>
             </div>
-            <div className="px-6 py-4">
-              <div className="text-sm font-medium text-gray-700 mb-3">
-                Topics to merge ({selectedTopicIds.size}):
-              </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="px-[var(--space-5)] py-[var(--space-4)]">
+              <div className="field-label">Topics to merge ({selectedTopicIds.size})</div>
+              <div className="flex max-h-64 flex-col gap-[var(--space-2)] overflow-y-auto">
                 {getSelectedTopics().map((topic) => (
-                  <div key={topic.id} className="flex items-start p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{topic.topic_name}</div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {topic.topic_type} | Novelty: {topic.novelty_score.toFixed(2)}
+                  <div
+                    key={topic.id}
+                    className="flex items-start justify-between gap-[var(--space-3)] rounded-sm p-[var(--space-3)]"
+                    style={{ background: 'var(--surface-2)' }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div style={{ font: 'var(--t-small)', fontWeight: 600, color: 'var(--text)' }}>{topic.topic_name}</div>
+                      <div className="mt-[var(--space-1)] text-ink-faint" style={{ font: 'var(--t-micro)' }}>
+                        {topic.topic_type} · Novelty: {topic.novelty_score.toFixed(2)}
                       </div>
                       {topic.key_points.length > 0 && (
-                        <div className="text-xs text-gray-600 mt-1">
+                        <div className="mt-[var(--space-1)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                           Key points: {topic.key_points.slice(0, 2).join(', ')}
-                          {topic.key_points.length > 2 && '...'}
+                          {topic.key_points.length > 2 && '…'}
                         </div>
                       )}
                     </div>
                     <button
                       onClick={() => handleToggleTopicSelection(topic.id)}
-                      className="ml-2 text-gray-400 hover:text-gray-600"
+                      className="btn btn-ghost btn-sm"
+                      title="Remove from selection"
                     >
+                      <X size={14} />
                       <span className="sr-only">Remove</span>
-                      X
                     </button>
                   </div>
                 ))}
               </div>
 
               {mergeResult && (
-                <div className={`mt-4 p-4 rounded-lg ${
-                  mergeResult.success
-                    ? 'bg-green-50 border border-green-200'
-                    : 'bg-red-50 border border-red-200'
-                }`}>
-                  <p className={`text-sm ${mergeResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                    {mergeResult.message}
-                  </p>
+                <div
+                  className="mt-[var(--space-4)] rounded-sm p-[var(--space-4)]"
+                  style={{
+                    background: mergeResult.success ? 'var(--success-soft)' : 'var(--danger-soft)',
+                    color: mergeResult.success ? 'var(--success)' : 'var(--danger)',
+                    font: 'var(--t-small)',
+                  }}
+                >
+                  {mergeResult.message}
                 </div>
               )}
 
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="text-sm text-blue-800">
+              <div className="mt-[var(--space-4)] rounded-sm p-[var(--space-4)]" style={{ background: 'var(--accent-soft)' }}>
+                <div style={{ font: 'var(--t-small)', color: 'var(--text)' }}>
                   <strong>What happens when you merge:</strong>
-                  <ul className="mt-2 list-disc list-inside space-y-1">
+                  <ul className="mt-[var(--space-2)] list-inside list-disc" style={{ color: 'var(--text-muted)' }}>
                     <li>AI analyzes all selected topics to find common themes</li>
                     <li>A new unified topic is created with combined key points</li>
                     <li>Original topics are linked to the new merged topic</li>
@@ -1145,13 +1102,13 @@ export default function RecurringTopicsPage() {
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="flex justify-end gap-[var(--space-3)] border-t border-border px-[var(--space-5)] py-[var(--space-4)]">
               <button
                 onClick={() => {
                   setShowMergeModal(false)
                   setMergeResult(null)
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="btn btn-secondary"
               >
                 {mergeResult?.success ? 'Close' : 'Cancel'}
               </button>
@@ -1159,15 +1116,16 @@ export default function RecurringTopicsPage() {
                 <button
                   onClick={handleMergeTopics}
                   disabled={merging || selectedTopicIds.size < 2}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                  className="btn btn-primary"
                 >
                   {merging ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Merging with AI...
+                      <Loader2 size={14} className="animate-spin" /> Merging with AI…
                     </>
                   ) : (
-                    'Merge with AI'
+                    <>
+                      <Sparkles size={14} /> Merge with AI
+                    </>
                   )}
                 </button>
               )}

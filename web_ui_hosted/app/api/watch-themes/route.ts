@@ -23,6 +23,8 @@ export async function GET() {
   }
 }
 
+const VALID_SCOPES = ['weekly', 'daily', 'both'] as const
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!
@@ -35,6 +37,9 @@ export async function POST(request: NextRequest) {
     if (typeof body.description !== 'string' || !body.description.trim()) {
       return NextResponse.json({ error: 'description is required' }, { status: 400 })
     }
+    if (body.scope !== undefined && !VALID_SCOPES.includes(body.scope)) {
+      return NextResponse.json({ error: `scope must be one of: ${VALID_SCOPES.join(', ')}` }, { status: 400 })
+    }
 
     const db = DatabaseClient.getInstance()
     const saved = await db.upsertWatchTheme({
@@ -43,6 +48,7 @@ export async function POST(request: NextRequest) {
       description: body.description.trim(),
       active: body.active !== undefined ? Boolean(body.active) : true,
       sort_order: typeof body.sort_order === 'number' ? body.sort_order : 100,
+      scope: body.scope,
     })
     return NextResponse.json({ theme: saved })
   } catch (error) {

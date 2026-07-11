@@ -9,18 +9,20 @@ export function ToastProvider() {
       toastOptions={{
         duration: 4000,
         style: {
-          background: 'white',
-          border: '1px solid #e5e7eb',
-          borderRadius: '0.5rem',
+          background: 'var(--surface-1)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          boxShadow: 'var(--shadow-md)',
+          font: 'var(--t-small)',
         },
         classNames: {
-          success: 'border-l-4 border-l-green-500',
-          error: 'border-l-4 border-l-red-500',
-          warning: 'border-l-4 border-l-amber-500',
-          info: 'border-l-4 border-l-blue-500',
+          success: '[border-left:3px_solid_var(--success)]',
+          error: '[border-left:3px_solid_var(--danger)]',
+          warning: '[border-left:3px_solid_var(--warning)]',
+          info: '[border-left:3px_solid_var(--accent)]',
         }
       }}
-      richColors
       closeButton
     />
   )

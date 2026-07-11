@@ -118,46 +118,40 @@ export default function MultiVoiceConfig({
   }
 
   if (loading) {
-    return <div className="text-sm text-gray-500">Loading voices...</div>
+    return <div className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>Loading voices...</div>
   }
 
   if (error) {
-    return <div className="text-sm text-error-600">{error}</div>
+    return <div style={{ font: 'var(--t-small)', color: 'var(--danger)' }}>{error}</div>
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-sm font-medium text-gray-700 mb-4">
-        Multi-Voice Dialogue Configuration
-      </div>
+    <div className="flex flex-col gap-[var(--space-5)]">
+      <div className="micro">Multi-Voice Dialogue Configuration</div>
 
       {/* Speaker 1 */}
-      <div className="space-y-3 p-4 bg-gray-50 rounded-md">
-        <div className="font-medium text-sm text-gray-700">Speaker 1</div>
+      <div className="flex flex-col gap-[var(--space-3)] rounded-sm bg-surface-2 p-[var(--space-4)]">
+        <div className="text-ink" style={{ font: 'var(--t-small)', fontWeight: 600 }}>Speaker 1</div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Speaker Name (for script generation)
-          </label>
+          <label className="field-label">Speaker Name (for script generation)</label>
           <input
             type="text"
             value={speaker1Name}
             onChange={(e) => handleSpeaker1NameChange(e.target.value)}
-            className="input w-full"
+            className="input"
             placeholder="SPEAKER_1"
             disabled={disabled}
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Voice
-          </label>
+          <label className="field-label">Voice</label>
           <select
             value={speaker1VoiceId}
             onChange={(e) => handleSpeaker1VoiceChange(e.target.value)}
             disabled={disabled}
-            className="input w-full"
+            className="select"
           >
             <option value="">Select a voice...</option>
             {voices.map((voice) => (
@@ -166,41 +160,33 @@ export default function MultiVoiceConfig({
               </option>
             ))}
           </select>
-          {speaker1VoiceId && (
-            <div className="text-xs text-gray-500 mt-1">
-              Voice ID: {speaker1VoiceId}
-            </div>
-          )}
+          {speaker1VoiceId && <div className="field-hint">Voice ID: {speaker1VoiceId}</div>}
         </div>
       </div>
 
       {/* Speaker 2 */}
-      <div className="space-y-3 p-4 bg-gray-50 rounded-md">
-        <div className="font-medium text-sm text-gray-700">Speaker 2</div>
+      <div className="flex flex-col gap-[var(--space-3)] rounded-sm bg-surface-2 p-[var(--space-4)]">
+        <div className="text-ink" style={{ font: 'var(--t-small)', fontWeight: 600 }}>Speaker 2</div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Speaker Name (for script generation)
-          </label>
+          <label className="field-label">Speaker Name (for script generation)</label>
           <input
             type="text"
             value={speaker2Name}
             onChange={(e) => handleSpeaker2NameChange(e.target.value)}
-            className="input w-full"
+            className="input"
             placeholder="SPEAKER_2"
             disabled={disabled}
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Voice
-          </label>
+          <label className="field-label">Voice</label>
           <select
             value={speaker2VoiceId}
             onChange={(e) => handleSpeaker2VoiceChange(e.target.value)}
             disabled={disabled}
-            className="input w-full"
+            className="select"
           >
             <option value="">Select a voice...</option>
             {voices.map((voice) => (
@@ -209,18 +195,17 @@ export default function MultiVoiceConfig({
               </option>
             ))}
           </select>
-          {speaker2VoiceId && (
-            <div className="text-xs text-gray-500 mt-1">
-              Voice ID: {speaker2VoiceId}
-            </div>
-          )}
+          {speaker2VoiceId && <div className="field-hint">Voice ID: {speaker2VoiceId}</div>}
         </div>
       </div>
 
       {/* Summary */}
       {speaker1VoiceId && speaker2VoiceId && (
-        <div className="text-xs text-gray-600 p-3 bg-blue-50 border border-blue-200 rounded">
-          <div className="font-medium mb-1">Configuration Summary:</div>
+        <div
+          className="rounded-sm p-[var(--space-3)]"
+          style={{ background: 'var(--accent-soft)', color: 'var(--text)', font: 'var(--t-small)' }}
+        >
+          <div className="mb-[var(--space-1)]" style={{ fontWeight: 600 }}>Configuration Summary:</div>
           <div>{speaker1Name} → {getVoiceName(speaker1VoiceId)}</div>
           <div>{speaker2Name} → {getVoiceName(speaker2VoiceId)}</div>
         </div>

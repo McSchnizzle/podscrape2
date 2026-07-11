@@ -19,6 +19,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { GripVertical, Youtube, Rss, ExternalLink, Plus, Loader2 } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill, type PillTone } from '@/components/ui/Pill'
 
 type Message = { type: 'success' | 'error'; text: string } | null
 
@@ -46,10 +49,10 @@ const youtubeChannelUrl = (feedUrl: string): string | null => {
   }
 }
 
-const healthBadgeClass = (failures: number) => {
-  if (failures === 0) return 'bg-green-100 text-green-800 border-green-200'
-  if (failures <= 2) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-  return 'bg-red-100 text-red-800 border-red-200'
+const healthTone = (failures: number): PillTone => {
+  if (failures === 0) return 'success'
+  if (failures <= 2) return 'warning'
+  return 'danger'
 }
 
 // ---------- sortable row ----------
@@ -98,8 +101,8 @@ function SortableFeedRow(props: RowProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-start gap-3 bg-white border rounded-lg px-3 py-3 shadow-sm hover:shadow-md transition-shadow ${
-        isDragging ? 'ring-2 ring-blue-400' : 'border-gray-200'
+      className={`card card-hover group flex items-start gap-[var(--space-3)] !p-[var(--space-5)] ${
+        isDragging ? 'ring-2' : ''
       } ${!feed.active ? 'opacity-60' : ''}`}
     >
       {/* Drag handle */}
@@ -107,112 +110,86 @@ function SortableFeedRow(props: RowProps) {
         {...attributes}
         {...listeners}
         aria-label="Drag to reorder"
-        className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none p-1 text-gray-400 hover:text-gray-700 select-none"
+        className="mt-[2px] flex-shrink-0 cursor-grab touch-none select-none rounded-sm p-[6px] text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted active:cursor-grabbing"
         title="Drag to reorder"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <circle cx="6" cy="5" r="1.5" /><circle cx="14" cy="5" r="1.5" />
-          <circle cx="6" cy="10" r="1.5" /><circle cx="14" cy="10" r="1.5" />
-          <circle cx="6" cy="15" r="1.5" /><circle cx="14" cy="15" r="1.5" />
-        </svg>
+        <GripVertical size={18} />
       </button>
 
       {/* Position number */}
-      <div className="flex-shrink-0 w-8 text-center text-sm font-mono text-gray-500 pt-1">
+      <div className="w-8 flex-shrink-0 pt-[6px] text-center font-mono text-ink-faint" style={{ font: 'var(--t-small)' }}>
         {position}
       </div>
 
       {/* Main content */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         {editing ? (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-[var(--space-2)]">
             <input
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+              className="input"
               placeholder="Feed title"
             />
             <input
               type="text"
               value={editUrl}
               onChange={(e) => setEditUrl(e.target.value)}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm font-mono"
+              className="input font-mono"
               placeholder="Feed URL"
             />
-            <div className="flex gap-2">
-              <button
-                onClick={() => onEditSave({ title: editTitle, feed_url: editUrl })}
-                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
+            <div className="flex gap-[var(--space-2)]">
+              <button onClick={() => onEditSave({ title: editTitle, feed_url: editUrl })} className="btn btn-primary btn-sm">
                 Save
               </button>
-              <button
-                onClick={onEditCancel}
-                className="px-3 py-1 text-sm bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-              >
+              <button onClick={onEditCancel} className="btn btn-secondary btn-sm">
                 Cancel
               </button>
             </div>
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Type badge */}
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
-                  yt
-                    ? 'bg-red-50 text-red-700 border-red-200'
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                }`}
-                title={yt ? 'YouTube channel feed' : 'RSS podcast feed'}
-              >
-                {yt ? 'YouTube' : 'RSS'}
-              </span>
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              <Pill tone={yt ? 'danger' : 'accent'}>
+                {yt ? <Youtube size={11} /> : <Rss size={11} />} {yt ? 'YouTube' : 'RSS'}
+              </Pill>
 
-              <span className="font-medium text-gray-900 truncate">{feed.title}</span>
+              <span className="truncate text-ink" style={{ font: 'var(--t-body)', fontWeight: 600 }}>
+                {feed.title}
+              </span>
 
               {yt && channelLink && (
                 <a
                   href={channelLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-red-600 hover:text-red-800 underline"
+                  className="flex items-center gap-[2px] text-xs hover:underline"
+                  style={{ color: 'var(--danger)' }}
                   title="Open channel on YouTube"
                 >
-                  open channel ↗
+                  open channel <ExternalLink size={10} />
                 </a>
               )}
 
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded text-xs border ${healthBadgeClass(
-                  feed.consecutive_failures
-                )}`}
-              >
+              <Pill tone={healthTone(feed.consecutive_failures)}>
                 {feed.consecutive_failures === 0
                   ? 'healthy'
                   : `${feed.consecutive_failures} fail${feed.consecutive_failures > 1 ? 's' : ''}`}
-              </span>
+              </Pill>
 
-              {!feed.active && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-700">
-                  inactive
-                </span>
-              )}
+              {!feed.active && <Pill tone="neutral">inactive</Pill>}
             </div>
 
-            <div className="mt-1 text-xs text-gray-500 truncate font-mono">
+            <div className="mt-[var(--space-2)] truncate font-mono text-ink-faint" style={{ font: 'var(--t-small)' }}>
               {feed.feed_url}
             </div>
 
             {feed.latest_episode_title && (
-              <div className="mt-1 text-xs text-gray-600 truncate">
+              <div className="mt-[var(--space-1)] truncate text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                 Latest: <span className="italic">{feed.latest_episode_title}</span>
                 {feed.last_episode_date && (
-                  <span className="text-gray-400">
-                    {' '}
-                    · {new Date(feed.last_episode_date).toLocaleDateString()}
-                  </span>
+                  <span className="text-ink-faint"> · {new Date(feed.last_episode_date).toLocaleDateString()}</span>
                 )}
               </div>
             )}
@@ -222,32 +199,17 @@ function SortableFeedRow(props: RowProps) {
 
       {/* Actions */}
       {!editing && (
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={onCheck}
-            disabled={checking}
-            className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
-            title="Check feed now"
-          >
-            {checking ? '…' : 'Check'}
+        <div className="flex flex-shrink-0 items-center gap-[var(--space-1)] opacity-60 transition-opacity group-hover:opacity-100">
+          <button onClick={onCheck} disabled={checking} className="btn btn-ghost btn-sm">
+            {checking ? <Loader2 size={12} className="animate-spin" /> : 'Check'}
           </button>
-          <button
-            onClick={onToggleActive}
-            className="px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded"
-            title={feed.active ? 'Disable feed' : 'Enable feed'}
-          >
+          <button onClick={onToggleActive} className="btn btn-ghost btn-sm">
             {feed.active ? 'Disable' : 'Enable'}
           </button>
-          <button
-            onClick={onEditStart}
-            className="px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded"
-          >
+          <button onClick={onEditStart} className="btn btn-ghost btn-sm">
             Edit
           </button>
-          <button
-            onClick={onDelete}
-            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
-          >
+          <button onClick={onDelete} className="btn btn-ghost btn-sm hover:text-danger">
             Delete
           </button>
         </div>
@@ -431,89 +393,87 @@ export default function FeedsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="text-lg text-gray-600">Loading feeds...</div>
+      <div>
+        <PageHeader title="Feeds" description="Drag to reorder. Higher in the list means higher priority when picking episodes for a digest." />
+        <div className="flex flex-col gap-[var(--space-2)]">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="card h-16 animate-pulse" />
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Feeds</h1>
-          <p className="mt-1 text-gray-600">
-            Drag to reorder. Higher in the list = higher priority when picking
-            episodes for a digest. RSS podcasts and YouTube channels are sorted
-            together.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 whitespace-nowrap"
-          disabled={saving}
-        >
-          + Add Feed
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        title="Feeds"
+        description="Drag to reorder. Higher in the list = higher priority when picking episodes for a digest. RSS podcasts and YouTube channels are sorted together."
+        actions={
+          <button onClick={() => setShowAddForm(true)} disabled={saving} className="btn btn-primary">
+            <Plus size={14} /> Add feed
+          </button>
+        }
+      />
 
       {message && (
         <div
-          className={`px-4 py-2 rounded-md text-sm ${
-            message.type === 'success'
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
+          className="mb-[var(--space-4)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+          style={{
+            background: message.type === 'success' ? 'var(--success-soft)' : 'var(--danger-soft)',
+            color: message.type === 'success' ? 'var(--success)' : 'var(--danger)',
+            font: 'var(--t-small)',
+          }}
         >
           {message.text}
         </div>
       )}
 
       {showAddForm && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <h2 className="font-semibold text-gray-900">Add new feed</h2>
-          <input
-            type="text"
-            value={newFeed.title}
-            onChange={(e) => setNewFeed({ ...newFeed, title: e.target.value })}
-            placeholder="Title (e.g. 'The Bridge with Peter Mansbridge')"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-          />
-          <input
-            type="text"
-            value={newFeed.feed_url}
-            onChange={(e) => setNewFeed({ ...newFeed, feed_url: e.target.value })}
-            placeholder="RSS feed URL or YouTube RSS URL"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={addFeed}
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {saving ? 'Adding…' : 'Add'}
-            </button>
-            <button
-              onClick={() => {
-                setShowAddForm(false)
-                setNewFeed({ feed_url: '', title: '' })
-              }}
-              className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300"
-            >
-              Cancel
-            </button>
+        <div className="card mb-[var(--space-5)]" style={{ borderColor: 'var(--accent)' }}>
+          <h2 className="mb-[var(--space-3)]" style={{ font: 'var(--t-h3)', color: 'var(--text)' }}>
+            Add new feed
+          </h2>
+          <div className="flex flex-col gap-[var(--space-3)]">
+            <input
+              type="text"
+              value={newFeed.title}
+              onChange={(e) => setNewFeed({ ...newFeed, title: e.target.value })}
+              placeholder="Title (e.g. 'The Bridge with Peter Mansbridge')"
+              className="input"
+            />
+            <input
+              type="text"
+              value={newFeed.feed_url}
+              onChange={(e) => setNewFeed({ ...newFeed, feed_url: e.target.value })}
+              placeholder="RSS feed URL or YouTube RSS URL"
+              className="input font-mono"
+            />
+            <div className="flex gap-[var(--space-2)]">
+              <button onClick={addFeed} disabled={saving} className="btn btn-primary">
+                {saving ? 'Adding…' : 'Add'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddForm(false)
+                  setNewFeed({ feed_url: '', title: '' })
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="field-hint">
+              For YouTube channels, use the channel&apos;s RSS URL:{' '}
+              <code className="rounded-sm bg-surface-2 px-[4px] py-[1px] font-mono">
+                https://www.youtube.com/feeds/videos.xml?channel_id=...
+              </code>
+            </p>
           </div>
-          <p className="text-xs text-gray-500">
-            For YouTube channels, use the channel's RSS URL:{' '}
-            <code className="bg-white px-1 rounded">
-              https://www.youtube.com/feeds/videos.xml?channel_id=...
-            </code>
-          </p>
         </div>
       )}
 
-      <div className="text-sm text-gray-600">
+      <div className="mb-[var(--space-4)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
         {feeds.length} feed{feeds.length !== 1 ? 's' : ''} · {feeds.filter(f => f.active).length} active
       </div>
 
@@ -523,7 +483,7 @@ export default function FeedsPage() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={feeds.map(f => f.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-[var(--space-2)]">
             {feeds.map((feed, idx) => (
               <SortableFeedRow
                 key={feed.id}
@@ -544,8 +504,8 @@ export default function FeedsPage() {
       </DndContext>
 
       {feeds.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          No feeds yet. Click "+ Add Feed" to get started.
+        <div className="card py-[var(--space-8)] text-center text-ink-subtle">
+          No feeds yet. Click &quot;Add feed&quot; to get started.
         </div>
       )}
     </div>

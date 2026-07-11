@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, X } from 'lucide-react'
 import { toast } from '@/components/Toast'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill, type PillTone } from '@/components/ui/Pill'
+import { StatCard } from '@/components/ui/StatCard'
 
 interface Task {
   id: number
@@ -41,19 +45,34 @@ interface TaskStats {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'open', label: 'Open', color: 'bg-blue-100 text-blue-800' },
-  { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'on_hold', label: 'On Hold', color: 'bg-gray-100 text-gray-800' },
-  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
-  { value: 'skipped', label: 'Skipped', color: 'bg-purple-100 text-purple-800' }
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'skipped', label: 'Skipped' },
 ]
 
+const STATUS_TONE: Record<string, PillTone> = {
+  open: 'neutral',
+  in_progress: 'accent',
+  on_hold: 'warning',
+  completed: 'success',
+  skipped: 'danger',
+}
+
 const PRIORITY_OPTIONS = [
-  { value: 'P0', label: 'P0 (Critical)', color: 'text-red-600 font-bold' },
-  { value: 'P1', label: 'P1 (High)', color: 'text-orange-600 font-semibold' },
-  { value: 'P2', label: 'P2 (Medium)', color: 'text-yellow-600' },
-  { value: 'P3', label: 'P3 (Low)', color: 'text-gray-600' }
+  { value: 'P0', label: 'P0 (Critical)' },
+  { value: 'P1', label: 'P1 (High)' },
+  { value: 'P2', label: 'P2 (Medium)' },
+  { value: 'P3', label: 'P3 (Low)' },
 ]
+
+const PRIORITY_TONE: Record<string, PillTone> = {
+  P0: 'danger',
+  P1: 'warning',
+  P2: 'accent',
+  P3: 'neutral',
+}
 
 export default function MaintenancePage() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -175,175 +194,165 @@ export default function MaintenancePage() {
     )
   }
 
-  const getStatusBadge = (status: string) => {
-    const option = STATUS_OPTIONS.find(o => o.value === status)
-    return (
-      <span className={`px-2 py-1 text-xs rounded-full ${option?.color || 'bg-gray-100 text-gray-800'}`}>
-        {option?.label || status}
-      </span>
-    )
-  }
-
-  const getPriorityClass = (priority: string) => {
-    const option = PRIORITY_OPTIONS.find(o => o.value === priority)
-    return option?.color || 'text-gray-600'
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Task Management</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Track features, bugs, and improvements for the podcast digest system
-        </p>
-      </div>
-
-      {/* Stats Overview */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatsCard label="Total Tasks" value={stats.total} />
-          <StatsCard label="Open" value={stats.byStatus.open} color="text-blue-600" />
-          <StatsCard label="In Progress" value={stats.byStatus.in_progress} color="text-yellow-600" />
-          <StatsCard label="Completed" value={stats.byStatus.completed} color="text-green-600" />
-        </div>
-      )}
-
-      {/* Filters and Search */}
-      <div className="card space-y-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Add Task Button */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn btn-primary whitespace-nowrap"
-          >
-            + Add Task
+    <div>
+      <PageHeader
+        title="Task Management"
+        description="Track features, bugs, and improvements for the podcast digest system."
+        actions={
+          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+            <Plus size={14} /> Add Task
           </button>
-        </div>
+        }
+      />
 
-        <div className="flex flex-wrap gap-2">
-          {/* Status Filters */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-sm font-medium text-gray-700">Status:</span>
-            {STATUS_OPTIONS.map(option => (
-              <button
-                key={option.value}
-                onClick={() => toggleStatusFilter(option.value)}
-                className={`px-3 py-1 text-xs rounded-full ${
-                  statusFilters.includes(option.value)
-                    ? option.color
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+      <div className="flex flex-col gap-[var(--space-6)]">
+        {/* Stats Overview */}
+        {stats && (
+          <div className="grid grid-cols-2 gap-[var(--space-4)] md:grid-cols-4">
+            <StatCard label="Total Tasks" value={stats.total} />
+            <StatCard label="Open" value={stats.byStatus.open} tone="neutral" />
+            <StatCard label="In Progress" value={stats.byStatus.in_progress} tone="warning" />
+            <StatCard label="Completed" value={stats.byStatus.completed} tone="success" />
+          </div>
+        )}
+
+        {/* Filters and Search */}
+        <div className="card flex flex-col gap-[var(--space-4)]">
+          <div className="flex flex-col gap-[var(--space-3)] md:flex-row">
+            {/* Search */}
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input"
+              />
+            </div>
           </div>
 
-          {/* Priority Filters */}
-          <div className="flex flex-wrap gap-2 ml-4">
-            <span className="text-sm font-medium text-gray-700">Priority:</span>
-            {PRIORITY_OPTIONS.map(option => (
+          <div className="flex flex-wrap items-center gap-[var(--space-4)]">
+            {/* Status Filters */}
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              <span className="micro">Status:</span>
+              {STATUS_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => toggleStatusFilter(option.value)}
+                  className={
+                    statusFilters.includes(option.value)
+                      ? `pill pill-${STATUS_TONE[option.value]}`
+                      : 'pill'
+                  }
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Priority Filters */}
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              <span className="micro">Priority:</span>
+              {PRIORITY_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => togglePriorityFilter(option.value)}
+                  className={
+                    priorityFilters.includes(option.value)
+                      ? `pill pill-${PRIORITY_TONE[option.value]}`
+                      : 'pill'
+                  }
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Clear Filters */}
+            {(statusFilters.length > 0 || priorityFilters.length > 0 || searchQuery) && (
               <button
-                key={option.value}
-                onClick={() => togglePriorityFilter(option.value)}
-                className={`px-3 py-1 text-xs rounded-full ${
-                  priorityFilters.includes(option.value)
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                onClick={() => {
+                  setStatusFilters([])
+                  setPriorityFilters([])
+                  setSearchQuery('')
+                }}
+                className="btn btn-ghost btn-sm ml-auto"
               >
-                {option.label}
+                <X size={12} /> Clear filters
               </button>
-            ))}
+            )}
           </div>
-
-          {/* Clear Filters */}
-          {(statusFilters.length > 0 || priorityFilters.length > 0 || searchQuery) && (
-            <button
-              onClick={() => {
-                setStatusFilters([])
-                setPriorityFilters([])
-                setSearchQuery('')
-              }}
-              className="ml-auto text-sm text-gray-600 hover:text-gray-900"
-            >
-              Clear filters
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* Task List */}
-      <div className="card">
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading tasks...</div>
-          ) : tasks.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No tasks found</div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+        {/* Task List */}
+        {loading ? (
+          <div className="card py-[var(--space-6)] text-center text-ink-subtle">Loading tasks...</div>
+        ) : tasks.length === 0 ? (
+          <div className="card py-[var(--space-6)] text-center text-ink-subtle">No tasks found</div>
+        ) : (
+          <div className="table-shell overflow-x-auto">
+            <table className="house-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Priority</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Category</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Updated</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase">Actions</th>
+                  <th>Priority</th>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Category</th>
+                  <th>Updated</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {tasks.map(task => (
-                  <tr key={task.id} className="hover:bg-gray-50">
-                    <td className={`px-4 py-3 text-sm font-medium ${getPriorityClass(task.priority)}`}>
-                      {task.priority}
+                  <tr key={task.id}>
+                    <td>
+                      <Pill tone={PRIORITY_TONE[task.priority] || 'neutral'}>{task.priority}</Pill>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900 line-clamp-2">{task.title}</div>
+                    <td>
+                      <div className="line-clamp-2 font-medium text-ink" style={{ font: 'var(--t-small)' }}>
+                        {task.title}
+                      </div>
                       {task.tags && task.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
+                        <div className="mt-[var(--space-1)] flex flex-wrap gap-[var(--space-1)]">
                           {task.tags.slice(0, 3).map(tag => (
-                            <span key={tag} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                            <span
+                              key={tag}
+                              className="rounded-sm bg-surface-2 px-[6px] py-[1px] font-mono text-ink-subtle"
+                              style={{ font: 'var(--t-micro)' }}
+                            >
                               {tag}
                             </span>
                           ))}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">{getStatusBadge(task.status)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{task.category}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {new Date(task.last_update_date).toLocaleDateString()}
+                    <td>
+                      <Pill tone={STATUS_TONE[task.status] || 'neutral'}>
+                        {STATUS_OPTIONS.find(o => o.value === task.status)?.label || task.status}
+                      </Pill>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="text-ink-muted">{task.category}</td>
+                    <td className="text-ink-muted">
+                      <span className="font-mono text-xs">{new Date(task.last_update_date).toLocaleDateString()}</span>
+                    </td>
+                    <td className="text-center">
                       <button
                         onClick={() => {
                           setSelectedTask(task)
                           setShowModal(true)
                         }}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="btn btn-ghost btn-sm"
                       >
-                        Edit
+                        <Pencil size={12} /> Edit
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Edit Task Modal */}
@@ -367,15 +376,6 @@ export default function MaintenancePage() {
           onSave={handleCreateTask}
         />
       )}
-    </div>
-  )
-}
-
-function StatsCard({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <div className="card">
-      <div className="text-sm text-gray-600">{label}</div>
-      <div className={`text-2xl font-bold ${color || 'text-gray-900'}`}>{value}</div>
     </div>
   )
 }
@@ -408,51 +408,48 @@ function TaskModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-[var(--space-4)]"
+      style={{ background: 'var(--scrim)' }}
+    >
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-surface-1 shadow-lg">
         <form onSubmit={handleSubmit}>
-          <div className="p-6 space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">
+          <div className="flex flex-col gap-[var(--space-4)] p-[var(--space-6)]">
+            <h2 style={{ font: 'var(--t-h2)', color: 'var(--text)' }}>
               {task ? 'Edit Task' : 'Add New Task'}
             </h2>
 
             {/* Title */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Title *
-              </label>
+              <label className="field-label">Title *</label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 required
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
+              <label className="field-label">Description</label>
               <textarea
                 value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="textarea"
                 rows={4}
               />
             </div>
 
             {/* Status and Priority */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-[var(--space-4)]">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status *
-                </label>
+                <label className="field-label">Status *</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  className="select"
                 >
                   {STATUS_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -461,13 +458,11 @@ function TaskModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Priority *
-                </label>
+                <label className="field-label">Priority *</label>
                 <select
                   value={formData.priority}
                   onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  className="select"
                 >
                   {PRIORITY_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -478,22 +473,18 @@ function TaskModal({
 
             {/* Category */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category
-              </label>
+              <label className="field-label">Category</label>
               <input
                 type="text"
                 value={formData.category || ''}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="input"
               />
             </div>
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tags (comma-separated)
-              </label>
+              <label className="field-label">Tags (comma-separated)</label>
               <input
                 type="text"
                 value={formData.tags?.join(', ') || ''}
@@ -501,31 +492,23 @@ function TaskModal({
                   ...formData,
                   tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
                 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 placeholder="e.g. database, performance, security"
               />
             </div>
           </div>
 
           {/* Actions */}
-          <div className="border-t border-gray-200 px-6 py-4 flex justify-between">
+          <div className="flex justify-between border-t border-border px-[var(--space-6)] py-[var(--space-4)]">
             <div>
               {task && onDelete && (
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  className="btn text-red-600 hover:text-red-800"
-                >
-                  Delete
+                <button type="button" onClick={onDelete} className="btn btn-danger">
+                  <Trash2 size={14} /> Delete
                 </button>
               )}
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="btn btn-secondary"
-              >
+            <div className="flex gap-[var(--space-3)]">
+              <button type="button" onClick={onClose} className="btn btn-secondary">
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">

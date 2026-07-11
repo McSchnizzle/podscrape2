@@ -377,12 +377,14 @@ export class DatabaseClient {
     description: string
     active?: boolean
     sort_order?: number
+    scope?: 'weekly' | 'daily' | 'both'
   }) {
     const payload: Record<string, unknown> = {
       name: theme.name,
       description: theme.description,
       active: theme.active ?? true,
       sort_order: theme.sort_order ?? 100,
+      scope: theme.scope ?? 'weekly',
       updated_at: new Date().toISOString(),
     }
     if (theme.id) payload.id = theme.id

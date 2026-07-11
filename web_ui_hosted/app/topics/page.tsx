@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Plus, Trash2, FileText, Loader2 } from 'lucide-react'
 import VoiceSelector from '@/components/VoiceSelector'
 import MultiVoiceConfig, { VoiceConfig } from '@/components/MultiVoiceConfig'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Pill } from '@/components/ui/Pill'
 
 interface TopicRow {
   id?: number
@@ -170,120 +173,118 @@ export default function TopicsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="text-lg text-gray-600">Loading topics...</div>
+      <div>
+        <PageHeader title="Topics" description="Configure digest topics, voice settings, TTS models, and manage instructions via Script Lab." />
+        <div className="flex flex-col gap-[var(--space-3)]">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="card h-32 animate-pulse" />
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Topics</h1>
-        <p className="mt-1 text-gray-600">
-          Configure digest topics, voice settings, TTS models, and manage instructions via Script Lab
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Topics"
+        description="Configure digest topics, voice settings, TTS models, and manage instructions via Script Lab."
+        actions={
+          <button onClick={addTopic} disabled={saving} className="btn btn-secondary">
+            <Plus size={14} /> Add Topic
+          </button>
+        }
+      />
 
       {message && (
-        <div className={`p-4 rounded-md ${
-          message.type === 'success'
-            ? 'bg-success-50 text-success-700 border border-success-200'
-            : 'bg-error-50 text-error-700 border border-error-200'
-        }`}>
+        <div
+          className="mb-[var(--space-5)] rounded-sm px-[var(--space-4)] py-[var(--space-3)]"
+          style={{
+            background: message.type === 'success' ? 'var(--success-soft)' : 'var(--danger-soft)',
+            color: message.type === 'success' ? 'var(--success)' : 'var(--danger)',
+            font: 'var(--t-small)',
+          }}
+        >
           {message.text}
         </div>
       )}
 
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={addTopic}
-          className="btn-secondary"
-          disabled={saving}
-        >
-          Add Topic
-        </button>
-      </div>
-
       {topics.length === 0 ? (
-        <div className="card p-6 text-center text-gray-500">
-          No topics configured. Click "Add Topic" to get started.
+        <div className="card py-[var(--space-8)] text-center text-ink-subtle">
+          No topics configured. Click &quot;Add Topic&quot; to get started.
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-[var(--space-4)]">
           {topics.map((topic, index) => (
             <div key={index} className="card">
-              <div className="space-y-4">
+              <div className="flex flex-col gap-[var(--space-4)]">
                 {/* Header Row */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-[var(--space-3)]">
+                  <div className="flex items-start gap-[var(--space-3)]">
                     <input
                       type="checkbox"
                       checked={topic.active}
                       onChange={(e) => updateTopic(index, 'active', e.target.checked)}
-                      className="h-5 w-5 text-primary-600 rounded border-gray-300 mt-1"
+                      className="mt-[6px] h-4 w-4 accent-[var(--accent)]"
                       disabled={saving}
                       title="Active"
                     />
                     <div className="flex-1">
-                      <input
-                        type="text"
-                        value={topic.name}
-                        onChange={(e) => updateTopic(index, 'name', e.target.value)}
-                        className="text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-primary-500 outline-none px-2 py-1 -ml-2"
-                        placeholder="Topic name"
-                        disabled={saving}
-                        required
-                      />
-                      <div className="text-xs text-gray-500 px-2">
+                      <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                        <input
+                          type="text"
+                          value={topic.name}
+                          onChange={(e) => updateTopic(index, 'name', e.target.value)}
+                          className="border-0 border-b-2 border-transparent bg-transparent px-[var(--space-1)] py-[2px] text-ink outline-none transition-colors hover:border-border-strong focus:border-accent"
+                          style={{ font: 'var(--t-h3)' }}
+                          placeholder="Topic name"
+                          disabled={saving}
+                          required
+                        />
+                        <Pill tone={topic.active ? 'success' : 'neutral'}>{topic.active ? 'Active' : 'Inactive'}</Pill>
+                      </div>
+                      <div className="mt-[var(--space-1)] px-[var(--space-1)] text-ink-subtle" style={{ font: 'var(--t-small)' }}>
                         Slug: {topic.slug}
                         {topic.last_generated_at && (
-                          <> • Last generated: {new Date(topic.last_generated_at).toLocaleString()}</>
+                          <> &middot; Last generated: {new Date(topic.last_generated_at).toLocaleString()}</>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <a
-                      href={scriptLabLink(topic.name)}
-                      className="text-sm text-primary-600 hover:text-primary-700"
-                    >
-                      Script Lab
+                  <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+                    <a href={scriptLabLink(topic.name)} className="btn btn-ghost btn-sm">
+                      <FileText size={13} /> Script Lab
                     </a>
                     <button
                       onClick={() => removeTopic(index)}
-                      className="text-sm text-error-600 hover:text-error-700"
+                      className="btn btn-ghost btn-sm hover:text-danger"
                       disabled={saving}
                     >
-                      Remove
+                      <Trash2 size={13} /> Remove
                     </button>
                   </div>
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description & Keywords
-                  </label>
+                  <label className="field-label">Description &amp; Keywords</label>
                   <textarea
                     value={topic.description}
                     onChange={(e) => updateTopic(index, 'description', e.target.value)}
-                    className="input w-full h-20 resize-y"
+                    className="textarea h-20 resize-y"
                     placeholder="Topic description and keywords for episode scoring"
                     disabled={saving}
                   />
                 </div>
 
                 {/* TTS Configuration */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-[var(--space-4)] sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      TTS Model
-                    </label>
+                    <label className="field-label">TTS Model</label>
                     <select
                       value={topic.dialogue_model || 'eleven_turbo_v2_5'}
                       onChange={(e) => updateTopic(index, 'dialogue_model', e.target.value)}
-                      className="input w-full"
+                      className="select"
                       disabled={saving}
                     >
                       <option value="eleven_v3">v3 (High Quality, Dialogue Support)</option>
@@ -293,56 +294,54 @@ export default function TopicsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sort Order
-                    </label>
+                    <label className="field-label">Sort Order</label>
                     <input
                       type="number"
                       value={topic.sort_order}
                       onChange={(e) => updateTopic(index, 'sort_order', e.target.value)}
-                      className="input w-full"
+                      className="input"
                       disabled={saving}
                     />
                   </div>
                 </div>
 
                 {/* Feature Toggles */}
-                <div className="border-t pt-4 space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex flex-col gap-[var(--space-3)] border-t border-border pt-[var(--space-4)]">
+                  <label className="flex cursor-pointer items-center gap-[var(--space-2)]">
                     <input
                       type="checkbox"
                       checked={topic.use_dialogue_api || false}
                       onChange={(e) => updateTopic(index, 'use_dialogue_api', e.target.checked)}
-                      className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                      className="h-4 w-4 accent-[var(--accent)]"
                       disabled={saving}
                     />
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-ink" style={{ font: 'var(--t-small)', fontWeight: 600 }}>
                       Enable Multi-Voice Dialogue Mode
                     </span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-ink-faint" style={{ font: 'var(--t-small)' }}>
                       (Requires TTS Model: v3)
                     </span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex cursor-pointer items-center gap-[var(--space-2)]">
                     <input
                       type="checkbox"
                       checked={topic.enable_topic_tracking || false}
                       onChange={(e) => updateTopic(index, 'enable_topic_tracking', e.target.checked)}
-                      className="h-4 w-4 text-primary-600 rounded border-gray-300"
+                      className="h-4 w-4 accent-[var(--accent)]"
                       disabled={saving}
                     />
-                    <span className="text-sm font-medium text-gray-700">
-                      Enable Topic Tracking & Deduplication
+                    <span className="text-ink" style={{ font: 'var(--t-small)', fontWeight: 600 }}>
+                      Enable Topic Tracking &amp; Deduplication
                     </span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-ink-faint" style={{ font: 'var(--t-small)' }}>
                       (Extracts topics and avoids repetitive content)
                     </span>
                   </label>
                 </div>
 
                 {/* Voice Configuration */}
-                <div className="border-t pt-4">
+                <div className="border-t border-border pt-[var(--space-4)]">
                   {topic.use_dialogue_api ? (
                     <MultiVoiceConfig
                       value={topic.voice_config || null}
@@ -367,13 +366,19 @@ export default function TopicsPage() {
 
       {/* Save Button */}
       {topics.length > 0 && (
-        <div className="flex justify-end">
+        <div className="mt-[var(--space-5)] flex justify-end">
           <button
             onClick={saveTopics}
-            className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary"
             disabled={saving}
           >
-            {saving ? 'Saving...' : 'Save All Topics'}
+            {saving ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Saving…
+              </>
+            ) : (
+              'Save All Topics'
+            )}
           </button>
         </div>
       )}

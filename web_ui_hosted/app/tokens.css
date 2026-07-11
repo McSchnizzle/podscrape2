@@ -1,0 +1,161 @@
+/* ============================================================================
+   HOUSE DESIGN TOKENS  ·  Paul Brown
+   One vocabulary, two proven themes.
+   - LIGHT ("Warm Cream / Forest"): lifted verbatim from the interview-project,
+     the Ryan-blessed, production-proven palette. This is the default.
+   - DARK ("Dark Done Right"): the antidote to Harold's muddy dark.
+   Components reference ONLY these semantic names, so they work in either theme.
+   Switch themes by setting <html data-theme="dark"> (or class="dark").
+   ============================================================================ */
+
+:root {
+  /* ---- Surfaces: a real elevation ramp (NOT a 0.5% band) ---- */
+  --bg:          #f3efe7;  /* warm cream page background */
+  --surface-1:   #ffffff;  /* cards, panels */
+  --surface-2:   #faf7f0;  /* hover / inactive surfaces */
+  --surface-3:   #f0ebe0;  /* nested / active surfaces */
+
+  /* ---- Borders: must be visibly separable from their surface ---- */
+  --border:        #e3ddcf;  /* default divider */
+  --border-strong: #cdc5b3;  /* emphasized border / input outline */
+
+  /* ---- Text: each meets contrast on the surfaces it sits on ---- */
+  --text:        #15201c;  /* primary (near-black forest) */
+  --text-muted:  #3a4641;  /* secondary */
+  --text-subtle: #6b756f;  /* tertiary / metadata */
+  --text-faint:  #9aa39d;  /* disabled */
+
+  /* ---- Accent: saturated & distinctive, never washed out ---- */
+  --accent:      #1f4d40;  /* forest green — primary action / active */
+  --accent-hover:#25584a;
+  --accent-soft: #e5efe9;  /* tint for accent backgrounds (not the only signal) */
+  --on-accent:   #f5f1e8;  /* text on accent fills */
+
+  /* ---- Secondary / signal colors ---- */
+  --warm:        #b8722f;  --warm-soft: #f5e8d6;  /* earthy highlight */
+  --success:     #2f8f6e;  --success-soft: rgba(47,143,110,0.12);
+  --warning:     #b67d22;  --warning-soft: rgba(182,125,34,0.14);  --on-warning: #2a1d08;
+  --danger:      #a04a2d;  --danger-soft:  rgba(160,74,45,0.14);
+  --live:        #2f8f6e;  /* recording / live activity */
+
+  /* ---- Scrim / backdrop overlays (modals, restart overlays) ----
+     Theme-agnostic; these darken whatever sits behind them. */
+  --scrim-strong: rgba(0, 0, 0, 0.8);  /* fullscreen restart-modal */
+  --scrim:        rgba(0, 0, 0, 0.7);  /* default modal backdrop */
+  --scrim-soft:   rgba(0, 0, 0, 0.6);  /* lighter overlay */
+
+  /* ---- Hairline overlays (faint hover wash, 1px low-alpha borders) ----
+     Theme-tinted: low-alpha DARK on LIGHT, low-alpha WHITE on DARK. */
+  --hairline:      rgba(0, 0, 0, 0.05);
+  --hairline-soft: rgba(0, 0, 0, 0.03);
+
+  /* ---- Typography ---- */
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:  'IBM Plex Mono', 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  /* Type scale — headings in serif, body in sans. Adjacent levels jump >=1.25x. */
+  --t-display: 700 clamp(34px,5vw,52px)/1.05 var(--font-serif);
+  --t-h1:      600 32px/1.15 var(--font-serif);
+  --t-h2:      600 24px/1.2  var(--font-serif);
+  --t-h3:      600 18px/1.3  var(--font-sans);
+  --t-body:    400 15px/1.55 var(--font-sans);
+  --t-small:   400 13px/1.5  var(--font-sans);
+  --t-micro:   600 11px/1.2  var(--font-sans);  /* UPPERCASE, letter-spacing .06em */
+
+  /* ---- Spacing (4px base, real jumps) ---- */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:24px; --space-6:32px; --space-7:48px; --space-8:64px; --space-9:96px;
+
+  /* ---- Radius ---- */
+  --radius-sm:7px; --radius:12px; --radius-lg:16px; --radius-full:999px;
+
+  /* ---- Shadows: multi-layer, palette-tinted, and ACTUALLY USED ---- */
+  --shadow-sm: 0 6px 24px rgba(21,32,28,0.08);
+  --shadow-md: 0 14px 50px -18px rgba(21,32,28,0.18), 0 2px 8px -2px rgba(21,32,28,0.04);
+  --shadow-lg: 0 20px 60px rgba(21,32,28,0.22);
+
+  /* ---- Motion ---- */
+  --ease: cubic-bezier(0.2,0,0,1);
+  --dur-fast:120ms; --dur:180ms; --dur-slow:320ms;
+}
+
+/* ============================================================================
+   DARK THEME ("Dark Done Right")
+   Same names, opposite execution from Harold: legible elevation steps,
+   full-strength accents, borders you can see.
+   ============================================================================ */
+:root[data-theme="dark"], .dark {
+  --bg:          #0a0d14;
+  --surface-1:   #11151f;
+  --surface-2:   #171c29;
+  --surface-3:   #212838;
+
+  --border:        #2c3447;
+  --border-strong: #465069;
+
+  --text:        #f2f5fb;
+  --text-muted:  #aeb7c9;
+  --text-subtle: #7c8699;
+  --text-faint:  #5a6478;
+
+  --accent:      #6d7cff;   /* vivid indigo — never rendered at 10% as a primary */
+  --accent-hover:#8f9bff;
+  --accent-soft: rgba(109,124,255,0.14);
+  --on-accent:   #0a0d14;
+
+  --warm:        #ffb070;  --warm-soft: rgba(255,176,112,0.14);
+  --success:     #34d399;  --success-soft: rgba(52,211,153,0.15);
+  --warning:     #fbbf24;  --warning-soft: rgba(251,191,36,0.15);  --on-warning: #1c1405;
+  --danger:      #f87171;  --danger-soft:  rgba(248,113,113,0.15);
+  --live:        #3dd6c4;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-md: 0 4px 18px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.22);
+  --shadow-lg: 0 18px 50px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.30);
+
+  --hairline:      rgba(255, 255, 255, 0.05);
+  --hairline-soft: rgba(255, 255, 255, 0.03);
+}
+
+/* ============================================================================
+   COMPONENT BASELINE  (theme-agnostic — reads only from tokens above)
+   Copy into any project after importing this file.
+   ============================================================================ */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+
+.btn { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 16px;
+  border:1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface-1); color: var(--text); font: var(--t-small); cursor:pointer;
+  transition: transform var(--dur-fast) var(--ease), border-color var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease), background var(--dur) var(--ease); }
+.btn:hover:not(:disabled){ background: var(--surface-2); box-shadow: var(--shadow-sm); }
+.btn:active{ transform: translateY(1px); }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+.btn.primary{ background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover:not(:disabled){ background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger{ background: var(--danger); border-color: var(--danger); color: var(--on-accent); }
+
+.input { width:100%; min-height:38px; padding:0 14px;
+  background: var(--surface-1); color: var(--text);
+  border:1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font: var(--t-body); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.input:focus{ outline:none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px;
+  border:1px solid var(--border-strong); border-radius: var(--radius-full);
+  background: var(--surface-2); color: var(--text-muted); font: var(--t-micro); }
+.pill.success{ color:var(--success); background:var(--success-soft); border-color:transparent; }
+.pill.warning{ color:var(--warning); background:var(--warning-soft); border-color:transparent; }
+.pill.danger { color:var(--danger);  background:var(--danger-soft);  border-color:transparent; }
+
+.micro { font: var(--t-micro); text-transform:uppercase; letter-spacing:.06em; color: var(--text-subtle); }

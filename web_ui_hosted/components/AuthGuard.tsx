@@ -16,19 +16,20 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const isPublicPath = publicPaths.includes(pathname)
 
   if (isPublicPath) {
-    return (
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        {children}
-      </div>
-    )
+    return <div className="min-h-screen flex flex-col bg-bg">{children}</div>
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="flex flex-col items-center gap-[var(--space-4)]">
+          <div
+            className="h-10 w-10 animate-spin rounded-full border-2 border-border-strong"
+            style={{ borderTopColor: 'var(--accent)' }}
+          />
+          <p className="text-ink-subtle" style={{ font: 'var(--t-small)' }}>
+            Loading...
+          </p>
         </div>
       </div>
     )
@@ -40,7 +41,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex min-h-screen flex-col bg-bg md:ml-[248px]">
       {children}
     </div>
   )
