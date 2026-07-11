@@ -53,7 +53,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const loginUrl = new URL('/login', request.url)
+  // Behind the Cloudflare tunnel the origin sees Host localhost:3050, so
+  // request.url-based absolute redirects would send the browser to
+  // localhost. Anchor on PUBLIC_BASE_URL when set (kanban #2846).
+  const loginUrl = new URL('/login', process.env.PUBLIC_BASE_URL || request.url)
   loginUrl.searchParams.set('next', pathname)
   return NextResponse.redirect(loginUrl)
 }

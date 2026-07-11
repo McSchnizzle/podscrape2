@@ -26,7 +26,7 @@ function loginRedirect(
   error: string,
   opts: { clearNonce?: boolean } = {}
 ): NextResponse {
-  const url = new URL('/login', request.url)
+  const url = new URL('/login', process.env.PUBLIC_BASE_URL || request.url)
   url.searchParams.set('error', error)
   const response = NextResponse.redirect(url)
   if (opts.clearNonce) {
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
 
   const token = await createSessionToken()
   const nextPath = safeNextPath(state.next)
-  const response = NextResponse.redirect(new URL(nextPath, request.url))
+  const response = NextResponse.redirect(new URL(nextPath, process.env.PUBLIC_BASE_URL || request.url))
   response.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: isSecureRequest(request),
