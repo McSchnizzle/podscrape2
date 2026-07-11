@@ -1193,7 +1193,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a dialogue-style digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Every transcript below is complete and self-supporting — pre-generation dedup already stripped repeated background against prior digests while preserving each episode's own thesis and the evidence it needs to stand on its own. Discuss each episode in the depth its content allows; do not claim you lack access to any transcript.
+Each transcript below is the actual content available for that episode. Some are shorter than others — pre-generation dedup may have removed content already covered in prior digests (while preserving each episode's own thesis and its supporting evidence), or the episode itself may simply be brief. Discuss each episode in the depth its content actually allows; do not claim a transcript is missing or that you lack access to it.
 
 """
 
@@ -1209,7 +1209,7 @@ Transcript:
 
         user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes.
 
-REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable.
+REMINDER: Each transcript above is the actual content provided for that episode. Discuss it directly at the depth it supports - do not claim any transcript is missing or unavailable.
 
 CRITICAL FORMAT: Use EXACT format for EVERY turn:
 SPEAKER_1: [audio_tag] dialogue text...
@@ -1668,7 +1668,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a narrative digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Every transcript below is complete and self-supporting — pre-generation dedup already stripped repeated background against prior digests while preserving each episode's own thesis and the evidence it needs to stand on its own. Discuss each episode in the depth its content allows; do not claim you lack access to any transcript.
+Each transcript below is the actual content available for that episode. Some are shorter than others — pre-generation dedup may have removed content already covered in prior digests (while preserving each episode's own thesis and its supporting evidence), or the episode itself may simply be brief. Discuss each episode in the depth its content actually allows; do not claim a transcript is missing or that you lack access to it.
 
 """
 
@@ -1684,7 +1684,7 @@ Transcript:
 
         user_prompt += f"""Generate a TTS-optimized narrative script following ALL the text normalization rules above. Target 10,000-15,000 characters. Remember: expand ALL numbers, dates, and abbreviations to their full spoken form.
 
-REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable."""
+REMINDER: Each transcript above is the actual content provided for that episode. Discuss it directly at the depth it supports - do not claim any transcript is missing or unavailable."""
 
         try:
             # v3.46: min_chars=5000 lets claude -p retry on truncated output.
@@ -2441,11 +2441,26 @@ Thank you for your understanding, and we'll see you tomorrow!
 
                 # Cache deduped transcripts for all episodes. By construction
                 # dedup_transcript() guarantees deduped_transcript is either
-                # "" (dropped, zero novel content) or >= the safety-net floor
-                # (kept as-is or restored from the original) -- never a
-                # below-floor stub (kanban #2861).
+                # "" (dropped -- zero novel content OR the original itself
+                # was too short to stand as a real segment) or >= the
+                # safety-net floor (kept as-is or restored from the
+                # original) -- never a below-floor stub (kanban #2861).
+                #
+                # Check below_floor_action=="dropped" FIRST and independent
+                # of `skipped`: the too-short-original case sets skipped=True
+                # (dedup never ran) but still must be excluded from writer
+                # input (codex-flagged bypass fix). Any OTHER skip (claude -p
+                # unhealthy, timeout, chunk failure) leaves below_floor_action
+                # unset, so those episodes correctly fall through to "not
+                # cached" and keep their original, unmodified transcript --
+                # a real, presumably substantial transcript that just failed
+                # to process, not an inherently-thin one.
                 for ep, result in zip(all_available_episodes, dedup_results):
-                    if not result.skipped and result.deduped_transcript:
+                    if result.below_floor_action == "dropped":
+                        deduped_transcript_cache[ep.id] = ""
+                        if ep.id is not None:
+                            dropped_episode_ids.append(ep.id)
+                    elif not result.skipped and result.deduped_transcript:
                         deduped_transcript_cache[ep.id] = result.deduped_transcript
                         action_note = (
                             f", {result.below_floor_action} via safety net"
@@ -2457,10 +2472,6 @@ Thank you for your understanding, and we'll see you tomorrow!
                             f"{result.original_chars:,} -> {result.deduped_chars:,} chars "
                             f"({result.reduction_pct:.0%} removed{action_note})"
                         )
-                    elif result.deduped_chars == 0 and not result.skipped:
-                        deduped_transcript_cache[ep.id] = ""  # fully redundant
-                        if ep.id is not None:
-                            dropped_episode_ids.append(ep.id)
 
                 # Apply deduped transcripts to the initial episode set
                 for ep in episodes:

@@ -460,6 +460,40 @@ def test_restore_bounded_excerpt_hard_cuts_with_no_boundary():
     assert len(excerpt) == 3_000
 
 
+def test_restore_bounded_excerpt_ignores_early_boundary_below_floor():
+    """codex review (kanban #2861 round 2): a sentence boundary EARLY in the
+    window (e.g. a short opening line) must never win over the floor
+    guarantee -- that recreates the exact below-floor stub this function
+    exists to prevent. Codex's exact probe: "Done. " (a boundary at char 6)
+    followed by thousands of unpunctuated chars restored to only 6 chars
+    under the old implementation."""
+    text = "Done. " + ("x" * 6_994)  # 7,000 chars total, one EARLY boundary
+    assert len(text) > RESTORE_EXCERPT_CAP_CHARS
+    excerpt = _restore_bounded_excerpt(text)
+    assert len(excerpt) >= MIN_DEDUPED_CHARS
+    # No boundary exists at/after the floor within the window -- must hard
+    # cut at the cap, NOT stop at the 6-char early boundary.
+    assert len(excerpt) == RESTORE_EXCERPT_CAP_CHARS
+
+
+def test_restore_bounded_excerpt_uses_boundary_at_or_after_floor():
+    """When a REAL sentence boundary exists between the floor and the cap,
+    use it (sentence-trimmed) rather than hard-cutting -- while still
+    skipping any earlier boundary before the floor."""
+    early = "Done. "  # boundary at char 6 -- must be ignored (below floor)
+    filler_to_floor = "x" * 700  # pushes well past MIN_DEDUPED_CHARS (500)
+    late_boundary = "Stop here. "  # a real boundary AFTER the floor
+    tail = "y" * 3_000  # keeps total > cap so the cap/trim logic actually runs
+    text = early + filler_to_floor + late_boundary + tail
+    assert len(text) > 3_000
+
+    excerpt = _restore_bounded_excerpt(text, cap=3_000)
+
+    assert len(excerpt) >= MIN_DEDUPED_CHARS
+    assert excerpt.endswith("Stop here. ")
+    assert text.startswith(excerpt)
+
+
 # ---------------------------------------------------------------------------
 # dedup_transcript() floor/restore/drop behavior
 # ---------------------------------------------------------------------------
@@ -551,6 +585,39 @@ def test_dedup_transcript_zero_content_drops_not_restores(monkeypatch):
     assert result.below_floor_action == "dropped"
     assert result.deduped_chars == 0
     assert result.deduped_transcript == ""
+
+
+def test_dedup_transcript_too_short_original_marks_dropped(monkeypatch):
+    """codex review (kanban #2861 round 2): an original transcript below the
+    floor bypassed the safety net entirely -- skipped=True with the full,
+    too-short original handed back as deduped_transcript and no signal for
+    the caller to exclude it. Now it must set below_floor_action='dropped'
+    (even while skipped=True -- dedup never ran) so script_generator
+    excludes it from writer input, same as a genuinely-redundant result."""
+    _patch_claude_healthy(monkeypatch)
+
+    tiny_original = "Too short to be a real segment. " * 10  # ~330 chars
+    assert len(tiny_original) < MIN_DEDUPED_CHARS
+
+    calls = {"n": 0}
+
+    def fake_call(prompt, timeout=300):
+        calls["n"] += 1
+        return "should never be called"
+
+    monkeypatch.setattr(transcript_dedup, "_call_claude_p", fake_call)
+
+    result = dedup_transcript(
+        transcript=tiny_original,
+        episode_title="Tiny original ep",
+        episode_id=200,
+        prior_content="prior content",
+    )
+
+    assert calls["n"] == 0  # too short to bother calling claude -p at all
+    assert result.skipped is True
+    assert result.skip_reason == "transcript too short"
+    assert result.below_floor_action == "dropped"
 
 
 # ---------------------------------------------------------------------------
@@ -682,7 +749,11 @@ def test_batch_complete_counts_include_below_floor_drops(monkeypatch, caplog):
     restored_count = sum(1 for r in results if r.below_floor_action == "restored")
 
     assert empty_count == 1
-    assert dropped_count == empty_count  # every below-floor drop IS a zero-char result
+    # In THIS scenario (no too-short-original episodes) every below-floor
+    # drop happens to be a zero-char result too. That equality does NOT
+    # hold in general once a too-short-original episode is involved --
+    # see test_batch_complete_counts_include_too_short_original_drops.
+    assert dropped_count == empty_count
     assert restored_count == 1
 
     summary_lines = [rec.message for rec in caplog.records if "batch complete" in rec.message]
@@ -691,22 +762,177 @@ def test_batch_complete_counts_include_below_floor_drops(monkeypatch, caplog):
     assert "1 restored" in summary_lines[-1]
 
 
+def test_batch_complete_counts_include_too_short_original_drops(monkeypatch, caplog):
+    """codex review (kanban #2861 round 2): the batch-complete 'dropped'
+    count must include too-short-original drops (skipped=True, nonzero
+    original_chars), not just deduped-to-zero drops. The old `empty`
+    counter (deduped_chars==0 and not skipped) silently missed this case --
+    below_floor_action is the only field that captures both."""
+    _patch_claude_healthy(monkeypatch)
+
+    ep_kept = _ThesisEpisode(70, "Kept episode", "Novel content. " * 300)
+    ep_tiny = _ThesisEpisode(71, "Tiny episode", "Too short. " * 5)
+    assert len(ep_tiny.transcript_content) < MIN_DEDUPED_CHARS
+
+    monkeypatch.setattr(
+        transcript_dedup,
+        "_call_claude_p",
+        lambda prompt, timeout=300: "Genuinely novel material not covered anywhere else. " * 30,
+    )
+
+    import logging
+
+    caplog.set_level(logging.INFO, logger="src.generation.transcript_dedup")
+    results, combined = dedup_episode_batch(
+        episodes=[ep_kept, ep_tiny],
+        prior_digest_scripts=["some prior digest script"],
+    )
+
+    tiny_result = next(r for r in results if r.episode_id == 71)
+    assert tiny_result.skipped is True
+    assert tiny_result.below_floor_action == "dropped"
+    # The old `empty` counter would have missed this -- it's skipped=True
+    # with a nonzero original_chars, not a zero-char dedup result.
+    empty_count = sum(1 for r in results if r.deduped_chars == 0 and not r.skipped)
+    dropped_count = sum(1 for r in results if r.below_floor_action == "dropped")
+    assert empty_count == 0
+    assert dropped_count == 1
+
+    summary_lines = [rec.message for rec in caplog.records if "batch complete" in rec.message]
+    assert summary_lines
+    assert "1 fully redundant/dropped" in summary_lines[-1]
+    assert "--- EPISODE: Tiny episode ---" not in combined
+
+
+# ---------------------------------------------------------------------------
+# Behavioral regressions (codex round 2): assert the actual WRITER-FACING
+# combined string never contains a below-floor fragment. Source-text
+# assertions alone did not catch the restore-boundary bug (finding #1) or
+# the too-short-original bypass (finding #3) -- these exercise the full
+# dedup_episode_batch() -> combined pipeline the writer actually consumes.
+# ---------------------------------------------------------------------------
+
+
+def test_batch_combined_never_contains_below_floor_restore_fragment(monkeypatch):
+    """Regression for the restore-boundary bug: an original transcript with
+    an EARLY sentence boundary (the exact shape that broke the old
+    _restore_bounded_excerpt) must still produce a floor-respecting excerpt
+    in the writer-facing combined string, not a several-char fragment."""
+    _patch_claude_healthy(monkeypatch)
+
+    # Early boundary at char 11 ("Confirmed. "), then thousands of chars
+    # with no further punctuation.
+    original = "Confirmed. " + ("Sonnet 5 underperforms across every eval " * 200)
+    assert len(original) > RESTORE_EXCERPT_CAP_CHARS
+
+    ep = _ThesisEpisode(50, "Early-boundary episode", original)
+
+    monkeypatch.setattr(
+        transcript_dedup, "_call_claude_p", lambda prompt, timeout=300: "Confirmed."
+    )
+
+    results, combined = dedup_episode_batch(
+        episodes=[ep],
+        prior_digest_scripts=["some prior digest script"],
+    )
+
+    result = results[0]
+    assert result.below_floor_action == "restored"
+    assert result.deduped_chars >= MIN_DEDUPED_CHARS
+
+    assert "--- EPISODE: Early-boundary episode ---" in combined
+    # The writer-facing content is the full restored excerpt, not the
+    # 11-char "Confirmed." stub the mocked model returned.
+    assert result.deduped_transcript in combined
+    assert len(result.deduped_transcript) >= MIN_DEDUPED_CHARS
+
+
+def test_batch_combined_excludes_too_short_original_episode(monkeypatch):
+    """Regression for the too-short-original bypass: an episode whose
+    ORIGINAL transcript is under the floor must be completely ABSENT from
+    the writer-facing combined string -- not present as a below-floor stub."""
+    _patch_claude_healthy(monkeypatch)
+
+    ep_normal = _ThesisEpisode(60, "Normal episode", "Real substantial content. " * 100)
+    ep_tiny = _ThesisEpisode(61, "Tiny original episode", "Way too short. " * 5)
+    assert len(ep_tiny.transcript_content) < MIN_DEDUPED_CHARS
+
+    monkeypatch.setattr(
+        transcript_dedup,
+        "_call_claude_p",
+        lambda prompt, timeout=300: "Novel content not covered elsewhere. " * 30,
+    )
+
+    results, combined = dedup_episode_batch(
+        episodes=[ep_normal, ep_tiny],
+        prior_digest_scripts=["some prior digest script"],
+    )
+
+    tiny_result = next(r for r in results if r.episode_id == 61)
+    assert tiny_result.below_floor_action == "dropped"
+    assert tiny_result.skipped is True  # dedup never ran -- too short to bother
+
+    # Completely absent from writer input -- no episode block, no stub text.
+    assert "--- EPISODE: Tiny original episode ---" not in combined
+    assert "Way too short." not in combined
+    # The normal episode is unaffected.
+    assert "--- EPISODE: Normal episode ---" in combined
+
+
 # ---------------------------------------------------------------------------
 # script_generator.py cleanup wiring (kanban #2861)
 # ---------------------------------------------------------------------------
 
 
-def test_script_generator_no_longer_falsely_claims_key_insights_present():
-    """The dialogue/narrative writer prompts must not tell the model 'the
-    key insights are present' regardless of transcript length -- that was
-    a false claim once dedup could hand it a below-floor stub. Now that the
-    safety net guarantees a floor, the prompt should say so truthfully."""
+def _slice_between(src: str, start_marker: str, end_marker: str) -> str:
+    start = src.index(start_marker)
+    end = src.index(end_marker, start)
+    return src[start:end]
+
+
+def test_script_generator_prompts_no_false_completeness_claims():
+    """The dialogue/narrative writer prompts must not claim COMPLETE/full
+    access or that transcripts are inherently self-supporting -- codex
+    review (kanban #2861 round 2) flagged that those claims are false for
+    deduped content, below-floor-restored excerpts, dedup-skipped originals,
+    and no-prior-script runs. Scoped to the dialogue and narrative
+    prompt-building methods specifically via source slicing between known
+    method boundaries -- NOT a whole-file check, because the separate
+    _generate_general_summary_script path intentionally keeps the old
+    language (see test_general_summary_path_unaffected_by_prompt_cleanup)."""
     sg_path = PROJECT_ROOT / "src" / "generation" / "script_generator.py"
     src = sg_path.read_text()
-    assert "the key insights are present" not in src
-    assert "content was truncated for length" not in src
-    # The truthful replacement should still be present (dialogue + narrative).
-    assert src.count("self-supporting") >= 2
+
+    dialogue_src = _slice_between(
+        src, "def _generate_dialogue_script(", "def _enforce_speaker_name_binding("
+    )
+    narrative_src = _slice_between(
+        src, "def _generate_narrative_script(", "def _run_dedup_pass_with_retry("
+    )
+
+    for label, section in [("dialogue", dialogue_src), ("narrative", narrative_src)]:
+        assert "COMPLETE access" not in section, f"{label} prompt still claims COMPLETE access"
+        assert "is complete and" not in section, f"{label} prompt still claims completeness"
+        assert "self-supporting" not in section, f"{label} prompt still claims self-supporting"
+        assert "full transcripts" not in section, f"{label} prompt still claims full transcripts"
+        assert "the key insights are present" not in section
+        assert "content was truncated for length" not in section
+        # The truthful replacement should be present.
+        assert "actual content" in section, f"{label} prompt missing truthful replacement"
+
+
+def test_general_summary_path_unaffected_by_prompt_cleanup():
+    """_generate_general_summary_script never goes through
+    dedup_episode_batch (confirmed via call-graph: create_general_summary
+    doesn't call it) -- it's a separate, out-of-scope path. Pin that the
+    cleanup above did NOT touch it, so a future refactor doesn't
+    accidentally couple the two prompt-cleanup concerns."""
+    sg_path = PROJECT_ROOT / "src" / "generation" / "script_generator.py"
+    src = sg_path.read_text()
+    general_src = _slice_between(
+        src, "def _generate_general_summary_script(", "def mark_episode_as_digested("
+    )
+    assert "COMPLETE access" in general_src
 
 
 def test_script_generator_marks_dropped_episodes_as_digested():
@@ -717,3 +943,26 @@ def test_script_generator_marks_dropped_episodes_as_digested():
     src = sg_path.read_text()
     assert "dropped_episode_ids" in src
     assert "mark_episode_as_digested(dropped_ep)" in src
+
+
+def test_script_generator_drop_check_precedes_and_is_independent_of_skipped():
+    """codex round 2, finding #3: the below-floor drop check in
+    create_digest's dedup-caching loop must be evaluated BEFORE (and
+    independent of) `not result.skipped`, so a too-short-original result
+    (skipped=True, below_floor_action='dropped') is still excluded from
+    writer input rather than falling through to the "keep original,
+    untouched" fallback meant for transient dedup failures. This is a
+    structural/wiring check; the actual invariant is proven behaviorally by
+    test_batch_combined_excludes_too_short_original_episode at the dedup
+    module level (script_generator's role here is just to route the
+    dedup module's below_floor_action signal into the writer cache)."""
+    sg_path = PROJECT_ROOT / "src" / "generation" / "script_generator.py"
+    src = sg_path.read_text()
+    drop_check_pos = src.index('if result.below_floor_action == "dropped":')
+    skipped_branch_pos = src.index(
+        "elif not result.skipped and result.deduped_transcript:"
+    )
+    assert drop_check_pos < skipped_branch_pos, (
+        "the below-floor drop check must come first so it isn't masked by "
+        "the not-skipped branch"
+    )

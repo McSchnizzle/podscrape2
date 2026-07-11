@@ -138,10 +138,14 @@ class TranscriptDedupResult:
     deduped_transcript: str
     skipped: bool = False
     skip_reason: Optional[str] = None
-    # kanban #2861 safety net: None (no action), "dropped" (deduped_chars==0,
-    # genuinely no new content -- excluded from writer input), or "restored"
+    # kanban #2861 safety net: None (no action), "dropped" (genuinely no new
+    # content, OR the original transcript itself was too short to stand as a
+    # real segment -- excluded from writer input either way), or "restored"
     # (dedup output fell below the floor, so deduped_transcript was replaced
-    # with a bounded excerpt of the ORIGINAL transcript).
+    # with a bounded excerpt of the ORIGINAL transcript). This is set even
+    # when skipped=True for the too-short-original case: "skipped" means
+    # "dedup didn't run" (independent of whether the original is usable),
+    # below_floor_action is what the caller should DO with the result.
     below_floor_action: Optional[str] = None
 
     @property
@@ -399,15 +403,23 @@ def detect_evergreen_topics(
 def _restore_bounded_excerpt(
     original: str,
     cap: int = RESTORE_EXCERPT_CAP_CHARS,
+    floor: int = MIN_DEDUPED_CHARS,
 ) -> str:
-    """Return a sentence-trimmed excerpt of ``original``, capped at ``cap`` chars.
+    """Return a sentence-trimmed excerpt of ``original``, capped at ``cap``
+    chars and never shorter than ``floor`` (unless ``original`` itself is
+    shorter than ``floor``, in which case it's returned unchanged -- there's
+    nothing more to give it).
 
     kanban #2861 safety net: when dedup over-strips a distinctive episode
     below the floor, we fall back to a bounded slice of the ORIGINAL
     transcript (not the over-stripped output) so the writer gets coherent,
     self-supporting content instead of a fragment. Reuses the same
     sentence-boundary logic as ``split_transcript_into_chunks`` so the
-    excerpt ends cleanly rather than mid-sentence.
+    excerpt ends cleanly rather than mid-sentence -- but ONLY at a boundary
+    at or after ``floor``. A sentence boundary early in the window (e.g. a
+    short opening line like "Done.") must never win over the floor
+    guarantee; that would silently recreate the exact below-floor stub this
+    function exists to prevent (codex review, kanban #2861).
     """
     if len(original) <= cap:
         return original
@@ -415,8 +427,13 @@ def _restore_bounded_excerpt(
     window = original[:cap]
     last_boundary_end = -1
     for m in _SENTENCE_END_RE.finditer(window):
+        if m.end() < floor:
+            continue  # too early -- would recreate a below-floor stub
         last_boundary_end = m.end()
 
+    # No sentence boundary at/after the floor within [floor, cap] -- hard
+    # cut at the cap. cap > floor by construction (RESTORE_EXCERPT_CAP_CHARS
+    # > MIN_DEDUPED_CHARS), so this is always >= floor.
     return original[:last_boundary_end] if last_boundary_end > 0 else window
 
 
@@ -445,7 +462,21 @@ def dedup_transcript(
     """
     original_chars = len(transcript)
 
-    if original_chars < 500:
+    if original_chars < MIN_DEDUPED_CHARS:
+        # kanban #2861: an original transcript shorter than the safety-net
+        # floor can't stand as a real segment either -- there's no dedup
+        # pass to run, but the SAME "never hand the writer a below-floor
+        # fragment" invariant applies. below_floor_action="dropped" (even
+        # though skipped=True -- "skipped" means "dedup didn't run", it
+        # doesn't mean the original is usable) tells the caller to exclude
+        # this episode from writer input, same as a genuinely-redundant
+        # dedup result (codex review caught this bypass).
+        logger.info(
+            f"Pre-gen dedup safety net: '{episode_title[:50]}' original "
+            f"transcript below floor ({original_chars} < {MIN_DEDUPED_CHARS} "
+            f"chars) -- too short to dedup or use as a segment, dropping "
+            f"from writer input"
+        )
         return TranscriptDedupResult(
             episode_id=episode_id,
             episode_title=episode_title,
@@ -454,6 +485,7 @@ def dedup_transcript(
             deduped_transcript=transcript,
             skipped=True,
             skip_reason="transcript too short",
+            below_floor_action="dropped",
         )
 
     # Check claude -p health
@@ -711,16 +743,20 @@ def dedup_episode_batch(
     total_original = sum(r.original_chars for r in results)
     total_deduped = sum(r.deduped_chars for r in results)
     skipped = sum(1 for r in results if r.skipped)
-    # kanban #2861: "empty" already covers every below-floor DROP -- the
-    # safety net only ever drops (vs. restores) when deduped_chars == 0.
-    empty = sum(1 for r in results if r.deduped_chars == 0 and not r.skipped)
+    # kanban #2861: below_floor_action=="dropped" is the authoritative
+    # "excluded from writer input" count -- it covers BOTH genuinely
+    # redundant results (deduped_chars==0, not skipped) AND originals too
+    # short to dedup at all (skipped=True, codex-flagged bypass fix). Do
+    # NOT recompute this from deduped_chars==0 alone -- that would miss the
+    # too-short-original case, which keeps its nonzero original_chars.
+    dropped = sum(1 for r in results if r.below_floor_action == "dropped")
     restored = sum(1 for r in results if r.below_floor_action == "restored")
 
     logger.info(
         f"Pre-gen dedup batch complete: {len(results)} episodes, "
         f"{total_original:,} -> {total_deduped:,} chars "
         f"({total_deduped/total_original:.0%} retained), "
-        f"{skipped} skipped, {empty} fully redundant/dropped, "
+        f"{skipped} skipped, {dropped} fully redundant/dropped, "
         f"{restored} restored (below-floor safety net)"
     )
 
