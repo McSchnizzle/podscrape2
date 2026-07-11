@@ -5,6 +5,13 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/session'
 const PUBLIC_PATHS = new Set([
   '/login',
   '/api/auth/login',
+  '/api/auth/providers',
+  // Google OAuth2 sign-in (kanban #2846 Phase 3) -- both legs run before any
+  // session cookie exists, so they must stay reachable without one. The
+  // callback still rejects on its own terms (bad/expired state, unverified
+  // email, non-allowlisted email) and sends the browser to /login?error=...
+  '/api/auth/google',
+  '/api/auth/callback/google',
   '/api/health',
   // Has its own CRON_SECRET / x-vercel-cron check (app/api/heartbeat/route.ts)
   // and a live 5-min caller (systemd podcast-heartbeat.timer) that doesn't

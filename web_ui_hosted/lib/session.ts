@@ -38,7 +38,12 @@ export function isSecureRequest(request: { headers: Headers; nextUrl?: { protoco
   return false
 }
 
-function getSessionSecret(): string {
+/**
+ * Exported (not just used internally) so lib/google-oauth.ts can sign/verify
+ * its own short-lived OAuth `state` token with the same secret and HMAC
+ * primitives instead of duplicating the Web Crypto boilerplate.
+ */
+export function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET
   if (!secret) {
     throw new Error('SESSION_SECRET is not set')
@@ -46,13 +51,13 @@ function getSessionSecret(): string {
   return secret
 }
 
-function toHex(buf: ArrayBuffer): string {
+export function toHex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 }
 
-function fromHex(hex: string): Uint8Array<ArrayBuffer> | null {
+export function fromHex(hex: string): Uint8Array<ArrayBuffer> | null {
   if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) {
     return null
   }
@@ -63,7 +68,7 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> | null {
   return out
 }
 
-async function importHmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
+export async function importHmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
