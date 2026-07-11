@@ -181,17 +181,29 @@ class ConfigManager:
 
     def _get_database_topics(self, active_only: bool) -> Optional[List[Dict[str, Any]]]:
         """Returns None when the DB could not be queried at all (no
-        topic_repo, or the query raised) -- callers should fall back to
-        JSON in that case. Returns a list (possibly empty) when the query
-        SUCCEEDED, including a successful-but-zero-rows result -- an empty
-        list here is DB-authoritative and callers must NOT fall back to
-        JSON, or disabling the last active DB topic would silently
-        resurrect the legacy JSON topic set (kanban #2856 follow-up).
+        topic_repo, the query raised, or the topics table itself is
+        missing/unavailable) -- callers should fall back to JSON in that
+        case. Returns a list (possibly empty) when the query SUCCEEDED,
+        including a successful-but-zero-rows result -- an empty list here
+        is DB-authoritative and callers must NOT fall back to JSON, or
+        disabling the last active DB topic would silently resurrect the
+        legacy JSON topic set (kanban #2856 follow-up).
+
+        Passes raise_on_unavailable=True to TopicRepository so a missing
+        topics table (ProgrammingError, normally swallowed into [] for
+        TopicRepository's other callers) propagates here instead of being
+        indistinguishable from "table exists, zero active rows" -- exactly
+        the schema-failure case the JSON fallback exists to protect
+        against.
         """
         if not self.topic_repo:
             return None
         try:
-            topics = self.topic_repo.get_active_topics() if active_only else self.topic_repo.get_all_topics()
+            topics = (
+                self.topic_repo.get_active_topics(raise_on_unavailable=True)
+                if active_only
+                else self.topic_repo.get_all_topics(raise_on_unavailable=True)
+            )
             return [self._topic_to_config_dict(topic) for topic in topics if active_only is False or topic.is_active]
         except Exception as exc:
             logger.debug("Falling back to JSON topics due to database error: %s", exc)

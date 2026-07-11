@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from sqlalchemy import create_engine, text, func
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.exc import SQLAlchemyError, ProgrammingError
+from sqlalchemy.exc import SQLAlchemyError, ProgrammingError, OperationalError
 
 from .sqlalchemy_models import (
     Base,
@@ -1214,19 +1214,45 @@ class DigestRepository:
         )
 
 
+# Dialect-portable "table doesn't exist" detection: SQLite raises
+# OperationalError with "no such table" in the message; Postgres (psycopg's
+# UndefinedTable) raises ProgrammingError with "does not exist". Message-
+# sniffing rather than a blanket except on OperationalError (which also
+# covers unrelated failures like lock timeouts or disk I/O errors) keeps
+# _safe_query_topics from swallowing a genuine operational failure as if
+# the schema were merely missing.
+_MISSING_TABLE_ERROR_MARKERS = ("no such table", "does not exist")
+
+
+def _is_missing_table_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _MISSING_TABLE_ERROR_MARKERS)
+
+
 class TopicRepository:
     """Repository for topic metadata and instructions."""
 
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
 
-    def get_active_topics(self) -> List[Topic]:
-        """Return all active topics ordered by sort order/name."""
-        return self._safe_query_topics(active_only=True)
+    def get_active_topics(self, raise_on_unavailable: bool = False) -> List[Topic]:
+        """Return all active topics ordered by sort order/name.
 
-    def get_all_topics(self) -> List[Topic]:
-        """Return all topics (active + inactive)."""
-        return self._safe_query_topics(active_only=False)
+        raise_on_unavailable: if True, a missing/unavailable topics table
+        (ProgrammingError) propagates instead of being swallowed into [].
+        Default False preserves the existing behavior for every caller
+        that doesn't opt in (src/audio/audio_generator.py,
+        scripts/apply_ai_tech_instructions_v5_engineering_depth.py, etc.)
+        -- only ConfigManager._get_database_topics opts in, so it can tell
+        "zero active topics" apart from "table doesn't exist" (kanban
+        #2856 follow-up: the latter must still trigger the JSON fallback).
+        """
+        return self._safe_query_topics(active_only=True, raise_on_unavailable=raise_on_unavailable)
+
+    def get_all_topics(self, raise_on_unavailable: bool = False) -> List[Topic]:
+        """Return all topics (active + inactive). See get_active_topics()
+        for the raise_on_unavailable contract."""
+        return self._safe_query_topics(active_only=False, raise_on_unavailable=raise_on_unavailable)
 
     def update_instructions(self, topic_id: int, instructions_md: str,
                             change_note: str = None, created_by: str = None) -> TopicInstructionVersion:
@@ -1324,7 +1350,7 @@ class TopicRepository:
                 session.rollback()
                 logger.error(f"Failed to record digest generation for topic {topic_id}: {exc}")
 
-    def _safe_query_topics(self, active_only: bool) -> List[Topic]:
+    def _safe_query_topics(self, active_only: bool, raise_on_unavailable: bool = False) -> List[Topic]:
         with self.db.get_session() as session:
             try:
                 query = session.query(TopicModel)
@@ -1332,9 +1358,23 @@ class TopicRepository:
                     query = query.filter(TopicModel.is_active == True)  # noqa: E712
                 topic_models = query.order_by(TopicModel.sort_order.asc(), TopicModel.name.asc()).all()
                 return [self._model_to_topic(model) for model in topic_models]
-            except ProgrammingError as exc:
-                # Table might not exist yet during migrations or local dev; log and fallback
+            except (ProgrammingError, OperationalError) as exc:
+                # Table might not exist yet during migrations or local dev.
+                # ProgrammingError is Postgres's flavor (production);
+                # OperationalError is SQLite's (the whole test suite, plus
+                # any genuinely local dev DB) -- only treat this as a
+                # missing-table condition if the message actually says so,
+                # so an unrelated OperationalError (lock timeout, disk
+                # error) still propagates instead of being swallowed.
+                if not _is_missing_table_error(exc):
+                    raise
+                # Callers that haven't opted into raise_on_unavailable get
+                # the historical []-and-log-debug behavior; ConfigManager
+                # opts in so it can distinguish this from a genuine
+                # zero-active-topics result (see get_active_topics above).
                 logger.debug(f"Topics table unavailable: {exc}")
+                if raise_on_unavailable:
+                    raise
                 return []
 
     def _model_to_topic(self, model: TopicModel) -> Topic:
