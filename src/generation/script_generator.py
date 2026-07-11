@@ -1193,7 +1193,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a dialogue-style digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+Each transcript below is the actual content available for that episode. Some are shorter than others — pre-generation dedup may have removed content already covered in prior digests (while preserving each episode's own thesis and its supporting evidence), or the episode itself may simply be brief. Discuss each episode in the depth its content actually allows; do not claim a transcript is missing or that you lack access to it.
 
 """
 
@@ -1209,7 +1209,7 @@ Transcript:
 
         user_prompt += f"""Generate a dialogue script between SPEAKER_1 ({speaker_1_name}) and SPEAKER_2 ({speaker_2_name}) that covers the key insights from these episodes.
 
-REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable.
+REMINDER: Each transcript above is the actual content provided for that episode. Discuss it directly at the depth it supports - do not claim any transcript is missing or unavailable.
 
 CRITICAL FORMAT: Use EXACT format for EVERY turn:
 SPEAKER_1: [audio_tag] dialogue text...
@@ -1668,7 +1668,7 @@ Episodes: {len(transcripts)}"""
         user_prompt = f"""Create a narrative digest script from these {len(transcripts)} episode(s):
 
 IMPORTANT - TRANSCRIPT AVAILABILITY:
-You have COMPLETE access to ALL {len(transcripts)} episode transcripts provided below. Each transcript contains the full content needed to discuss that episode in detail. DO NOT claim you don't have access to any transcript, as all transcripts are fully provided. If a transcript seems shorter, it's because the episode itself was shorter or content was truncated for length - the key insights are present.
+Each transcript below is the actual content available for that episode. Some are shorter than others — pre-generation dedup may have removed content already covered in prior digests (while preserving each episode's own thesis and its supporting evidence), or the episode itself may simply be brief. Discuss each episode in the depth its content actually allows; do not claim a transcript is missing or that you lack access to it.
 
 """
 
@@ -1684,7 +1684,7 @@ Transcript:
 
         user_prompt += f"""Generate a TTS-optimized narrative script following ALL the text normalization rules above. Target 10,000-15,000 characters. Remember: expand ALL numbers, dates, and abbreviations to their full spoken form.
 
-REMINDER: You have full transcripts for ALL {len(transcripts)} episodes above. Discuss each episode's content directly based on the transcript provided - do not claim any transcripts are missing or unavailable."""
+REMINDER: Each transcript above is the actual content provided for that episode. Discuss it directly at the depth it supports - do not claim any transcript is missing or unavailable."""
 
         try:
             # v3.46: min_chars=5000 lets claude -p retry on truncated output.
@@ -2411,6 +2411,21 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Dedup the full pool against prior digests
         original_episodes = list(episodes)
         deduped_transcript_cache = {}  # episode.id -> deduped transcript
+        # kanban #2861 (codex round 3, P2): episode IDs the dedup safety net
+        # dropped where dedup actually RAN and established zero novel
+        # content (below_floor_action=="dropped" AND skipped=False --
+        # genuinely redundant against prior digests/siblings). Marked
+        # digested below once the digest is confirmed created, so they
+        # don't resurface tomorrow only to be deduped to nothing again.
+        # Deliberately does NOT include the too-short-ORIGINAL case
+        # (skipped=True, dedup never ran): redundancy was never
+        # established there, so marking it digested would permanently
+        # lose a possibly-unique episode whose transcript just happened to
+        # be short (often a failed/partial transcription). That case is
+        # still excluded from THIS digest's writer input via
+        # deduped_transcript_cache below, but left 'scored' for
+        # reconsideration/retry -- see the loop just below.
+        dropped_episode_ids: List[int] = []
         try:
             from src.generation.transcript_dedup import dedup_episode_batch
             from src.database.sqlalchemy_models import Digest as DigestModel
@@ -2434,17 +2449,46 @@ Thank you for your understanding, and we'll see you tomorrow!
                     timeout_per_episode=300,
                 )
 
-                # Cache deduped transcripts for all episodes
+                # Cache deduped transcripts for all episodes. By construction
+                # dedup_transcript() guarantees deduped_transcript is either
+                # "" (dropped -- zero novel content OR the original itself
+                # was too short to stand as a real segment) or >= the
+                # safety-net floor (kept as-is or restored from the
+                # original) -- never a below-floor stub (kanban #2861).
+                #
+                # Check below_floor_action=="dropped" FIRST and independent
+                # of `skipped`: the too-short-original case sets skipped=True
+                # (dedup never ran) but still must be excluded from writer
+                # input (codex-flagged bypass fix). Any OTHER skip (claude -p
+                # unhealthy, timeout, chunk failure) leaves below_floor_action
+                # unset, so those episodes correctly fall through to "not
+                # cached" and keep their original, unmodified transcript --
+                # a real, presumably substantial transcript that just failed
+                # to process, not an inherently-thin one.
+                #
+                # dropped_episode_ids (below) is deliberately narrower than
+                # this exclusion: only genuinely-redundant results (dedup
+                # ran, skipped=False) get marked digested. A too-short
+                # ORIGINAL (skipped=True) is excluded from writer input here
+                # but must NOT be added to dropped_episode_ids -- see its
+                # comment above (codex round 3, P2).
                 for ep, result in zip(all_available_episodes, dedup_results):
-                    if not result.skipped and result.deduped_transcript:
+                    if result.below_floor_action == "dropped":
+                        deduped_transcript_cache[ep.id] = ""
+                        if ep.id is not None and not result.skipped:
+                            dropped_episode_ids.append(ep.id)
+                    elif not result.skipped and result.deduped_transcript:
                         deduped_transcript_cache[ep.id] = result.deduped_transcript
+                        action_note = (
+                            f", {result.below_floor_action} via safety net"
+                            if result.below_floor_action
+                            else ""
+                        )
                         logger.info(
                             f"Pre-gen dedup: '{ep.title[:40]}' "
                             f"{result.original_chars:,} -> {result.deduped_chars:,} chars "
-                            f"({result.reduction_pct:.0%} removed)"
+                            f"({result.reduction_pct:.0%} removed{action_note})"
                         )
-                    elif result.deduped_chars == 0 and not result.skipped:
-                        deduped_transcript_cache[ep.id] = ""  # fully redundant
 
                 # Apply deduped transcripts to the initial episode set
                 for ep in episodes:
@@ -2461,6 +2505,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         except Exception as e:
             logger.warning(f"Pre-gen transcript dedup failed ({e}), using original transcripts")
             episodes = original_episodes
+            dropped_episode_ids = []
 
         # Watch-theme daily emphasis (Tier B, Paul 2026-07-10): scan active
         # daily/both watch themes against this digest's (deduped) episodes
@@ -2612,6 +2657,25 @@ Thank you for your understanding, and we'll see you tomorrow!
         if episodes:  # Only if we actually used episodes
             logger.info(f"Marking {len(episodes)} episodes as digested")
             self.mark_digest_episodes_as_digested(digest)
+
+        # kanban #2861: episodes the dedup safety net dropped where dedup
+        # actually RAN and established zero novel content are covered by
+        # sibling episodes in this digest -- mark them digested too
+        # (they're not linked to the digest content, just excluded from the
+        # writer input) so they don't resurface tomorrow only to be
+        # re-deduped to nothing again. dropped_episode_ids deliberately
+        # excludes too-short-ORIGINAL episodes (dedup never ran, so
+        # redundancy was never established) -- see its declaration comment
+        # above (codex round 3, P2): those stay 'scored' for reconsideration.
+        if dropped_episode_ids:
+            logger.info(
+                f"Marking {len(dropped_episode_ids)} fully-redundant episode(s) "
+                f"as digested (dropped from writer input, covered by siblings)"
+            )
+            for ep_id in dropped_episode_ids:
+                dropped_ep = self.episode_repo.get_by_id(ep_id)
+                if dropped_ep:
+                    self.mark_episode_as_digested(dropped_ep)
 
         # Mark story arcs that were covered in this digest
         if digest.id and script_content:
