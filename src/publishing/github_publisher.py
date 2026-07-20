@@ -70,16 +70,45 @@ def _validate_github_tools(require_gh_cli: bool = False) -> None:
 
 
 def _is_gh_authenticated() -> bool:
-    """Check if GitHub CLI is authenticated."""
+    """Check if GitHub CLI is authenticated.
+
+    NOTE: `gh auth status` performs a live network round-trip to validate the
+    stored token, so the timeout must tolerate a loaded host / slow GitHub.
+    It was 5s, which is what silently broke publishing on 2026-07-19: the probe
+    timed out under pipeline load, TimeoutExpired was swallowed by the bare
+    `except` below, this returned False, and the CLI fallback was skipped --
+    reported as the misleading "GH CLI not authenticated".
+    """
     try:
         import subprocess
         env_nt = os.environ.copy()
         env_nt.pop('GITHUB_TOKEN', None)
         result = subprocess.run(['gh', 'auth', 'status'],
-                               capture_output=True, text=True, timeout=5, env=env_nt)
+                               capture_output=True, text=True, timeout=30, env=env_nt)
         return result.returncode == 0
     except Exception:
         return False
+
+
+def _gh_cli_token() -> Optional[str]:
+    """Return the GitHub CLI's stored OAuth token, or None.
+
+    This is what makes the REST path work when GITHUB_TOKEN is unset or empty
+    (the state podscrape2's .env has been in). Previously an empty GITHUB_TOKEN
+    meant every REST call went out unauthenticated and 401'd, leaving only the
+    CLI fallback -- which is gated behind the fragile `gh auth status` probe
+    above. Reading the token up front makes the primary path self-sufficient
+    instead of depending on that probe succeeding.
+    """
+    try:
+        import subprocess
+        result = subprocess.run(['gh', 'auth', 'token'],
+                               capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+    except Exception:
+        return None
 
 @dataclass
 class GitHubRelease:
@@ -121,7 +150,10 @@ class GitHubPublisher:
         # FAIL FAST: Validate GitHub tools before proceeding
         _validate_github_tools()
 
-        self.github_token = github_token or os.getenv('GITHUB_TOKEN')
+        # An EMPTY GITHUB_TOKEN is treated as absent (podscrape2's .env sets it
+        # to ""), so fall through to the gh CLI's stored token rather than
+        # sending unauthenticated REST calls that 401.
+        self.github_token = github_token or os.getenv('GITHUB_TOKEN') or _gh_cli_token()
         self.repository = repository or os.getenv('GITHUB_REPOSITORY')
 
         # Detect gh CLI availability/auth (now we know at least one method works)
