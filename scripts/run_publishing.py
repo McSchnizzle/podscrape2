@@ -496,11 +496,31 @@ class PublishingPipelineRunner:
 
             duration = (get_pacific_now() - start_time).total_seconds()
 
+            # A failed upload is a FAILED publish, even if other digests went out.
+            # Until 2026-07-20 this returned True unconditionally: on 2026-07-19 the
+            # GitHub upload 401'd, this logged "completed successfully", the pipeline
+            # exited 0, and run_pipeline_with_alerts.sh therefore never sent its
+            # failure email. The missing episode was found by Paul, not by us.
+            # Steps 3 and 4 above still ran, so successful uploads stay published and
+            # the failed digest keeps github_url=NULL and is retried next run.
+            failed = upload_stats.get('failed', 0)
+            if failed:
+                self.pipeline_logger.log_phase_complete(
+                    f"Publishing FAILED after {duration:.1f}s: {failed} upload(s) failed"
+                )
+                self.logger.error(
+                    f"❌ Publishing incomplete: {failed} digest(s) failed to upload "
+                    f"({upload_stats.get('uploaded', 0)} uploaded, "
+                    f"{upload_stats.get('skipped', 0)} skipped). "
+                    f"Those digests have no github_url and are NOT in the RSS feed."
+                )
+                return False
+
             # Log completion
             self.pipeline_logger.log_phase_complete(f"Publishing completed successfully in {duration:.1f}s")
 
             self.logger.info(f"RSS feed should be available at: https://podcast.paulrbrown.org/daily-digest.xml")
-            
+
             return True
 
         except Exception as e:
