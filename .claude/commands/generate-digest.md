@@ -150,7 +150,7 @@ These patterns make scripts sound obviously AI-generated. Avoid ALL of them.
 - **Triads: Avoid defaulting to exactly 3 items** in comma-separated lists. Use 2, or 4, or 5. Three is the AI default.
 - **Turn length asymmetry: REQUIRED.** Speaker turns should vary wildly. Never let both speakers consistently take equal-length turns. Some turns are 1 sentence. Some are 5-6.
 - **Contractions: ALWAYS.** Use "isn't" not "is not," "can't" not "cannot," "don't" not "do not," "aren't" not "are not," "didn't" not "did not," "that's" not "that is" at clause starts. These are people talking.
-- **"Not just X, it's Y" construction: MAX 1 per script.** This is a classic AI rhetorical pattern.
+- **Contrasted negation: MAX 1 per script.** The "it's not X, it's Y" move in ALL its forms: "not just X, it's Y", "isn't X, it's Y", "that's not X, that's Y", "isn't A because B, it's C because D", "not a X, a whole Y". Naming one variant does not work -- this rule used to say only "Not just X, it's Y", and across 14 days of scripts that exact form appeared ZERO times while the other variants appeared 31 times (2.2 per script, 10 of 14 scripts over the cap). State the point directly instead of staging a correction: write "the bottleneck is the software stack", not "it isn't the chip, it's the software stack".
 - **"Now —" as topic transition: MAX 2 per script.** Vary how you move between topics.
 
 ### What Makes It Sound Human

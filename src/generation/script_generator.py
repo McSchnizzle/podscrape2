@@ -54,6 +54,12 @@ class ScriptGenerationError(Exception):
     """Raised when script generation fails"""
     pass
 
+from src.generation.anti_ai_rules import compact_banned_list
+
+# Rendered once at import so the f-string prompt above stays readable.
+_ANTI_AI_COMPACT = compact_banned_list()
+
+
 class ScriptGenerator:
     """
     Generates topic-based digest scripts from scored episodes using GPT-5.
@@ -1221,7 +1227,7 @@ Follow ALL rules in the system prompt exactly, especially:
 - MAX 25 audio tags total, MAX 35% of turns tagged
 - MAX 15 em dashes in the entire script — use commas, colons, semicolons, parentheses instead
 - Do NOT manufacture disagreements between hosts — they are curators, not pundits. Attribute opinions to sources.
-- NEVER use these phrases: "genuinely" (as intensifier), "throughline," "connect the threads," "what surprised you/us," "I want to push back," "both things can be true"
+- {_ANTI_AI_COMPACT}
 - Vary the episode structure — do NOT follow the same template every time"""
 
         try:
@@ -1480,6 +1486,7 @@ WHAT TO FIX:
 - Both speakers using identical sentence patterns. SPEAKER_1 should use shorter, punchier constructions. SPEAKER_2 should use longer, more technical ones. They should NOT sound interchangeable.
 - Formulaic phrases: rewrite (don't just delete) sentences containing "genuinely" (as intensifier), "the framing," "throughline/through-line," "connect the threads," "what surprised you/us," "worth noting/watching/flagging," "deep dive," "break that down," "both things can be true," "doing a lot of work in that sentence."
 - "That's a [adjective] [noun]" as standalone summary sentences — rewrite as natural reactions.
+- Contrasted negation: rewrite any "it's not X, it's Y" / "isn't X, it's Y" / "that's not X, that's Y" into a direct statement. The previous rule named only "not just X, it's Y" and the model used the other variants instead -- 31 occurrences across 14 scripts.
 - Manufactured disagreements: rewrite any "I want to push back" / "I disagree" / "I see it differently" — the hosts are curators presenting source material, not pundits with their own positions. If there's tension, it should come from contrasting source perspectives, attributed to the original speakers.
 - Performed uncertainty: rewrite "I honestly don't know" / "I haven't figured out what I think" — the hosts don't have opinions to be uncertain about.
 - Sentences that all use em dashes for subordinate clauses — restructure some to use different constructions (appositives, parentheticals, separate sentences, semicolons).
@@ -1493,6 +1500,7 @@ WHAT NOT TO TOUCH:
 DO NOT INTRODUCE:
 - Do NOT add em dashes that weren't there. If you're restructuring a sentence, use commas, semicolons, colons, or separate sentences — not em dashes.
 - Do NOT use these phrases in your rewrites: "genuinely," "the framing," "throughline," "deep dive," "break that down," "worth noting," "both things can be true," "I want to push back," "I honestly don't know."
+- Do NOT introduce contrasted negation in any form ("it's not X, it's Y", "isn't X, it's Y", "that's not X, that's Y"). Measured at 2.2 per script against a cap of 1 -- the most overused pattern in this show. State the point directly.
 - Do NOT add manufactured disagreements between hosts. They are curators, not pundits.
 - Do NOT expand contractions. Keep "isn't," "don't," "can't" as contractions."""
 

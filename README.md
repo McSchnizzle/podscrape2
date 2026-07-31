@@ -10,8 +10,8 @@ Production-ready automated system that generates daily, topic-based podcast dige
 This production system automatically:
 - Discovers new episodes from RSS podcast feeds
 - Downloads and transcribes audio using local OpenAI Whisper
-- Scores content against multiple topics using GPT-4o-mini
-- Generates topic-based digest scripts using GPT-4o (dialogue or narrative mode)
+- Scores content against multiple topics using the configured OpenAI model (currently the GPT-5 family; see `web_settings`)
+- Generates topic-based digest scripts using the configured OpenAI model (dialogue or narrative mode)
 - Converts scripts to MP3 audio using ElevenLabs TTS (single-voice or multi-voice dialogue)
 - Publishes via GitHub Releases and RSS feed at podcast.paulrbrown.org
 
@@ -33,7 +33,7 @@ AI Scoring → Script Generation (Database-First) → TTS → GitHub Releases �
 - **Database**: PostgreSQL (Supabase) with SQLAlchemy models, RLS security, and automatic connection pooling
 - **Orchestrator**: Production-ready 6-phase pipeline with comprehensive logging and error handling
 - **Transcription**: Local OpenAI Whisper with memory-efficient incremental database writes (v1.52)
-- **AI Processing**: GPT-4o-mini scoring and GPT-4o script generation (database-first architecture)
+- **AI Processing**: OpenAI scoring and script generation, models set in the database (database-first architecture)
 - **Audio/TTS**: ElevenLabs with per-topic voice configuration
   - **Dialogue Mode**: Multi-voice conversations with Text-to-Dialogue API (v3) and intelligent chunking
   - **Narrative Mode**: Single-voice TTS with text normalization and optimization
@@ -197,7 +197,7 @@ The system supports two script generation modes per topic:
 3. For dialogue mode:
    - Choose Voice 1 (e.g., "Young Jamal - energetic, passionate")
    - Choose Voice 2 (e.g., "Dakota H - thoughtful, analytical")
-   - Select GPT model: gpt-4o or gpt-4o-mini
+   - Select the GPT model (see the model list in the UI; the pipeline currently runs the GPT-5 family)
 4. Edit topic instructions to guide conversation style
 5. Use Script Lab preview to test with real episodes
 
@@ -269,7 +269,7 @@ The Next.js Web UI is hosted at https://podcast.paulrbrown.org and provides:
 - **Topics**:
   - Configure script mode: dialogue (multi-voice) or narrative (single-voice)
   - Select Voice 1 and Voice 2 (for dialogue mode) from ElevenLabs voice library
-  - Choose dialogue model: GPT-4o or GPT-4o-mini
+  - Choose the dialogue model from the list offered in the UI
   - Edit instructions_md (database-stored, no files), description, active status
   - Script Lab preview: Generate and preview scripts with real episode data
   - All topic configuration stored in PostgreSQL, no filesystem dependencies

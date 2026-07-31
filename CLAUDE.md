@@ -166,13 +166,29 @@ mocks hide. The established feeds are listed in `docs/test-feeds.md`.
 
 ## Models
 
-Scoring and generation use the GPT-5 family (`gpt-5-mini` for scoring, `gpt-5`
-for generation, with some `gpt-5.1`/`gpt-5.2` call sites). Confirm against the
-code rather than this line:
+**What the pipeline runs today**: the GPT-5 family -- `gpt-5-mini` for scoring
+and topic extraction, `gpt-5` / `gpt-5.2` at the generation call sites. The
+Claude path (`claude -p`, free under the Max subscription) drives the
+structural-variety rewrite.
+
+**Current frontier models, as of 2026-07-31** -- the pipeline is a generation
+behind and migrating is a deliberate cost/quality decision, not a cleanup:
+
+| Family | Models | Notes |
+|---|---|---|
+| OpenAI GPT-5.6 | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` | `gpt-5.6` aliases to sol. Sol = flagship, Terra = balanced, Luna = fastest/cheapest |
+| Anthropic Claude 5 | `claude-opus-5`, `claude-sonnet-5` | plus `claude-haiku-4-5-20251001` |
+
+Do not trust the table over the config. Models are set in the database
+(`web_settings`, and `dialogue_model` per topic), so read those:
 
 ```bash
-grep -rhoE "gpt-[0-9.]+(-mini)?" src/ --include=*.py | sort | uniq -c | sort -rn
+grep -rhoE "gpt-[0-9.]+[a-z-]*" src/ --include=*.py | sort | uniq -c | sort -rn
 ```
+
+`gpt-4` still appears once in `src/generation/script_generator.py` inside the
+`known_entities` list. That is a DETECTION keyword for transcripts that discuss
+GPT-4, not a model selection. Leave it.
 
 ## Layout
 
@@ -192,6 +208,12 @@ Serving: `podcast-web.service` (systemd **system** unit, port 3050) plus
 `cloudflared-tunnel.service` (`linus-et01`); hostname mapping in
 `~/.cloudflared/config.yml`. Check with `systemctl is-active podcast-web.service`
 -- it is a system unit, so `systemctl --user` will report it missing.
+
+**Nothing is hosted on Vercel.** Verified 2026-07-31: responses from
+podcast.paulrbrown.org carry no `x-vercel-*` headers, only cloudflare, and the
+tunnel points at localhost:3050. The two `vercel.json` files were removed; the
+`/daily-digest.xml` rewrite they contained is duplicated in
+`web_ui_hosted/next.config.js`, which is what actually serves it.
 
 ## Timezone
 

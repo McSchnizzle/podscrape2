@@ -142,7 +142,11 @@ violate them when rewriting):
   sentences.
 - No manufactured disagreement between hosts. They are curators, not pundits.
 - No "genuinely," "the framing," "throughline," "deep dive," "worth noting,"
-  "both things can be true," "I want to push back," "I honestly don't know."
+  "both things can be true," "doing a lot of work," "I want to push back,"
+  "I honestly don't know."
+- No contrasted negation in any form ("it's not X, it's Y", "isn't X, it's Y",
+  "that's not X, that's Y"). State the point directly rather than staging a
+  correction. This pass previously carried no rule against it at all.
 
 OUTPUT:
 Return ONLY the rewritten DRAFT script. No preamble, no explanation, no diff,
