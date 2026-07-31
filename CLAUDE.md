@@ -1,580 +1,199 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Automated RSS podcast digest system. This file is what a session needs to work here
+safely; reference material lives in `docs/` and in the code.
 
-## Session Context
+**This project lives ONLY at `/srv/projects/podcast/` on et01.** There is no Mac
+checkout and no rsync deploy. SSH to et01, edit in place, commit, push to
+`origin/main`. The macOS setup section this file used to carry (Homebrew
+installs, the GNU-prefixed timeout command) contradicted that and has been
+removed; if you find similar guidance elsewhere, it is stale.
 
-**IMPORTANT**: At the start of each session:
-1. Note the current date/time from the system environment
-2. **Timezone**: The user is in **Pacific Time (PT)** - all time references should use PT unless otherwise specified
-3. When reviewing logs or timestamps, convert UTC to Pacific Time for clarity
-4. Cron jobs on et01 server run in PT (server is configured for America/Los_Angeles)
+## Pipeline
 
-## High-Level Architecture
-
-This is an automated RSS podcast digest system that follows this flow:
 ```
-RSS Feeds → Episode Discovery → Audio Download/Chunking → Transcription (OpenAI Whisper) →
-AI Scoring (GPT) → Script Generation → TTS Audio → Publishing (GitHub + Dynamic RSS API) → Retention
+RSS Feeds -> Episode Discovery -> Audio Download/Chunking -> Transcription (Whisper)
+  -> Scoring -> Script Generation -> TTS -> Publishing (GitHub + dynamic RSS) -> Retention
 ```
 
-**Current Version**: v2.05 (December 2025)
-**Pipeline Architecture**: 6 phases (Discovery, Audio, Digest, TTS, Publishing, Retention)
+Six phases: Discovery, Audio, Digest, TTS, Publishing, Retention.
 
-### Core Data Flow
-- **RSS Feeds**: Monitored for new episodes via `src/podcast/feed_parser.py`
-- **Audio Processing**: Downloads, chunks (3-min), transcribes with OpenAI Whisper (cross-platform)
-- **Content Scoring**: Uses GPT-4o-mini to score transcripts against configured topics (threshold: 0.65)
-- **Script Generation**: Creates topic-based digest scripts using GPT-4o and database-stored topic instructions (database-first architecture)
-  - **Dialogue Mode**: SPEAKER_1/SPEAKER_2 format with audio tags (15-20k chars)
-  - **Narrative Mode**: Single-voice TTS-optimized prose (10-15k chars)
-- **Audio Generation**: Converts scripts to MP3 using ElevenLabs TTS
-  - **Dialogue Mode**: Text-to-Dialogue API (v3) with intelligent chunking (~3k chars per chunk)
-  - **Narrative Mode**: Standard Text-to-Speech API with single voice
-- **Publishing**: Uploads to GitHub Releases, updates database for dynamic RSS API (no static files since v1.49)
-- **Retention**: Automatic cleanup of old MP3s, GitHub releases, logs, and database records based on configured retention periods
+```bash
+python3 run_full_pipeline_orchestrator.py              # full run
+python3 run_full_pipeline_orchestrator.py --phase audio # stop after a phase
+python3 scripts/run_discovery.py   # or run_audio / run_digest / run_tts /
+                                   # run_publishing / run_retention
+```
 
-### Database Architecture (PostgreSQL via Supabase)
+Production: 9 PM PT daily via user crontab (`0 21 * * *`) wrapping
+`scripts/run_pipeline_with_alerts.sh` through `~/patrol/cron-wrapper.sh`.
 
-**Single Database, Two Access Patterns**:
-The system uses a single PostgreSQL database hosted on Supabase, accessed through two complementary stacks:
+**Timeout is a live concern.** The cron wrapper allows 7200s. Runtime is trending
+up and was last measured at 6247s (~86% of the cap). If runs start hitting the
+ceiling, raise it to 10800s; if the baseline exceeds ~2h consistently,
+investigate rather than raise again.
 
-| Stack | Language | Use Case | Client |
-|-------|----------|----------|--------|
-| SQLAlchemy ORM | Python | Backend pipeline, scripts, migrations | `src/database/models.py` |
+## Version: check the file, do not trust prose
+
+Current version lives in `web_ui_hosted/app/version.ts` and **nowhere else**.
+Read it; do not rely on any number written into documentation, including this
+sentence.
+
+```bash
+grep VERSION web_ui_hosted/app/version.ts
+```
+
+Every commit increments it by 0.01 and names it in the commit message
+(`feat: add feature (vX.YZ)`). This file used to hardcode a version string and
+a worked increment example, both of which drifted about 1.5 major versions
+behind the real value before anyone noticed. That is why the number is not
+written here.
+
+## Before every commit
+
+Build errors and warnings both block a commit. `.husky/pre-commit` enforces it.
+
+```bash
+cd web_ui_hosted && npm run build
+npx tsc --noEmit          # must be zero errors AND zero warnings
+```
+
+Three build-time traps that recur:
+
+- **Module-level Supabase clients.** Never `const client = createClient()` at top
+  level. Use a lazy getter or construct inside the function.
+- **API routes reading env vars** need `export const dynamic = 'force-dynamic'`
+  or they get prerendered.
+- **Set iteration**: use `Array.from(new Set(...))`, not `[...new Set(...)]`, for
+  the configured ES target.
+
+## Traps that cost real time
+
+### FFmpeg subprocess calls MUST pass stdin=subprocess.DEVNULL
+
+FFmpeg enables interactive mode by default ("Press [q] to stop"). Without a TTY
+-- cron, background, SSH -- it waits forever on stdin that never arrives, pins a
+core at 100%, and never completes.
+
+```python
+subprocess.run(cmd, stdin=subprocess.DEVNULL,      # CRITICAL
+               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+```
+
+Affects every ffmpeg/ffprobe call in `src/podcast/audio_processor.py`. The
+`-nostdin` flag also works but is less reliable.
+
+### Environment config fails fast, deliberately
+
+A missing or malformed required variable must stop the run immediately with a
+non-zero exit and show RED in the Web UI health panel. No fallbacks, no silent
+degradation. Required: `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GITHUB_TOKEN`,
+`GITHUB_REPOSITORY`, and `DATABASE_URL` (or Supabase config).
+`scripts/doctor.py` validates all of them.
+
+### The publishing repo MUST stay public
+
+Podcatchers fetch GitHub release assets unauthenticated; a private repo returns
+404 to every subscriber. `scripts/doctor.py` checks visibility.
+
+### Python
+
+Requires 3.13+ and the venv provides it. Always `python3`, never `python`.
+Activate the venv before any ad-hoc database query, or imports resolve against
+the wrong interpreter.
+
+## Data and configuration are database-first
+
+There are no filesystem fallbacks. Topics, topic instructions (`instructions_md`),
+feeds, and web settings all live in PostgreSQL (Supabase); the RSS feed is
+generated on demand by an API route, not written to disk.
+
+Single database, two access stacks against the SAME Supabase instance:
+
+| Stack | Language | Use | Entry point |
+|---|---|---|---|
+| SQLAlchemy ORM | Python | pipeline, scripts, migrations | `src/database/models.py` |
 | Supabase JS | TypeScript | Web UI API routes | `web_ui_hosted/utils/supabase.ts` |
 
-Both stacks connect to the SAME Supabase PostgreSQL database. This is intentional - each stack serves its ecosystem well (Python ORM for backend, JS SDK for Next.js).
+`supabase_schema.sql` is the authoritative schema contract; both stacks must
+match it. Schema changes go through Alembic (`python3 -m alembic upgrade head`).
 
-**Canonical Schema Contract**: `supabase_schema.sql` is the authoritative reference. Both SQLAlchemy models and TypeScript interfaces must align with this schema.
+RLS is enabled on every public table. Backend and migrations use the service
+role and bypass it; the Web UI uses `SUPABASE_SERVICE_ROLE`. **New tables must
+enable RLS in the same migration** -- see `docs/database-rls.md` for the policy
+block to copy.
 
-**Core Tables**:
-- **episodes**: Core episode data, transcripts, AI scores, processing status
-- **feeds**: RSS feed URLs, titles, health status, last checked timestamps
-- **digests**: Generated scripts, MP3 metadata, publishing status
-- **topics**: Topic configuration with voice settings and GPT instructions
-- **web_settings**: UI configuration (score thresholds, audio processing settings)
-- **story_arcs**: Evolving news narratives tracked over time (v2.29+)
-- **story_arc_events**: Timeline events within each story arc
-- **pipeline_logs**: Pipeline execution logs for monitoring
-- **workflow_errors**: Persistent error tracking for pattern analysis
-
-### Episode Status Values (Canonical: src/database/episode_status.py)
-The episode processing state machine follows this flow:
-- **pending**: Initial state after RSS discovery
-- **processing**: Transient state during audio download/transcription (auto-reset if stuck >10min)
-- **transcribed**: Successfully transcribed, awaiting scoring
-- **scored**: Scored and qualifies for at least one topic
-- **not_relevant**: Scored but doesn't qualify for any topic (terminal)
-- **digested**: Included in a generated digest script (terminal)
-- **failed**: Processing failed after max retries (terminal)
-
-Terminal states (digested, not_relevant, failed) represent end of processing.
-
-**Schema Management**:
-- Schema changes are made via Alembic migrations: `python3 -m alembic upgrade head`
-- SQLAlchemy models: `src/database/sqlalchemy_models.py`
-- TypeScript types: `web_ui_hosted/utils/supabase.ts`
-- Legacy SQLite schema has been archived (see `archive/legacy_schemas/`)
-
-### Story Arc Tracking System (v2.29+)
-
-The system tracks evolving news narratives (story arcs) from episode transcripts. Each arc contains multiple events from different sources, creating a timeline of how stories develop.
-
-**Key Features**:
-- **LLM-Driven Recognition**: No hardcoded keywords - GPT identifies story arcs and events
-- **Timeline Tracking**: Events are timestamped and ordered to show story evolution
-- **Multi-Source Perspectives**: Different podcasts may have different perspectives on the same story
-- **Functional Categories**: Arcs are classified (model_release, regulation, company_strategy, etc.)
-
-**Key Components**:
-- `src/topic_tracking/topic_extractor.py`: `StoryArcExtractor` class extracts arcs and events using GPT
-- `src/topic_tracking/semantic_matcher.py`: Finds semantically similar arcs for deduplication
-- `src/database/story_arc_repo.py`: Database operations for story_arcs and story_arc_events tables
-
-**Story Arc Categories**:
-- `model_release`: New model announcements, updates, versions
-- `company_strategy`: Business moves, pivots, leadership changes
-- `research`: Papers, studies, breakthroughs
-- `regulation`: Policy, legal, governance
-- `product_launch`: New products, features, services
-- `partnership`: Collaborations, acquisitions, investments
-- `controversy`: Disputes, criticisms, debates
-- `industry_trend`: Broader patterns, market shifts
-- `technique`: New methods, approaches, architectures
-- `use_case`: Applications, implementations
-
-**Web UI**: Navigate to `/story-arcs` to view and manage story arcs with expandable timelines.
-
-**Configuration** (via web_settings):
-- `topic_tracking.extraction_model`: GPT model for extraction (default: gpt-4o-mini)
-- `topic_evolution.similarity_threshold`: Threshold for semantic matching (default: 0.85)
-- `topic_evolution.embedding_model`: Model for embeddings (default: text-embedding-3-small)
-
-**Note**: The daily deduplication script runs on the shared database via the AInewsletter project.
-
-## Development Commands
-
-### **CRITICAL: Version Management on Every Commit**
-**IMPORTANT**: Before making any commit, you MUST update the version number in `web_ui_hosted/app/version.ts`:
-
-```typescript
-export const VERSION = "0.78"; // Increment by 0.01 from previous version
-```
-
-**Current version tracking**:
-- Check current version: `web_ui_hosted/app/version.ts`
-- Version guide: `VERSION_GUIDE.md`
-- Every commit increments by 0.01 (e.g., 0.77 → 0.78 → 0.79)
-- Include version in commit message: `feat: add feature (v0.78)`
-
-### **CRITICAL: No Errors or Warnings Policy**
-**NEVER commit code with build errors or warnings**. Before every commit:
-
-1. **Run the Next.js build**: `cd web_ui_hosted && npm run build`
-2. **Run TypeScript check**: `npx tsc --noEmit`
-3. **Both must pass with zero errors and zero warnings**
-
-**Common build-time issues to avoid**:
-- **Module-level Supabase client creation**: Never create Supabase clients at module load time (top-level `const client = createClient()`). Use lazy getters or create clients inside functions.
-- **Missing `export const dynamic = 'force-dynamic'`**: API routes that use environment variables need this export to prevent prerendering.
-- **TypeScript Set iteration**: Use `Array.from(new Set(...))` instead of `[...new Set(...)]` for ES target compatibility.
-
-**Pre-commit hooks enforce this policy automatically** - see `.husky/pre-commit`.
-
-### Environment Setup
-```bash
-# Use python3 explicitly (required on macOS)
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-
-# Required external tools
-brew install ffmpeg  # Audio processing
-brew install gh && gh auth login  # GitHub publishing
-```
-
-### Production Cron Jobs (et01 Server)
-**IMPORTANT**: As of v3.45, this project lives entirely at `/srv/projects/podcast/` on et01. All edits happen via SSH to et01 — no Mac checkout, no rsync deploy. Cloudflared tunnel serves `podcast.paulrbrown.org` from the `podcast-web.service` systemd unit on port 3050.
-
-- **Canonical path**: `/srv/projects/podcast/` on et01 (replaced `/srv/projects/podcast-pipeline/` in the v3.45 migration)
-- **Edit workflow**: SSH to et01, edit in place, commit, push directly to `origin/main`. NOT via rsync.
-- **Migration history**: Cron moved from GitHub Actions to et01 in v2.72; workflow files removed in v2.74; full consolidation to et01 single-folder in v3.45
-- **Daily schedule**: 9 PM PT via user crontab (`0 21 * * *`) wrapping `scripts/run_pipeline_with_alerts.sh` through `~/patrol/cron-wrapper.sh`
-- **Timeout**: 7200s / 2h in the cron wrapper. **Runtime is trending up** (Apr 19: 6247s / 1h44m, ~86% of cap). Bump to 10800s if runs start hitting the ceiling; investigate if baseline runtime exceeds ~2h consistently.
-- **Web UI**: `podcast-web.service` (systemd, port 3050) + `podcast-heartbeat.timer` (5-min ping of `/api/heartbeat`, replacing the old Vercel cron)
-- **Ingress**: existing `cloudflared-tunnel.service` (`linus-et01` tunnel); hostname → port mapping in `/home/pbrown/.cloudflared/config.yml`
+Ad-hoc queries:
 
 ```bash
-# View crontab on et01
-ssh et01 'crontab -l'
-
-# Edit crontab on et01
-ssh et01 'crontab -e'
-```
-
-### Core Pipeline Commands
-```bash
-# Full pipeline orchestrator: RSS → Audio → Transcript → Score → Script → MP3 → Publish
-python3 run_full_pipeline_orchestrator.py
-
-# Legacy single-phase: RSS → Audio → Transcript → Score → Script → MP3 → Publish
-python3 run_full_pipeline.py
-
-# Publishing only: MP3s → GitHub → RSS → Vercel
-python3 run_publishing_pipeline.py
-
-# Stop after specific phase for debugging
-python3 run_full_pipeline_orchestrator.py --phase audio  # discovery, audio, digest, tts, publishing, retention
-
-# Individual phase scripts (production-ready)
-python3 scripts/run_discovery.py    # RSS feed discovery
-python3 scripts/run_audio.py        # Download + transcribe + score (integrated since v1.28)
-python3 scripts/run_digest.py       # Script generation
-python3 scripts/run_tts.py          # Audio generation
-python3 scripts/run_publishing.py   # GitHub release uploads + database updates
-python3 scripts/run_retention.py    # Cleanup old files and database records
-```
-
-### Web UI (Next.js)
-```bash
-# Start Next.js web interface (default: localhost:3000)
-cd web_ui_hosted && npm run dev
-
-# UI tests (requires UI running)
-cd ui-tests && npm install && npx playwright install && npx playwright test
-```
-
-### Testing Commands
-```bash
-# Phase-specific testing (real RSS feeds, no mocking)
-python3 test_phase2_simple.py  # RSS feed parsing
-python3 test_phase3.py         # Audio transcription
-python3 test_phase4.py         # Content scoring
-python3 test_phase5.py         # Script generation
-python3 test_phase6_integration.py  # TTS audio generation
-
-# Integration tests
-python3 test_full_pipeline_integration.py
-python3 test_database_integration.py
-
-# Utility testing
-python3 test_voice_configuration.py
-python3 test_metadata_generation.py
-```
-
-### Database Commands
-```bash
-# Initialize database (SQLite legacy) or run Alembic migrations (PostgreSQL)
-python3 src/database/init_db.py
-python3 -m alembic upgrade head  # For PostgreSQL/Supabase
-
-# Manual episode scoring
-python3 rescore_episodes.py
-
-# Reset latest episode status for testing
-python3 reset_latest_episode.py
-
-# Transcribe specific episode
-python3 transcribe_episode.py <episode_guid>
-
-# Row Level Security (RLS) Management
-python3 -m alembic upgrade head  # Apply all RLS migrations
-python3 -m alembic current       # Check current migration status
-
-# RLS Troubleshooting - if database access fails
-# 1. Verify service role credentials in environment
-# 2. Check that DATABASE_URL uses service role (postgres user)
-# 3. Confirm SUPABASE_SERVICE_ROLE is set for web UI
-# 4. All operations should use service role which bypasses RLS
-```
-
-### Ad-Hoc Database Queries (Python)
-**CRITICAL**: Always activate the virtual environment before running Python database queries.
-
-```bash
-# Template for ad-hoc database queries
 source .venv/bin/activate && python3 -c "
 from src.database.models import get_database_manager
-from src.database.sqlalchemy_models import Episode, Digest, Feed, Topic
-from src.config.web_config import WebConfigManager
-from datetime import datetime, timedelta
-
-# Get database session
-db_manager = get_database_manager()
-session = db_manager.get_session()
-
-# Example: Query episodes
-episodes = session.query(Episode).filter(Episode.status == 'scored').all()
-print(f'Scored episodes: {len(episodes)}')
-
-# Example: Get web settings
-wc = WebConfigManager()
-retention_days = int(wc.get_setting('retention', 'episode_retention_days', 14))
-print(f'Retention: {retention_days} days')
-
-session.close()
-"
+from src.database.sqlalchemy_models import Episode
+session = get_database_manager().get_session()   # NOT .Session()
+print(session.query(Episode).filter(Episode.status=='scored').count())
+session.close()"
 ```
 
-**Key imports and patterns**:
-- `from src.database.models import get_database_manager` - Factory for DatabaseManager
-- `from src.database.sqlalchemy_models import Episode, Digest, Feed, Topic` - SQLAlchemy models
-- `from src.config.web_config import WebConfigManager` - Web UI settings access
-- `db_manager.get_session()` - Returns a SQLAlchemy session (NOT `.Session()`)
-- Always call `session.close()` when done
+### Episode status machine
 
-**Common web_settings keys** (via `WebConfigManager.get_setting(group, key, default)`):
-- `('retention', 'episode_retention_days', 14)` - Episode retention period
-- `('retention', 'digest_retention_days', 14)` - Digest retention period
-- `('retention', 'github_releases_days', 14)` - GitHub release retention
-- `('retention', 'local_mp3_days', 14)` - Local MP3 file retention
-- `('retention', 'logs_days', 3)` - Log file retention
-- `('scoring', 'score_threshold', 0.65)` - Minimum score for inclusion
+`pending -> processing -> transcribed -> scored -> digested`, with
+`not_relevant` and `failed` as the other terminal states. `processing` is
+transient and auto-resets if stuck over 10 minutes. Canonical list:
+`src/database/episode_status.py`.
 
-## Critical Development Guidelines
+## Script generation
 
-### Environment Configuration - FAIL FAST PRINCIPLE
-**CRITICAL**: Environment configuration issues must FAIL IMMEDIATELY and LOUDLY. No fallbacks, no silent failures.
+Two modes per topic, set by `script_mode` in the `topics` table:
 
-**Core Principle**: If any required environment variable is missing or misconfigured, the system must:
-1. Stop immediately with a clear error message
-2. Exit with a non-zero status code
-3. Show RED status in the Web UI system health
-4. Never attempt to run with incomplete configuration
+- **dialogue** -- SPEAKER_1/SPEAKER_2 with audio tags, needs `voice_1_id` and
+  `voice_2_id`, uses the ElevenLabs Text-to-Dialogue API with ~3k-char chunking
+  at speaker boundaries.
+- **narrative** -- single voice, `voice_1_id` only, standard TTS with text
+  normalization.
 
-**Required Environment Variables**:
-- `OPENAI_API_KEY` - OpenAI API access for scoring and script generation
-- `ELEVENLABS_API_KEY` - ElevenLabs TTS audio generation
-- `GITHUB_TOKEN` - GitHub repository access for publishing
-- `GITHUB_REPOSITORY` - Target repository (format: owner/repo)
-- `DATABASE_URL` or Supabase configuration - Database connectivity
+Anti-AI writing rules (the banned-phrase list that shapes script voice) live in
+`.claude/commands/generate-digest.md` and are enforced again by the cleanup and
+structural-variety passes in `src/generation/script_generator.py`. Note the list
+is currently duplicated across both files and `src/generation/dedup_pass.py`; if
+you add a rule, add it to all of them or it will only be half-enforced.
 
-**Implementation**:
-- Use `scripts/doctor.py` to validate all required dependencies
-- Web UI system health section shows immediate RED for missing config
-- All scripts check environment at startup before proceeding
-- No masking or workarounds - configuration problems must be fixed
+Format details, tag vocabulary, and worked examples: `docs/script-formats.md`.
 
-### Python Environment
-**Requires Python 3.13+**. Always use `python3` command, never `python` - this is critical for macOS compatibility.
+## Testing uses real data, never mocks
 
-### macOS Command Compatibility
-**Use `gtimeout` instead of `timeout`** for command timeouts on macOS. For Claude Code Bash tool, use the `timeout` parameter instead.
+Real RSS feeds expose CDN behaviour, network faults, and malformed audio that
+mocks hide. The established feeds are listed in `docs/test-feeds.md`.
 
-### Real Data Testing Philosophy
-**NEVER use mock data or fake RSS feeds**. Always test with real RSS feeds:
-- The Bridge with Peter Mansbridge: https://feeds.simplecast.com/imTmqqal
-- Anchor feed: https://anchor.fm/s/e8e55a68/podcast/rss
-- The Great Simplification: https://thegreatsimplification.libsyn.com/rss
-- Movement Memos: https://feeds.megaphone.fm/movementmemos
-- Kultural: https://feed.podbean.com/kultural/feed.xml
+## Models
 
-Real data reveals actual RSS behavior, network issues, and audio CDN problems that mocks hide.
+Scoring and generation use the GPT-5 family (`gpt-5-mini` for scoring, `gpt-5`
+for generation, with some `gpt-5.1`/`gpt-5.2` call sites). Confirm against the
+code rather than this line:
 
-### Configuration Management (Database-First Architecture)
-- **Topics**: Stored in PostgreSQL `topics` table with voice mappings and instructions_md (no filesystem fallbacks since v1.52)
-- **Topic Instructions**: Stored as `instructions_md` field in database `topics` table (digest_instructions/ directory deleted in v1.52)
-- **Web Settings**: Database-backed via `web_settings` table and `WebConfigManager`
-- **Environment**: API keys in `.env` file (OpenAI, ElevenLabs, GitHub tokens)
-- **Feeds**: Stored in PostgreSQL `feeds` table (no JSON files)
-
-### Audio Processing Architecture
-- **Chunking**: Audio split into 3-minute chunks for optimal ASR performance
-- **Transcription**: OpenAI Whisper (local, cross-platform) with configurable model size
-- **Memory Efficiency**: Incremental database writes per chunk for O(1) constant memory usage (v1.52)
-- **TTS**: ElevenLabs with topic-specific voice IDs and settings (single-voice or multi-voice dialogue)
-- **Cleanup**: Automatic cleanup of intermediate audio files after processing
-
-### FFmpeg Subprocess Requirements (CRITICAL)
-**IMPORTANT**: When calling FFmpeg/FFprobe via Python subprocess, you MUST always include `stdin=subprocess.DEVNULL`.
-
-**Why**: FFmpeg enables interactive mode by default ("Press [q] to stop, [?] for help"). When running without a TTY (cron jobs, background processes, SSH commands), FFmpeg will hang indefinitely waiting for stdin input that never comes. This causes 100% CPU usage and the process never completes.
-
-**The Fix**:
-```python
-# CORRECT - prevents FFmpeg interactive mode hang
-result = subprocess.run(
-    cmd,
-    stdin=subprocess.DEVNULL,  # CRITICAL: Prevents hang in non-interactive mode
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
-
-# WRONG - will hang in cron/background
-result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-```
-
-**Alternative**: Use `-nostdin` flag in FFmpeg command, but `stdin=subprocess.DEVNULL` is more reliable.
-
-**Files affected**: `src/podcast/audio_processor.py` - all subprocess calls to ffmpeg/ffprobe
-
-**References**:
-- [FFmpeg mailing list discussion](https://ffmpeg.org/pipermail/ffmpeg-user/2017-November/037754.html)
-- [ffmpeg-python issue #452](https://github.com/kkroening/ffmpeg-python/issues/452)
-
-### Multi-Voice Dialogue Mode (v1.79+)
-The system supports two script generation modes per topic:
-
-**Dialogue Mode** (for conversational digests):
-- **Format**: SPEAKER_1/SPEAKER_2 conversation format with audio tags
-- **Length**: 15,000-20,000 characters
-- **Audio Tags**: Supports ElevenLabs audio tags like [excited], [thoughtful], [serious], [laughs], etc.
-- **TTS API**: ElevenLabs Text-to-Dialogue API (v3) with intelligent chunking
-- **Chunking**: Automatically splits scripts into ~3k character chunks at speaker boundaries
-- **Voice Config**: Requires `voice_1_id` and `voice_2_id` in database (configured via Web UI)
-
-**Narrative Mode** (for single-voice digests):
-- **Format**: Standard narrative prose with TTS optimization
-- **Length**: 10,000-15,000 characters
-- **TTS Optimization**: Text normalization (numbers spelled out, abbreviations expanded)
-- **TTS API**: ElevenLabs standard Text-to-Speech API
-- **Voice Config**: Uses primary `voice_1_id` only
-
-**Configuration** (via Web UI Topics page):
-```typescript
-// Database fields in topics table
-script_mode: 'dialogue' | 'narrative'  // Script generation mode
-voice_1_id: string                      // ElevenLabs voice ID for Voice 1 / narrator
-voice_2_id: string | null               // ElevenLabs voice ID for Voice 2 (dialogue only)
-dialogue_model: string                  // GPT model: 'gpt-4o' or 'gpt-4o-mini'
-instructions_md: string                 // Topic-specific generation instructions
-```
-
-**Dialogue Script Example**:
-```
-SPEAKER_1: [excited] Hey everyone, welcome back! Today we're diving into some incredible stories from the world of community organizing.
-
-SPEAKER_2: [thoughtful] That's right. We've been following some amazing movements, and the energy behind these grassroots efforts is absolutely inspiring.
-
-SPEAKER_1: [serious] Let's start with the transit justice campaign in Los Angeles...
-```
-
-**Narrative Script Example**:
-```
-Welcome to today's digest on artificial intelligence and technology. We're exploring groundbreaking developments in AI safety, machine learning, and the future of autonomous systems.
-
-Recent research from Stanford reveals fascinating insights into large language model capabilities. Scientists have discovered that these models can exhibit emergent properties...
-```
-
-**Audio Tags Reference**:
-Supported ElevenLabs audio tags for dialogue mode:
-- Emotion: `[excited]`, `[thoughtful]`, `[serious]`, `[concerned]`, `[hopeful]`
-- Action: `[laughs]`, `[sighs]`, `[chuckles]`
-- Pacing: `[pause]`, `[quickly]`, `[slowly]`
-
-**Implementation Files**:
-- Script generation: `src/generation/script_generator.py`
-- Audio generation: `src/audio/audio_generator.py`
-- Dialogue chunking: `src/audio/dialogue_chunker.py`
-- Web UI configuration: `web_ui_hosted/app/topics/page.tsx`
-- Script preview: `web_ui_hosted/app/api/script-lab/preview/route.ts`
-
-## Key File Structure Understanding
-
-### Source Code Organization (`src/`)
-```
-config/          # Configuration management (web settings, environment)
-database/        # SQLAlchemy models for PostgreSQL + legacy SQLite support
-podcast/         # RSS parsing, audio processing, OpenAI Whisper transcription
-generation/      # Script generation using database-stored instructions + GPT
-audio/           # TTS generation, metadata, audio management
-publishing/      # GitHub uploads, database updates for dynamic RSS API
-utils/           # Shared utilities, logging, error handling
-```
-
-### Data Architecture (`data/`)
-```
-database/        # Legacy SQLite files (digest.db) - PostgreSQL primary since v1.28
-transcripts/     # Raw transcript files from OpenAI Whisper
-scripts/         # Temporary digest scripts (deleted after database upload since v1.51)
-completed-tts/   # Staging area for MP3 files (deleted after GitHub upload since v1.51)
-logs/           # Pipeline execution logs (automatic retention management)
-```
-
-**Note**: RSS feed is now dynamically generated via API route (no static files since v1.49)
-
-### Web UI (`web_ui_hosted/`)
-Next.js application providing hosted configuration interface at podcast.paulrbrown.org:
-- Settings management (score thresholds, audio processing options, retention periods)
-- Feed management (add/edit RSS feeds, health checking, active/inactive toggles)
-- Topic configuration (voice IDs, instructions_md editing via database)
-- Dashboard (recent episodes, system status, pipeline controls, phase summaries)
-
-### Publishing Architecture
-- **GitHub Releases**: Daily tags (`daily-YYYY-MM-DD`) with MP3 assets uploaded and stored
-  - **CRITICAL**: Repository MUST be PUBLIC for MP3 downloads to work. Podcatcher apps access release assets without authentication. Private repos cause 404 errors.
-  - Run `scripts/doctor.py` to verify repo visibility
-- **Dynamic RSS API**: Next.js API route generates RSS 2.0 XML from database on-demand (v1.49)
-  - URL: `podcast.paulrbrown.org/daily-digest.xml` → `/api/rss/daily-digest`
-  - 5-minute edge cache, no static files, database is single source of truth
-- **Vercel Hosting**: Automatic deployment of Next.js app with API routes
-- **Retention Phase**: Dedicated cleanup phase (v1.51) with configurable periods:
-  - Local MP3s: Deleted immediately after GitHub upload
-  - GitHub releases: 14 days (configurable)
-  - Database records: 14 days (configurable)
-  - Logs: 3 days (configurable)
-
-## Integration Points
-
-### Database Architecture
-The system uses PostgreSQL (Supabase) for production:
-- **Production**: PostgreSQL with SQLAlchemy models in `src/database/sqlalchemy_models.py`
-- **Legacy**: SQLite support maintained in `src/database/models.py`
-- **Migration**: Completed migration to Supabase with automatic connection pooling
-- **Backup**: Professional daily backups with 7+ day retention via Supabase
-- **Security**: Full Row Level Security (RLS) enabled on ALL tables following Supabase best practices
-
-#### Row Level Security (RLS) Implementation
-**CRITICAL**: All tables in the public schema have RLS enabled per Supabase security requirements.
-
-**RLS Status (ALL ENABLED)**:
-- ✅ `episodes` - RLS enabled with service_role + authenticated policies
-- ✅ `feeds` - RLS enabled with service_role + authenticated policies
-- ✅ `digests` - RLS enabled with service_role + authenticated policies
-- ✅ `web_settings` - RLS enabled with service_role + authenticated policies
-- ✅ `topics` - RLS enabled with service_role + authenticated policies
-- ✅ `topic_instruction_versions` - RLS enabled with service_role + authenticated policies
-- ✅ `digest_episode_links` - RLS enabled with service_role + authenticated policies
-- ✅ `pipeline_runs` - RLS enabled with service_role + authenticated policies
-- ✅ `alembic_version` - RLS enabled with service_role policy only
-
-**RLS Policies**:
-- **service_role_policy**: Full CRUD access for backend operations and migrations
-- **authenticated_read_policy**: Read-only access for web UI (where applicable)
-
-**Database Connection Requirements**:
-- **Python Backend**: Uses `postgres` user (service role) via `DATABASE_URL`/`SUPABASE_PASSWORD`
-- **Next.js Web UI**: Uses `SUPABASE_SERVICE_ROLE` key for admin operations
-- **Alembic Migrations**: Uses service role credentials, bypasses RLS automatically
-
-**Adding New Tables**: Always include RLS enablement in migration files:
-```sql
--- In your Alembic migration upgrade() function:
-op.execute("ALTER TABLE your_new_table ENABLE ROW LEVEL SECURITY;")
-op.execute('''
-    CREATE POLICY "service_role_policy" ON your_new_table
-    FOR ALL TO service_role
-    USING (true) WITH CHECK (true);
-''')
-op.execute('''
-    CREATE POLICY "authenticated_read_policy" ON your_new_table
-    FOR SELECT TO authenticated
-    USING (true);
-''')
-```
-
-### API Dependencies
-- **OpenAI**: GPT-5-mini for scoring, GPT-5 for script generation
-- **ElevenLabs**: TTS audio generation with voice cloning
-- **GitHub**: Release management and asset hosting
-- **Vercel**: RSS feed hosting and CDN
-
-### External Tool Dependencies
-- **ffmpeg**: Required for audio chunking and format conversion
-- **gh CLI**: GitHub authentication and operations
-- **OpenAI Whisper**: Cross-platform local transcription (no API costs)
-
-## Development Workflow
-
-When implementing features:
-1. **Use the orchestrator**: Primary pipeline is `run_full_pipeline_orchestrator.py` with comprehensive logging and error handling
-2. **Phase-based development**: Independent phase scripts in `scripts/` directory for modular execution
-3. **Test with real data**: Use the established RSS feeds, not mock data
-4. **Respect the data flow**: RSS → Audio → Transcript → Score → Script → TTS → Publish
-5. **Database-first**: SQLAlchemy models with migrations for PostgreSQL (Supabase)
-6. **Error handling**: The system handles network failures, API limits, and partial processing gracefully
-7. **Logging**: Standardized logging via `PipelineLogger` with automatic cleanup and retention management
-
-## Common Maintenance Tasks
-
-### Episode Processing Issues
 ```bash
-# Check episode status in database
-python3 -c "from src.database.models import *; repo = get_episode_repo(); episodes = repo.get_recent_episodes(5); [print(f'{e.title}: {e.status}') for e in episodes]"
-
-# Rescore existing episodes with new topics/thresholds
-python3 rescore_episodes.py
-
-# Retry failed episodes
-python3 -c "from src.database.models import *; repo = get_episode_repo(); failed = repo.get_failed_episodes(); print(f'Failed: {len(failed)}')"
+grep -rhoE "gpt-[0-9.]+(-mini)?" src/ --include=*.py | sort | uniq -c | sort -rn
 ```
 
-### Publishing Issues
-```bash
-# Retry publishing for recent digests
-python3 run_publishing_pipeline.py --days-back 7
+## Layout
 
-# Check GitHub releases
-gh release list --repo $GITHUB_REPOSITORY
-
-# Validate RSS feed
-curl -s https://podcast.paulrbrown.org/daily-digest.xml | head -20
+```
+src/config/       web settings, environment
+src/database/     SQLAlchemy models (+ archived legacy SQLite)
+src/podcast/      RSS parsing, audio processing, Whisper transcription
+src/generation/   script generation, dedup, anti-AI passes
+src/audio/        TTS, metadata, audio management
+src/publishing/   GitHub uploads, database updates for the RSS API
+src/utils/        logging, error handling
+web_ui_hosted/    Next.js UI at podcast.paulrbrown.org
 ```
 
-### Configuration Changes (Database-First Architecture)
-- **Topics**: Edit via Web UI Topics page or direct PostgreSQL `topics` table manipulation
-- **Topic Instructions**: Edit `instructions_md` field in `topics` table (no filesystem files since v1.52)
-- **Settings**: Use Web UI Settings page or direct database manipulation of `web_settings` table
-- **Feeds**: Add via Web UI Feeds page or database insertion into `feeds` table
-- **Retention Periods**: Configure via Web UI or `web_settings` table (local_mp3_days, github_releases_days, etc.)
+Serving: `podcast-web.service` (systemd **system** unit, port 3050) plus
+`podcast-heartbeat.timer` every 5 minutes. Ingress via the existing
+`cloudflared-tunnel.service` (`linus-et01`); hostname mapping in
+`~/.cloudflared/config.yml`. Check with `systemctl is-active podcast-web.service`
+-- it is a system unit, so `systemctl --user` will report it missing.
+
+## Timezone
+
+The user is in Pacific Time and et01 runs `America/Los_Angeles`. Convert UTC
+timestamps in logs to PT when reporting.
