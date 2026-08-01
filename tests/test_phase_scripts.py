@@ -8,6 +8,8 @@ import os
 import sys
 import subprocess
 import json
+import atexit
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +22,26 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.config.web_config import WebConfigManager
 from src.database.models import get_episode_repo, get_digest_repo
 from scripts.run_publishing import PublishingPipelineRunner
+
+
+# Per-run throwaway database.
+#
+# These tests used to set DATABASE_URL to 'sqlite:///test.db', a RELATIVE path,
+# which resolves against the pytest CWD -- the repo root. So every suite run
+# wrote to the tracked test.db fixture and grew it (12288 -> 20480 bytes),
+# leaving a modified binary in the working tree that nobody intended to commit.
+#
+# Nothing reads seed data from that file: DATABASE_URL here sits alongside
+# 'OPENAI_API_KEY': 'test-key' as placeholder config for the DRY_RUN subprocess
+# invocations below. So a fresh temp path is a strict improvement -- isolated
+# per run, and cleaned up by the OS.
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="podscrape-test-db-")
+TEST_DATABASE_URL = f"sqlite:///{Path(_TEST_DB_DIR) / 'test.db'}"
+
+# mkdtemp does not clean up after itself, and this box's TMPDIR is not
+# auto-purged, so without this each suite run would leave a directory behind --
+# trading a dirty git tree for a dirty tmp.
+atexit.register(lambda: shutil.rmtree(_TEST_DB_DIR, ignore_errors=True))
 
 
 class TestPhaseScripts(unittest.TestCase):
@@ -39,7 +61,7 @@ class TestPhaseScripts(unittest.TestCase):
             'ELEVENLABS_API_KEY': 'test-key',
             'GITHUB_TOKEN': 'test-token',
             'GITHUB_REPOSITORY': 'test/repo',
-            'DATABASE_URL': 'sqlite:///test.db',
+            'DATABASE_URL': TEST_DATABASE_URL,
             'DRY_RUN': 'true'
         })
 
@@ -414,7 +436,7 @@ class TestPhaseScripts(unittest.TestCase):
 
 if __name__ == '__main__':
     # Set up test environment
-    os.environ.setdefault('DATABASE_URL', 'sqlite:///test.db')
+    os.environ.setdefault('DATABASE_URL', TEST_DATABASE_URL)
     os.environ.setdefault('OPENAI_API_KEY', 'test-key')
     os.environ.setdefault('ELEVENLABS_API_KEY', 'test-key')
     os.environ.setdefault('GITHUB_TOKEN', 'test-token')
