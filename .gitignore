@@ -89,8 +89,17 @@ yarn-error.log*
 *.mp3
 *.wav
 *.zip
-!data/completed-tts/**/*.mp3
-!data/completed-tts/**/*.wav
+# The `!data/completed-tts/**` negations were removed 2026-07-31.
+#
+# They dated to 2025-09-09 ("exclude all except TTS outputs"), before the
+# publishing architecture changed. Since v1.51 finished MP3s are uploaded to
+# GitHub Releases and then DELETED locally -- completed-tts/ is a staging area,
+# which is exactly what CLAUDE.md says it is.
+#
+# Keeping them tracked meant every retention run deleted files git still knew
+# about, so the working tree carried 7 phantom deletions that nobody committed.
+# The deliverable lives in the release assets (verified: daily-2026-07-30 holds
+# the day's mp3), so git tracking was duplication that fought retention.
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -106,3 +115,8 @@ config/topics.json
 # dynamic-only. (test-feed.xml is a stray test artifact, ignore it too.)
 web_ui_hosted/public/daily-digest.xml
 web_ui_hosted/public/test-feed.xml
+
+# TypeScript incremental build cache (164K). Rewritten by every `npm run build`,
+# which this project requires before every commit -- so tracking it guaranteed a
+# permanently dirty working tree. Untracked 2026-07-31.
+*.tsbuildinfo
