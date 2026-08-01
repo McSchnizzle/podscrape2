@@ -1,3 +1,4 @@
+import generatedSchema from '@/generated/settings-schema.json'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-guard'
 
@@ -125,38 +126,15 @@ const SETTINGS_SCHEMA: Record<string, Record<string, {
   }
 }
 
-// Mirror of src/config/web_config.py AI_MODELS (lines 109-132)
-const AI_MODELS = {
-  openai: {
-    'gpt-5.2': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Thinking' },
-    'gpt-5.2-chat-latest': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Instant' },
-    'gpt-5.2-pro': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.2 Pro' },
-    'gpt-5.1': { max_output: 128000, max_input: 400000, display_name: 'GPT-5.1' },
-    'gpt-5': { max_output: 128000, max_input: 272000, display_name: 'GPT-5' },
-    'gpt-5-mini': { max_output: 128000, max_input: 400000, display_name: 'GPT-5 Mini' },
-    'gpt-5-nano': { max_output: 64000, max_input: 128000, display_name: 'GPT-5 Nano' },
-  },
-  elevenlabs: {
-    'eleven_v3': { max_characters: 5000, display_name: 'v3 (5k chars, highest quality)' },
-    'eleven_turbo_v2_5': { max_characters: 40000, display_name: 'Turbo v2.5 (40k chars)' },
-    'eleven_turbo_v2': { max_characters: 30000, display_name: 'Turbo v2 (30k chars)' },
-    'eleven_flash_v2_5': { max_characters: 40000, display_name: 'Flash v2.5 (40k chars, low latency)' },
-    'eleven_flash_v2': { max_characters: 30000, display_name: 'Flash v2 (30k chars, low latency)' },
-    'eleven_multilingual_v2': { max_characters: 10000, display_name: 'Multilingual v2 (10k chars)' },
-    'eleven_multilingual_v1': { max_characters: 10000, display_name: 'Multilingual v1 (10k chars)' }
-  },
-  whisper: {
-    'whisper-1': { max_file_size_mb: 25, display_name: 'Whisper-1 (25MB limit)' }
-  },
-  anthropic: {
-    'claude-opus-4-6': { max_output: 128000, max_input: 200000, display_name: 'Claude Opus 4.6' },
-    'claude-sonnet-4-6': { max_output: 64000, max_input: 200000, display_name: 'Claude Sonnet 4.6' },
-    'claude-haiku-4-5-20251001': { max_output: 64000, max_input: 200000, display_name: 'Claude Haiku 4.5' },
-    'claude-opus-4-5-20251101': { max_output: 64000, max_input: 200000, display_name: 'Claude Opus 4.5' },
-    'claude-sonnet-4-5-20250929': { max_output: 64000, max_input: 200000, display_name: 'Claude Sonnet 4.5' },
-  }
-}
+// GENERATED, not hand-copied. Sourced from src/config/models.py::CATALOG via
+// scripts/export_settings_schema.py -> web_ui_hosted/generated/settings-schema.json
+// (regenerate with scripts/regen-settings-schema.sh).
+//
+// This block used to be a hand-maintained mirror and had already drifted: its own
+// comment pointed at "web_config.py lines 109-132" while AI_MODELS had moved to
+// 160-189, and it listed no current-frontier model, so the UI could not select one.
 
+const AI_MODELS = generatedSchema.ai_models as Record<string, Record<string, Record<string, unknown>>>
 export async function GET() {
   const auth = await requireAuth()
   if (!auth.authorized) return auth.error!

@@ -157,36 +157,16 @@ class SettingsKeys:
 
 
 # AI Model Definitions and Limits
-AI_MODELS = {
-    'openai': {
-        'gpt-5.2': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Thinking'},
-        'gpt-5.2-chat-latest': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Instant'},
-        'gpt-5.2-pro': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.2 Pro'},
-        'gpt-5.1': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5.1'},
-        'gpt-5': {'max_output': 128000, 'max_input': 272000, 'display_name': 'GPT-5'},
-        'gpt-5-mini': {'max_output': 128000, 'max_input': 400000, 'display_name': 'GPT-5 Mini'},
-        'gpt-5-nano': {'max_output': 64000, 'max_input': 128000, 'display_name': 'GPT-5 Nano'},
-    },
-    'elevenlabs': {
-        'eleven_v3': {'max_characters': 5000, 'display_name': 'v3 (5k chars, highest quality)'},
-        'eleven_turbo_v2_5': {'max_characters': 40000, 'display_name': 'Turbo v2.5 (40k chars)'},
-        'eleven_turbo_v2': {'max_characters': 30000, 'display_name': 'Turbo v2 (30k chars)'},
-        'eleven_flash_v2_5': {'max_characters': 40000, 'display_name': 'Flash v2.5 (40k chars, low latency)'},
-        'eleven_flash_v2': {'max_characters': 30000, 'display_name': 'Flash v2 (30k chars, low latency)'},
-        'eleven_multilingual_v2': {'max_characters': 10000, 'display_name': 'Multilingual v2 (10k chars)'},
-        'eleven_multilingual_v1': {'max_characters': 10000, 'display_name': 'Multilingual v1 (10k chars)'}
-    },
-    'whisper': {
-        'whisper-1': {'max_file_size_mb': 25, 'display_name': 'Whisper-1 (25MB limit)'}
-    },
-    'anthropic': {
-        'claude-opus-4-6': {'max_output': 128000, 'max_input': 1000000, 'display_name': 'Claude Opus 4.6 (1M)'},
-        'claude-sonnet-4-6': {'max_output': 64000, 'max_input': 1000000, 'display_name': 'Claude Sonnet 4.6 (1M)'},
-        'claude-haiku-4-5-20251001': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Haiku 4.5'},
-        'claude-opus-4-5-20251101': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Opus 4.5'},
-        'claude-sonnet-4-5-20250929': {'max_output': 64000, 'max_input': 200000, 'display_name': 'Claude Sonnet 4.5'},
-    }
-}
+#
+# DERIVED, not declared. src/config/models.py::CATALOG is the source of truth;
+# this name is kept because scripts/export_settings_schema.py and the web UI
+# consume it. Before 2026-07-31 this was a 20-literal dict that had to be edited
+# in lockstep with a hand-copied TypeScript mirror, three hardcoded dropdowns,
+# and ~16 scattered fallbacks every time a model shipped.
+from src.config.models import CATALOG as _MODEL_CATALOG
+from src.config.models import role
+
+AI_MODELS = {provider: dict(models) for provider, models in _MODEL_CATALOG.items()}
 
 Base = declarative_base()
 
@@ -232,8 +212,8 @@ DEFAULTS = {
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MIN_SCORE_FOR_EXTRACTION): {"type": "float", "default": 0.70, "min": 0.0, "max": 1.0},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.MAX_TOPICS_PER_EPISODE): {"type": "int", "default": 15, "min": 3, "max": 20},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RETENTION_DAYS): {"type": "int", "default": 14, "min": 7, "max": 90},
-    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL): {"type": "string", "default": "gpt-5-mini"},
-    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.EXTRACTION_MODEL): {"type": "string", "default": role("scoring")},
+    (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MODEL): {"type": "string", "default": role("scoring")},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_LOOKBACK): {"type": "int", "default": 7, "min": 3, "max": 15},
     (SettingsKeys.TopicTracking.CATEGORY, SettingsKeys.TopicTracking.RECONCILIATION_MIN_OCCURRENCES): {"type": "int", "default": 2, "min": 2, "max": 5},
 
@@ -260,18 +240,18 @@ DEFAULTS = {
     # Topic Evolution Configuration (v2.01+)
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.ENABLE_NOVELTY_DETECTION): {"type": "bool", "default": True},
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.NOVELTY_THRESHOLD): {"type": "float", "default": 0.30, "min": 0.0, "max": 1.0},
-    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL): {"type": "string", "default": "text-embedding-3-small"},
+    (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.EMBEDDING_MODEL): {"type": "string", "default": role("embedding")},
     (SettingsKeys.TopicEvolution.CATEGORY, SettingsKeys.TopicEvolution.SIMILARITY_THRESHOLD): {"type": "float", "default": 0.75, "min": 0.5, "max": 1.0},
 
     # AI Configuration - Content Scoring Phase
-    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL): {"type": "string", "default": role("scoring")},
     (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS): {"type": "int", "default": 1000, "min": 100, "max": 128000},
     (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH): {"type": "int", "default": 10, "min": 1, "max": 50},
     (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_INPUT_TOKENS): {"type": "int", "default": 120000, "min": 1000, "max": 272000},
     (SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.PROMPT_MAX_CHARS): {"type": "int", "default": 4000, "min": 0, "max": 200000},
 
     # AI Configuration - Digest Generation Phase
-    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL): {"type": "string", "default": "gpt-5"},
+    (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL): {"type": "string", "default": role("generation")},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS): {"type": "int", "default": 25000, "min": 1000, "max": 128000},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 500000, "min": 10000, "max": 1000000},
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT): {"type": "float", "default": 20.0, "min": 0.0, "max": 95.0},
@@ -279,18 +259,18 @@ DEFAULTS = {
     (SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_MAX_CHARS): {"type": "int", "default": 200000, "min": 0, "max": 1000000},
 
     # AI Configuration - Metadata Generation Phase
-    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL): {"type": "string", "default": "gpt-5-mini"},
+    (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MODEL): {"type": "string", "default": role("scoring")},
     (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_INPUT_TOKENS): {"type": "int", "default": 60000, "min": 1000, "max": 128000},
     (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_TITLE_TOKENS): {"type": "int", "default": 50, "min": 10, "max": 200},
     (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_SUMMARY_TOKENS): {"type": "int", "default": 200, "min": 50, "max": 1000},
     (SettingsKeys.AIMetadataGeneration.CATEGORY, SettingsKeys.AIMetadataGeneration.MAX_DESCRIPTION_TOKENS): {"type": "int", "default": 500, "min": 100, "max": 2000},
 
     # AI Configuration - TTS Generation Phase
-    (SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL): {"type": "string", "default": "eleven_turbo_v2_5"},
+    (SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL): {"type": "string", "default": role("tts")},
     (SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MAX_CHARACTERS): {"type": "int", "default": 35000, "min": 1000, "max": 40000},
 
     # AI Configuration - Speech-to-Text Phase
-    (SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL): {"type": "string", "default": "whisper-1"},
+    (SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL): {"type": "string", "default": role("stt")},
     (SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MAX_FILE_SIZE_MB): {"type": "int", "default": 20, "min": 1, "max": 25},
 
     # Transcript Processing Controls (scoring + digest ingestion)
@@ -531,7 +511,7 @@ class WebConfigReader:
     def get_ai_scoring_config(self) -> Dict[str, Any]:
         """Get AI content scoring configuration for run_scoring.py"""
         return {
-            'model': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL, 'gpt-5-mini'),
+            'model': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MODEL, role('scoring')),
             'max_tokens': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_TOKENS, 1000),
             'max_episodes_per_batch': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_EPISODES_PER_BATCH, 10),
             'max_input_tokens': self.web_config.get_setting(SettingsKeys.AIContentScoring.CATEGORY, SettingsKeys.AIContentScoring.MAX_INPUT_TOKENS, 120000),
@@ -549,7 +529,7 @@ class WebConfigReader:
     def get_ai_digest_config(self) -> Dict[str, Any]:
         """Get AI digest generation configuration for run_digest.py"""
         return {
-            'model': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL, 'gpt-5'),
+            'model': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MODEL, role('generation')),
             'max_output_tokens': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_OUTPUT_TOKENS, 25000),
             'max_input_tokens': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.MAX_INPUT_TOKENS, 150000),
             'transcript_buffer_percent': self.web_config.get_setting(SettingsKeys.AIDigestGeneration.CATEGORY, SettingsKeys.AIDigestGeneration.TRANSCRIPT_BUFFER_PERCENT, 20.0),
@@ -560,7 +540,7 @@ class WebConfigReader:
     def get_ai_tts_config(self) -> Dict[str, Any]:
         """Get AI TTS generation configuration for run_tts.py"""
         return {
-            'model': self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL, 'eleven_turbo_v2_5'),
+            'model': self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MODEL, role('tts')),
             'max_characters': self.web_config.get_setting(SettingsKeys.AITTSGeneration.CATEGORY, SettingsKeys.AITTSGeneration.MAX_CHARACTERS, 35000)
         }
 
@@ -570,7 +550,7 @@ class WebConfigReader:
             'chunk_duration_minutes': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.CHUNK_DURATION_MINUTES, 10),
             'transcribe_all_chunks': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.TRANSCRIBE_ALL_CHUNKS, True),
             'max_chunks_per_episode': self.web_config.get_setting(SettingsKeys.AudioProcessing.CATEGORY, SettingsKeys.AudioProcessing.MAX_CHUNKS_PER_EPISODE, 3),
-            'stt_model': self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL, 'whisper-1'),
+            'stt_model': self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MODEL, role('stt')),
             'max_file_size_mb': self.web_config.get_setting(SettingsKeys.AISTTTranscription.CATEGORY, SettingsKeys.AISTTTranscription.MAX_FILE_SIZE_MB, 20)
         }
 

@@ -21,6 +21,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
+
+def _claude_cli_model() -> str:
+    """Alias for `claude -p --model`. Sourced from
+    src/config/models.py::MODEL_ROLES so a model change is one edit,
+    not eleven. Falls back to the previous literal if the import
+    fails, so this can never break the pipeline."""
+    try:
+        from src.config.models import role
+        return role("claude_cli")
+    except Exception:
+        return "sonnet"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +82,7 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) ->
     result = subprocess.run(
         [
             claude_path, "-p",
-            "--model", "sonnet",
+            "--model", _claude_cli_model(),
             "--effort", effort,
             "--tools", "",
             "--no-session-persistence",

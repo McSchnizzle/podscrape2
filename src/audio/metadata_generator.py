@@ -23,6 +23,19 @@ from dataclasses import dataclass, field
 
 from ..config.web_config import WebConfigManager, SettingsKeys
 
+
+def _claude_cli_model() -> str:
+    """Alias for `claude -p --model`. Sourced from
+    src/config/models.py::MODEL_ROLES so a model change is one edit,
+    not eleven. Falls back to the previous literal if the import
+    fails, so this can never break the pipeline."""
+    try:
+        from src.config.models import role
+        return role("claude_cli")
+    except Exception:
+        return "sonnet"
+
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -97,9 +110,8 @@ class MetadataGenerator:
         GPT-5.2* models only support 'medium' reasoning effort.
         Other models (like gpt-5-mini) support 'minimal' for faster/cheaper metadata generation.
         """
-        if model.startswith("gpt-5.2"):
-            return "medium"
-        return "minimal"
+        from src.config.models import reasoning_effort
+        return reasoning_effort("metadata", model)
 
     @staticmethod
     def _call_claude_p(prompt: str, timeout: int = 300) -> str:
@@ -111,7 +123,7 @@ class MetadataGenerator:
         env.pop("CLAUDECODE", None)
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
+            [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,
             capture_output=True,

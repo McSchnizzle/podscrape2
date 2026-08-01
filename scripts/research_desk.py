@@ -263,9 +263,11 @@ class UnsafeUrlError(Exception):
 def get_reasoning_effort(model: str) -> str:
     """GPT-5.2* models only support 'medium' reasoning effort (matches
     src/scoring/content_scorer.py::_get_reasoning_effort)."""
-    if model.startswith("gpt-5.2"):
-        return "medium"
-    return "minimal"
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).resolve().parent.parent))
+    from src.config.models import reasoning_effort
+    return reasoning_effort("research", model)
 
 
 # ---------------------------------------------------------------------------

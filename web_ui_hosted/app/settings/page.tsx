@@ -1044,8 +1044,9 @@ export default function SettingsPage() {
                 onChange={(e) => updateLocalSetting('ai_stt_transcription', 'model', e.target.value)}
                 disabled={saving}
               >
-                <option value="whisper-1">Whisper-1</option>
-                <option value="local-whisper">Local Whisper</option>
+                {/* Generated from src/config/models.py::CATALOG via the settings schema.
+                    Was two hardcoded options that bypassed AI_MODELS entirely. */}
+                {renderModelOptions('whisper')}
               </SelectField>
               <NumberField
                 id="ai_stt_transcription-max_file_size_mb"
@@ -1189,8 +1190,8 @@ export default function SettingsPage() {
                 onChange={(e) => updateLocalSetting('topic_evolution', 'embedding_model', e.target.value)}
                 disabled={saving}
               >
-                <option value="text-embedding-3-small">text-embedding-3-small (Fast, $0.02/1M)</option>
-                <option value="text-embedding-3-large">text-embedding-3-large (Higher quality, $0.13/1M)</option>
+                {/* Generated from src/config/models.py::CATALOG. */}
+                {renderModelOptions('embedding')}
               </SelectField>
               <NumberField
                 id="topic_evolution-similarity_threshold"

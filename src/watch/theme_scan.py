@@ -23,6 +23,19 @@ import os
 import subprocess
 from typing import List
 
+
+def _claude_cli_model() -> str:
+    """Alias for `claude -p --model`. Sourced from
+    src/config/models.py::MODEL_ROLES so a model change is one edit,
+    not eleven. Falls back to the previous literal if the import
+    fails, so this can never break the pipeline."""
+    try:
+        from src.config.models import role
+        return role("claude_cli")
+    except Exception:
+        return "sonnet"
+
+
 logger = logging.getLogger("watch_theme_scan")
 
 # The only topic watch themes ever scan against -- both the weekly digest
@@ -53,7 +66,7 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int) -> str:
     env.pop("ANTHROPIC_API_KEY", None)
     full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
     result = subprocess.run(
-        [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+        [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "low",
          "--tools", "", "--no-session-persistence", "-"],
         input=full_prompt,
         capture_output=True,

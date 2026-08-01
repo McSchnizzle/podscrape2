@@ -33,6 +33,19 @@ from src.config.config_manager import ConfigManager
 from src.config.web_config import WebConfigManager, SettingsKeys
 from src.scoring.harold_rnd import HAROLD_RND_SCORE_KEY
 
+
+def _claude_cli_model() -> str:
+    """Alias for `claude -p --model`. Sourced from
+    src/config/models.py::MODEL_ROLES so a model change is one edit,
+    not eleven. Falls back to the previous literal if the import
+    fails, so this can never break the pipeline."""
+    try:
+        from src.config.models import role
+        return role("claude_cli")
+    except Exception:
+        return "sonnet"
+
+
 # Environment variables expected to be loaded by calling script via src.config.env
 
 # Configure logging
@@ -165,9 +178,8 @@ class ContentScorer:
         GPT-5.2* models only support 'medium' reasoning effort.
         Other models (like gpt-5-mini) support 'minimal' for faster/cheaper scoring.
         """
-        if model.startswith("gpt-5.2"):
-            return "medium"
-        return "minimal"
+        from src.config.models import reasoning_effort
+        return reasoning_effort("scoring", model)
 
     @staticmethod
     def _call_claude_p(prompt: str, timeout: int = 300) -> str:
@@ -179,7 +191,7 @@ class ContentScorer:
         env.pop("CLAUDECODE", None)
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "medium",
+            [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,
             capture_output=True,

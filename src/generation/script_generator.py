@@ -56,6 +56,19 @@ class ScriptGenerationError(Exception):
 
 from src.generation.anti_ai_rules import compact_banned_list
 
+
+def _claude_cli_model() -> str:
+    """Alias for `claude -p --model`. Sourced from
+    src/config/models.py::MODEL_ROLES so a model change is one edit,
+    not eleven. Falls back to the previous literal if the import
+    fails, so this can never break the pipeline."""
+    try:
+        from src.config.models import role
+        return role("claude_cli")
+    except Exception:
+        return "sonnet"
+
+
 # Rendered once at import so the f-string prompt above stays readable.
 _ANTI_AI_COMPACT = compact_banned_list()
 
@@ -266,7 +279,7 @@ class ScriptGenerator:
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
 
         result = subprocess.run(
-            [claude_path, "-p", "--model", "sonnet", "--effort", "low",
+            [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "low",
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,

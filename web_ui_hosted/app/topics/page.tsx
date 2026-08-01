@@ -6,6 +6,14 @@ import VoiceSelector from '@/components/VoiceSelector'
 import MultiVoiceConfig, { VoiceConfig } from '@/components/MultiVoiceConfig'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Pill } from '@/components/ui/Pill'
+import generatedSchema from '@/generated/settings-schema.json'
+
+// Generated from src/config/models.py::CATALOG (scripts/regen-settings-schema.sh).
+// The dialogue_model picker used to hardcode 3 of the 7 ElevenLabs models the
+// schema knows about, so four were unreachable from the UI.
+const elevenLabsModels = Object.entries(
+  (generatedSchema.ai_models as Record<string, Record<string, { display_name?: string }>>).elevenlabs ?? {}
+).map(([id, info]) => ({ id, display_name: info.display_name ?? id }))
 
 interface TopicRow {
   id?: number
@@ -287,9 +295,11 @@ export default function TopicsPage() {
                       className="select"
                       disabled={saving}
                     >
-                      <option value="eleven_v3">v3 (High Quality, Dialogue Support)</option>
-                      <option value="eleven_turbo_v2_5">Turbo v2.5 (Fast, Single Voice)</option>
-                      <option value="eleven_flash_v2_5">Flash v2.5 (Low Latency)</option>
+                      {/* Generated from src/config/models.py::CATALOG. Was 3 hardcoded
+                          options, a subset of the 7 the schema knows about. */}
+                      {elevenLabsModels.map((m) => (
+                        <option key={m.id} value={m.id}>{m.display_name}</option>
+                      ))}
                     </select>
                   </div>
 
