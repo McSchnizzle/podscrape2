@@ -52,23 +52,14 @@ class ElevenLabsQuotaExceededError(AudioGenerationError):
     pass
 
 
-# v3.37: Minimum character count for the final speaker turn.
-# Short final turns (<~40 chars, e.g. "See you then.") have been observed to
-# trigger ElevenLabs v3 Text-to-Dialogue hallucinating a duplicate outro
-# (ep 611 incident, 2026-04-17). See docs/audio-incidents.md.
-# v3.53: guard disabled — the padding created audible duplicate sign-offs
-# in every episode (ep 614 worst case: "Take care. Take care, and catch you
-# tomorrow."). The ep 611 hallucination was a one-off; the cure was worse
-# than the disease. See docs/audio-incidents.md.
-# FINAL_TURN_MIN_CHARS = 40
-# FINAL_TURN_PADDING = " Take care, and catch you tomorrow."
+# v4.01: guard_final_turn_length removed. It padded short final speaker turns
+# to dodge an ElevenLabs v3 duplicate-outro hallucination (ep 611, 2026-04-17),
+# was disabled in v3.53 when the padding turned out to cause audible duplicate
+# sign-offs in every episode (ep 614: "Take care. Take care, and catch you
+# tomorrow."), and then sat here for three months as a no-op passthrough with
+# its constants commented out above it. History has the implementation if the
+# hallucination ever comes back. See docs/audio-incidents.md.
 
-
-def guard_final_turn_length(script: str) -> str:
-    """No-op since v3.53 — padding removed because it created audible
-    duplicate sign-offs in every episode. Kept as a passthrough so
-    callers don't need to change."""
-    return script
 
 class AudioGenerator:
     """
@@ -875,10 +866,6 @@ class AudioGenerator:
         logger.info(f"Generating chunked dialogue audio for {topic}")
         logger.info(f"Voice config: {voice_config}")
         logger.info(f"Dialogue model: {dialogue_model}")
-
-        # v3.37 guard disabled in v3.53 — padding caused duplicate sign-offs.
-        # Kept as no-op passthrough for safety.
-        script_content = guard_final_turn_length(script_content)
 
         # Chunk the dialogue script
         # Use 2500 chars for safety margin (API limit is 3000)

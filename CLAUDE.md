@@ -143,21 +143,49 @@ transient and auto-resets if stuck over 10 minutes. Canonical list:
 
 ## Script generation
 
-Two modes per topic, set by `script_mode` in the `topics` table:
+Two modes per topic, set by **`use_dialogue_api`** (a boolean) in the `topics`
+table. This file said `script_mode` for a long time; there is no such column.
 
-- **dialogue** -- SPEAKER_1/SPEAKER_2 with audio tags, needs `voice_1_id` and
-  `voice_2_id`, uses the ElevenLabs Text-to-Dialogue API with ~3k-char chunking
-  at speaker boundaries.
+- **dialogue** (`use_dialogue_api = true`) -- SPEAKER_1/SPEAKER_2 with audio
+  tags, needs `voice_1_id` and `voice_2_id`, uses the ElevenLabs
+  Text-to-Dialogue API with ~3k-char chunking at speaker boundaries.
 - **narrative** -- single voice, `voice_1_id` only, standard TTS with text
   normalization.
 
 Anti-AI writing rules (the banned-phrase list that shapes script voice) live in
-`.claude/commands/generate-digest.md` and are enforced again by the cleanup and
-structural-variety passes in `src/generation/script_generator.py`. Note the list
-is currently duplicated across both files and `src/generation/dedup_pass.py`; if
-you add a rule, add it to all of them or it will only be half-enforced.
+`src/generation/anti_ai_rules.py`, the single source of truth. The markdown
+skill file `.claude/commands/generate-digest.md` cannot import Python, so it
+keeps a hand-maintained copy that `tests/test_anti_ai_rules_sync.py` guards.
+`src/generation/dedup_pass.py` still carries its own inline copy and does not
+import the shared list -- it is unwired from production, so this costs nothing
+today, but revive it and you inherit the drift.
+
+### The digest finalization path (v4.01)
+
+`create_digest` ends at `finalize_script()`, and that is the only place
+post-generation work belongs. It runs the structural variety pass exactly once
+on the draft that actually ships, then the lead-repeat guard
+(`src/generation/lead_repeat_guard.py`), which refuses to open a digest with a
+story the last three digests opened with.
+
+Three things about it are load-bearing and were each learned the hard way, so
+do not "simplify" them without reading the tests first:
+
+- It runs **after** the hard-floor check. The variety pass trims 1-2%, so
+  running it earlier lets polish push a legitimate script under the floor and
+  destroy the night's digest.
+- The guard scores **word tokens with `autojunk=False`**, and takes the **max
+  across several windows**. Character-wise scoring rates a verbatim repeat
+  lower than two unrelated digests; a single wide window misses a repeat that
+  ends after four turns.
+- Every failure path returns the draft unchanged. The guard must never be the
+  reason a digest fails to generate.
+
+`tests/test_finalize_script.py` asserts the wiring and the ordering, because
+v3.48 replaced this call with a comment and nobody noticed for three months.
 
 Format details, tag vocabulary, and worked examples: `docs/script-formats.md`.
+Incident history and the full remediation plan: `script-upgrade-plan.md`.
 
 ## Testing uses real data, never mocks
 

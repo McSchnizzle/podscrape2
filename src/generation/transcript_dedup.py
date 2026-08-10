@@ -52,6 +52,12 @@ logger = logging.getLogger(__name__)
 # leaves plenty of room for prior_content + the system prompt.
 MAX_CHUNK_CHARS = 30_000
 
+# Prior-digest context budget, and a SEPARATE budget for same-batch siblings.
+# They are separate because a single shared budget meant the siblings, which
+# are appended last, were always the part that got cut (see dedup_transcript).
+MAX_PRIOR_DIGEST_CHARS = 200_000
+MAX_SIBLING_CHARS = 100_000
+
 # kanban #2861: safety-net floor. Dedup must never hand the script writer a
 # below-floor stub -- a fragment so thin the writer can only reference it as
 # "we don't have the detail." If a NON-empty dedup result falls below this
@@ -251,6 +257,45 @@ def _call_claude_p(prompt: str, timeout: int = 300) -> str:
             f"claude -p failed (exit {result.returncode}): {result.stderr[:300]}"
         )
     return result.stdout.strip()
+
+
+def _provenance_normalize(text: str) -> str:
+    """Collapse a sentence to a comparison key.
+
+    Deliberately lossy: lowercase, strip everything that is not a letter,
+    digit or space, collapse whitespace. The dedup pass is allowed to fix
+    transcription punctuation and casing while it removes redundant material;
+    it is not allowed to introduce new words.
+    """
+    out = re.sub(r"[^a-z0-9 ]+", " ", text.lower())
+    return re.sub(r"\s+", " ", out).strip()
+
+
+def _invented_sentences(
+    output: str, source: str, min_words: int = 6, max_report: int = 5
+) -> List[str]:
+    """Return output sentences whose text does not appear in `source`.
+
+    Short fragments are skipped: sentence splitting on real transcripts
+    produces plenty of two-word shards, and a rule that flags those would
+    reject every dedup result over punctuation noise. Six words is long
+    enough that an exact substring match against the source is meaningful
+    and short enough to catch a fabricated statistic in its own clause.
+    """
+    haystack = _provenance_normalize(source)
+    if not haystack:
+        return []
+
+    invented: List[str] = []
+    for raw in re.split(r"(?<=[.!?])\s+", output):
+        key = _provenance_normalize(raw)
+        if len(key.split()) < min_words:
+            continue
+        if key not in haystack:
+            invented.append(raw.strip())
+            if len(invented) >= max_report:
+                break
+    return invented
 
 
 def _build_dedup_prompt(
@@ -465,6 +510,7 @@ def dedup_transcript(
     prior_content: str,
     timeout: int = 300,
     evergreen_topics: Optional[List[str]] = None,
+    sibling_content: str = "",
 ) -> TranscriptDedupResult:
     """Dedup a single transcript against prior content.
 
@@ -472,11 +518,15 @@ def dedup_transcript(
         transcript: The episode transcript to clean.
         episode_title: Title for logging.
         episode_id: Episode ID for tracking.
-        prior_content: Combined text of prior digests + previously deduped
-            transcripts in this batch.
+        prior_content: Text of prior digest scripts. Truncated to
+            MAX_PRIOR_DIGEST_CHARS.
         timeout: claude -p timeout in seconds.
         evergreen_topics: Optional list of saturated topics that should be
             stripped more aggressively.
+        sibling_content: Previously deduped transcripts from THIS batch.
+            Budgeted separately from prior_content so it cannot be truncated
+            away -- which is exactly what used to happen (see the truncation
+            comment below).
 
     Returns:
         TranscriptDedupResult with the cleaned transcript.
@@ -529,9 +579,23 @@ def dedup_transcript(
     # Prior content is ordered most-recent-first, so [:max_prior] keeps the
     # newest digests. 200k chars (~50k tokens) covers the last 6-7 digests
     # (~1 week), enough to catch entities introduced earlier in the news cycle.
-    max_prior = 200_000
-    if len(prior_content) > max_prior:
-        prior_content = prior_content[:max_prior]
+    #
+    # v4.01: sibling content is truncated SEPARATELY and appended after.
+    # It used to be appended to the end of prior_content by the batch driver
+    # and then cut off by this very truncation: prior digest scripts alone
+    # exceed 200k, so on every recent run the log read exactly "200,000 chars
+    # prior context" for all nine episodes and the same-batch sibling
+    # comparison this module documents never executed once. Two episodes
+    # covering the same story on the same day were never compared.
+    if len(prior_content) > MAX_PRIOR_DIGEST_CHARS:
+        prior_content = prior_content[:MAX_PRIOR_DIGEST_CHARS]
+
+    if sibling_content:
+        # Keep the tail: the most recently deduped siblings are the ones
+        # whose stories are still live in this batch.
+        if len(sibling_content) > MAX_SIBLING_CHARS:
+            sibling_content = sibling_content[-MAX_SIBLING_CHARS:]
+        prior_content = f"{prior_content}\n{sibling_content}"
 
     # Send the full transcript to dedup. The deduped result replaces
     # ep.transcript_content in the script generator, so truncating here
@@ -628,7 +692,27 @@ def dedup_transcript(
                 )
             cleaned_parts.append("")
         else:
-            cleaned_parts.append(cleaned_chunk)
+            # v4.01 provenance check. This pass is a REMOVAL pass, but it is
+            # implemented as free-form generation with up to 200k chars of
+            # prior digest scripts in context -- so nothing structurally
+            # prevented it from emitting prior-digest prose as though it were
+            # transcript. On 2026-08-08 the digest reproduced a share-price
+            # figure that appears in no source transcript for that day, only
+            # in the previous day's script, and this was the only component
+            # that saw both. Rather than re-tune the prompt and hope, verify:
+            # output sentences must come from the input chunk. On violation
+            # keep the raw chunk, which is the safe direction (worst case is
+            # a duplicate, never an invention).
+            invented = _invented_sentences(cleaned_chunk, chunk)
+            if invented:
+                logger.warning(
+                    f"Pre-gen dedup: '{episode_title[:50]}' chunk {i}/{len(chunks)} "
+                    f"returned {len(invented)} sentence(s) absent from the source "
+                    f"(e.g. {invented[0][:90]!r}); keeping the raw chunk"
+                )
+                cleaned_parts.append(chunk)
+            else:
+                cleaned_parts.append(cleaned_chunk)
 
     # Reassemble. Use "\n\n" between non-empty chunks so the script
     # generator sees a natural paragraph break at chunk seams; drop
@@ -724,6 +808,7 @@ def dedup_episode_batch(
 
     results = []
     novel_transcripts = []
+    sibling_content = ""
 
     for ep in episodes:
         transcript = ep.transcript_content or ""
@@ -746,17 +831,20 @@ def dedup_episode_batch(
             prior_content=prior_content,
             timeout=timeout_per_episode,
             evergreen_topics=evergreen_topics,
+            sibling_content=sibling_content,
         )
         results.append(result)
 
-        # Add this episode's deduped content to the prior content
-        # so the next episode is compared against it too
+        # Accumulate this episode's deduped content so the next episode is
+        # compared against it too. v4.01: kept in its own variable rather
+        # than appended to prior_content, which put it past the truncation
+        # boundary and silently discarded it on every call.
         if result.deduped_transcript and not result.skipped:
             novel_transcripts.append(
                 f"--- EPISODE: {ep.title} ---\n{result.deduped_transcript}\n"
             )
-            prior_content += f"\n--- ALREADY SELECTED: {ep.title} ---\n"
-            prior_content += result.deduped_transcript + "\n"
+            sibling_content += f"\n--- ALREADY SELECTED: {ep.title} ---\n"
+            sibling_content += result.deduped_transcript + "\n"
 
     combined = "\n\n".join(novel_transcripts)
 

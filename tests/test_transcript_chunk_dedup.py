@@ -568,7 +568,16 @@ def test_dedup_transcript_at_floor_not_restored(monkeypatch):
 
     original = _ep19_style_original()
     # Comfortably above both MIN_DEDUPED_CHARS and MIN_RETENTION_PCT of original.
-    kept = "This is genuinely novel analysis not covered anywhere else. " * 40
+    # v4.01: the kept text must be drawn from the ORIGINAL. The dedup pass is a
+    # removal pass and its output is now provenance-checked against the input,
+    # so a mock returning invented prose is rejected in favor of the raw chunk
+    # and this test would be asserting against the wrong string.
+    kept = (
+        "Sonnet 5 is a disappointment. The benchmark numbers tell the story: "
+        "on the coding eval it scored well behind the field, and on the "
+        "reasoning suite the gap was even wider. "
+    ) * 30
+    assert kept in original  # every sentence really is the source's
     assert len(kept) >= MIN_DEDUPED_CHARS
     assert len(kept) / len(original) >= MIN_RETENTION_PCT
 
@@ -674,8 +683,12 @@ def test_batch_restores_thesis_when_over_stripped_by_siblings(monkeypatch):
     # own call once siblings A/B have already run).
     def fake_call(prompt, timeout=300):
         # Siblings dedup normally (plenty of novel framing survives).
-        if "Sibling content A." in prompt or "Sibling content B." in prompt:
-            return "Sibling novel framing not covered elsewhere. " * 50
+        # v4.01: returned text must come from the sibling's own transcript --
+        # output is provenance-checked against the input chunk.
+        if "Sibling content A." in prompt:
+            return "Sibling content A. " * 50
+        if "Sibling content B." in prompt:
+            return "Sibling content B. " * 50
         # The contrarian episode gets over-stripped by the (buggy) model
         # behavior this safety net exists to catch.
         return "Sonnet 5 is a disappointment."
@@ -743,13 +756,19 @@ def test_batch_complete_counts_include_below_floor_drops(monkeypatch, caplog):
     # test_batch_restores_thesis_when_over_stripped_by_siblings) so each
     # episode's own transcript-to-clean prompt is unambiguous even after
     # prior_content accumulates earlier episodes' titles/output.
-    ep_kept = _ThesisEpisode(1, "Kept episode", "Novel content. " * 300)
+    # v4.01: the match marker must appear in the episode's RAW transcript but
+    # NOT in the text the mock returns. Sibling content now genuinely reaches
+    # later prompts (it used to be truncated away), so a marker that survives
+    # into the output would make this branch fire for every later episode too.
+    ep_kept = _ThesisEpisode(1, "Kept episode", "Novel content. " * 300 + "KEEP_MARKER")
     ep_restored = _ThesisEpisode(2, "Restored episode", _ep19_style_original() + " RESTORE_MARKER")
     ep_dropped = _ThesisEpisode(3, "Dropped episode", _ep19_style_original() + " DROP_MARKER")
 
     def fake_call(prompt, timeout=300):
-        if "Novel content." in prompt:
-            return "Genuinely novel material not covered anywhere else. " * 30
+        if "KEEP_MARKER" in prompt:
+            # v4.01: drawn from the episode's own transcript so the
+            # provenance check accepts it (see dedup_transcript).
+            return "Novel content. " * 100
         if "RESTORE_MARKER" in prompt:
             return "Tiny stub."  # below floor -> restored
         return "[NO_NEW_CONTENT]"  # Dropped episode -> genuinely empty

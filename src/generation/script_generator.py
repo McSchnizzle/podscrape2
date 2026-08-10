@@ -989,15 +989,19 @@ class ScriptGenerator:
 
     def _build_repetition_avoidance_instructions(self, recently_covered_arcs: List[str], topic: str = "AI and Technology") -> str:
         """
-        Build lightweight repetition avoidance instructions.
+        Build repetition avoidance instructions naming the saturated topics.
 
-        Since v3.34, transcripts are pre-deduped before reaching the script
-        generator, so we no longer need to include full prior digest snippets
-        in the prompt. Just a short note that the transcripts have been
-        pre-filtered for novelty.
+        v4.01: this used to return a CONSTANT string that discarded
+        `recently_covered_arcs` entirely and asserted that everything in the
+        prompt was new. That assertion is false whenever pre-generation dedup
+        fails open, and on 2026-08-08 it turned a dedup miss into an
+        instruction to cover yesterday's lead story thoroughly -- the digest
+        reopened with the previous day's cold open near verbatim. The names
+        were computed and logged the whole time; they just never reached the
+        model. Now they do, as a constraint.
 
         Args:
-            recently_covered_arcs: List of arc names recently covered
+            recently_covered_arcs: Saturated topic names already covered.
             topic: Topic name (unused but kept for interface compatibility)
 
         Returns:
@@ -1006,17 +1010,27 @@ class ScriptGenerator:
         if not recently_covered_arcs:
             return ""
 
-        return """
+        covered = "\n".join(f"- {name}" for name in recently_covered_arcs)
 
-## PRE-FILTERED TRANSCRIPTS
+        return f"""
 
-These transcripts have been pre-filtered to remove content that was already
-covered in recent episodes. The material you see below is what's NEW and
-hasn't been reported to our audience yet. Cover it thoroughly — every
-transcript provided has unique content worth discussing.
+## ALREADY COVERED — DO NOT LEAD WITH THESE
 
-Do NOT skip any episode or treat any content as "old news" — if it's in
-the transcript, it survived the dedup filter because it's genuinely new.
+Our audience already heard these stories in recent digests:
+
+{covered}
+
+Rules for the stories listed above:
+- Do NOT open the digest with any of them. The cold open must be a story the
+  audience has not heard from us yet.
+- Do NOT re-explain the background. A passing reference ("the DeepMind
+  shakeup we covered") is fine; re-introducing what it is, is not.
+- If today's transcripts carry a genuinely NEW development on one of them —
+  a new source's take, a reaction, a reversal, a consequence — cover that
+  development as an update in the body of the episode, not as the lead.
+
+Everything else in the transcripts below is fair game. Cover each episode in
+the depth its content allows.
 """
 
     def _build_claude_p_dialogue_prompt(
@@ -1041,11 +1055,20 @@ the transcript, it survived the dedup filter because it's genuinely new.
 
         Falls back to the hardcoded system_prompt if the skill file is not found.
 
+        v4.01: story_arc_context and repetition_instructions really are
+        injected now. Until v4.01 they were accepted as parameters and then
+        omitted from the returned prompt -- the docstring used to note that
+        theme_emphasis, "unlike story_arc_context/repetition_instructions
+        above," was guaranteed to reach the model, which was an accurate
+        description of a bug. `tests/test_prompt_renders_dynamic_blocks.py`
+        asserts against the RENDERED PROMPT STRING on both branches, so a
+        future refactor cannot quietly drop one again -- testing the builder
+        helper's return value is what let this hide for so long.
+
         theme_emphasis: optional pre-built watch-theme emphasis block, appended
-        verbatim when present. Unlike story_arc_context/repetition_instructions
-        above, this one is guaranteed to reach the model on both branches of
-        this method (skill-file-found and fallback) since the fallback simply
-        returns `system_prompt`, which the caller has already appended it to.
+        verbatim when present. Reaches the model on both branches of this
+        method (skill-file-found and fallback) since the fallback returns
+        `system_prompt`, which the caller has already appended it to.
         """
         skill_path = Path(__file__).parent.parent.parent / '.claude' / 'commands' / 'generate-digest.md'
 
@@ -1054,14 +1077,26 @@ the transcript, it survived the dedup filter because it's genuinely new.
             logger.info(f"Loaded dialogue skill from {skill_path.name} ({len(skill_content)} chars)")
         else:
             logger.warning(f"Skill file not found at {skill_path}, falling back to hardcoded prompt")
-            return system_prompt
+            # v4.01: the fallback must carry the dynamic blocks too. The
+            # caller appends theme_emphasis to system_prompt but not these,
+            # so returning system_prompt bare dropped them on this branch as
+            # well.
+            return f"{system_prompt}\n{story_arc_context}{repetition_instructions}"
 
+        # v4.01: story_arc_context and repetition_instructions used to be
+        # accepted here and silently dropped -- the docstring above still
+        # records that they were the exception theme_emphasis was contrasted
+        # against. In their place sat an unconditional assertion that
+        # "Everything provided is NEW material," which is false whenever
+        # pre-generation dedup fails open and was the instruction that
+        # actually reached the writer during the 2026-08-08 duplicate-intro
+        # incident. Both blocks are now interpolated; the false assertion is
+        # gone. Each is empty-string when it has nothing to say.
         prompt = (
             f"{skill_content}\n\n"
-            f"## Topic-Specific Instructions\n{topic_instructions}\n\n"
-            f"**PRE-FILTERED TRANSCRIPTS:** These transcripts have been pre-filtered "
-            f"to remove content already covered in recent episodes. Everything provided "
-            f"is NEW material. Cover it all thoroughly.\n\n"
+            f"## Topic-Specific Instructions\n{topic_instructions}\n"
+            f"{story_arc_context}"
+            f"{repetition_instructions}\n"
             f"Date: {digest_date.strftime('%B %d, %Y')}\n"
             f"Topic: {topic}\n"
             f"Episodes: {num_episodes}\n\n"
@@ -1184,8 +1219,10 @@ TOPIC INSTRUCTIONS:
 {instruction.content}
 
 **PRE-FILTERED TRANSCRIPTS:**
-These transcripts have been pre-filtered to remove content already covered in
-recent episodes. Everything below is NEW material. Cover it all thoroughly.
+These transcripts have been pre-filtered against recent digests, so most of
+what follows should be new. The filter is not perfect: if a passage restates a
+story listed as already covered, treat it as old news regardless of the fact
+that it reached you.
 
 REQUIREMENTS:
 - Target 25,000-30,000 characters (this is measured in characters, not words)
@@ -2071,6 +2108,133 @@ REMINDER: Each transcript above is the actual content provided for that episode.
             logger.debug(f"Feed priority lookup failed, falling back to score-only sort: {e}")
             return None
 
+    def finalize_script(
+        self,
+        script_content: str,
+        topic: str,
+        dialogue: bool = True,
+        floor: int = 10000,
+        already_varied: bool = False,
+    ) -> str:
+        """The single mandatory post-expansion path. Two jobs, in order.
+
+        1. Structural variety, exactly once, on the draft that actually ships.
+           v3.48 moved this pass off the intermediate expansion iterations to
+           save time and left a comment where the final call was meant to go,
+           so from 2026-04-24 every digest that expanded shipped without it.
+           Running it here keeps the call count at one per night rather than
+           adding a second.
+
+        2. The lead-repeat guard: refuse to open with a story we opened with
+           in the last few days. See src/generation/lead_repeat_guard.py.
+
+        Both steps fail safe. Anything that goes wrong returns the draft
+        unchanged, because shipping the draft is always better than shipping
+        nothing, and the caller has already cleared the hard floor.
+        """
+        from src.generation import lead_repeat_guard as guard
+
+        if not script_content:
+            return script_content
+
+        # --- 1. Structural variety -------------------------------------
+        if already_varied:
+            logger.info("Finalize: variety pass already ran on this draft (no expansion)")
+        else:
+            varied = self._run_structural_variety_pass(script_content)
+            # The pass trims 1-2%. The caller's floor check ran on the
+            # pre-pass length, so re-check rather than let polish push a
+            # legitimate script under the floor.
+            if len(varied) < floor <= len(script_content):
+                logger.warning(
+                    f"Finalize: variety pass would drop script under the hard floor "
+                    f"({len(script_content)} -> {len(varied)} < {floor}); keeping pre-pass draft"
+                )
+            else:
+                script_content = varied
+
+        # --- 2. Lead-repeat guard --------------------------------------
+        try:
+            result = guard.check_lead_repeat(script_content, topic=topic, dialogue=dialogue)
+        except Exception as exc:
+            logger.warning(f"Finalize: lead-repeat check failed ({exc}); shipping draft as is")
+            return script_content
+
+        if not result.tripped:
+            return script_content
+
+        logger.error(
+            f"Finalize: lead repeats digest {result.matched_digest_id} "
+            f"({result.matched_digest_date}) at {result.score:.3f} >= {result.threshold}; "
+            f"attempting a lead rewrite"
+        )
+
+        rewritten = self._rewrite_repeated_lead(script_content, result, dialogue)
+        if rewritten is None:
+            logger.error(
+                "Finalize: lead rewrite unavailable or rejected; SHIPPING THE REPEAT. "
+                "This digest opens on a story the audience already heard."
+            )
+            return script_content
+
+        logger.info("Finalize: lead rewritten; repeat resolved")
+        return rewritten
+
+    def _rewrite_repeated_lead(self, script_content: str, result, dialogue: bool) -> Optional[str]:
+        """Regenerate a repeated lead segment. Returns None if unusable.
+
+        Every rejection path here returns None so the caller keeps the
+        original. A duplicate opening that we logged loudly is a smaller
+        problem than a fresh opening containing invented facts, so the
+        candidate has to clear three checks: it must still be a well-formed
+        script, it must not introduce a number absent from the rest of the
+        draft, and it must actually beat the threshold it was written to beat.
+        """
+        from src.generation import lead_repeat_guard as guard
+
+        try:
+            from src.utils.claude_p_health import is_claude_p_healthy
+
+            if not is_claude_p_healthy():
+                logger.warning("Lead rewrite: claude -p unhealthy, skipping")
+                return None
+        except Exception:
+            pass
+
+        prompt = guard.build_rewrite_prompt(script_content, result, dialogue)
+        try:
+            new_lead = self._call_claude_p(prompt, "", timeout=360).strip()
+        except Exception as exc:
+            logger.warning(f"Lead rewrite: claude -p failed ({exc})")
+            return None
+
+        if not new_lead or len(new_lead) < 200:
+            logger.warning(f"Lead rewrite: result too short ({len(new_lead)} chars)")
+            return None
+
+        if dialogue and "SPEAKER_1:" not in new_lead:
+            logger.warning("Lead rewrite: result lost speaker labels")
+            return None
+
+        body = script_content[len(result.lead):]
+        if guard.contains_unsupported_numbers(new_lead, body + result.lead):
+            logger.warning("Lead rewrite: result introduces a number absent from the script")
+            return None
+
+        candidate = new_lead.rstrip() + "\n\n" + body.lstrip()
+
+        recheck = guard.check_lead_repeat(candidate, topic="", dialogue=dialogue,
+                                          prior_digests=[{"id": result.matched_digest_id,
+                                                          "date": result.matched_digest_date,
+                                                          "content": result.matched_lead}])
+        if recheck.tripped:
+            logger.warning(
+                f"Lead rewrite: still repeats at {recheck.score:.3f}; rejecting"
+            )
+            return None
+
+        return candidate
+
     def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str, List[str]]:
         """
         Check if the digest would have significant overlap with recent coverage.
@@ -2524,7 +2688,18 @@ Thank you for your understanding, and we'll see you tomorrow!
                         f"had no new content, {len(episodes)} remaining"
                     )
         except Exception as e:
-            logger.warning(f"Pre-gen transcript dedup failed ({e}), using original transcripts")
+            # v4.01: ERROR, not warning. Pre-generation dedup is the only
+            # cross-digest repetition defense in front of the writer; when it
+            # dies the whole batch falls back to raw transcripts and the run
+            # is undefended. That deserves to be visible in the alerting path
+            # rather than filed as a warning nobody reads.
+            logger.error(
+                f"Pre-gen transcript dedup FAILED ({e}) -- falling back to raw "
+                f"transcripts for all {len(original_episodes)} episodes. This run "
+                f"has NO cross-digest repetition filtering; the finalize_script "
+                f"lead-repeat guard is the only remaining defense.",
+                exc_info=True,
+            )
             episodes = original_episodes
             dropped_episode_ids = []
 
@@ -2566,6 +2741,10 @@ Thank you for your understanding, and we'll see you tomorrow!
         # loop, but existing_ids was re-created from `episodes` at the top of
         # every iteration, so the update was always thrown away.)
         excluded_from_expansion = {ep.id for ep in episodes if ep.id is not None}
+        # v4.01: track whether we regenerated. Every expansion iteration
+        # discards the draft the variety pass ran on, so finalize_script has
+        # to know whether the surviving draft has been through it.
+        did_expand = False
         while len(script_content) < TARGET_CHARS and len(episodes) < MAX_TRANSCRIPTS:
             extras = self._get_extra_scored_episodes(
                 topic=topic,
@@ -2601,6 +2780,7 @@ Thank you for your understanding, and we'll see you tomorrow!
                 continue
 
             episodes = list(episodes) + list(extras)
+            did_expand = True
             logger.info(
                 f"Expanding {topic} digest to {len(episodes)} episodes "
                 f"(prior script: {len(script_content)} chars, target: {TARGET_CHARS})"
@@ -2627,15 +2807,16 @@ Thank you for your understanding, and we'll see you tomorrow!
                 )
                 # Keep prior script_content (may be empty); loop will try more episodes
 
-        # v3.48: Run the final variety pass now if we skipped it during expansion
-        # (only if we actually expanded -- if no expansion happened, the initial
-        # generate_script already ran the variety pass)
-
         logger.info(
             f"Post-expansion script for {topic}: {len(script_content)} chars "
             f"from {len(episodes)} episodes (target {TARGET_CHARS}, floor {HARD_FLOOR})"
         )
 
+        # The floor check runs BEFORE finalization, deliberately. v3.48 left an
+        # empty slot for the final variety pass here, above this check; the
+        # pass removes 220-270 chars in practice, so restoring it there would
+        # have let a draft that legitimately cleared 10,000 fail the floor
+        # afterwards and destroy the night's digest.
         if len(script_content) < HARD_FLOOR:
             raise ScriptGenerationError(
                 f"Script for {topic} below hard floor after expansion: "
@@ -2644,8 +2825,20 @@ Thank you for your understanding, and we'll see you tomorrow!
                 f"Generation likely failed or transcripts lacked enough new material."
             )
 
-        # Store original (pre-dedup) transcript content for audit
+        # Pre-finalization draft, kept for audit. This is the "predupe" content
+        # in the column's documented sense: the lead-repeat guard inside
+        # finalize_script is the dedup step now that the v3.26 post-generation
+        # pass is gone.
         predupe_content = script_content
+
+        script_content = self.finalize_script(
+            script_content,
+            topic=topic,
+            dialogue=self._is_dialogue_mode(topic),
+            floor=HARD_FLOOR,
+            already_varied=not did_expand,
+        )
+        word_count = len(script_content.split())
 
         # Save script to file with timestamp for uniqueness
         digest_timestamp = datetime.now(UTC)
