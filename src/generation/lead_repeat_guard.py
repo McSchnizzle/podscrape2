@@ -29,12 +29,24 @@ DESIGN NOTES, because two of these were review findings:
    `autojunk=False`. All three of those details were forced by measurement
    against the 14 adjacent pairs in the retained history:
 
-     - Character-wise comparison silently collapses. `difflib` enables its
-       autojunk heuristic on sequences of 200+ elements, treating any element
-       in more than 1% of the sequence as noise -- which, for characters, is
-       most of the alphabet. The incident pair scored 0.034 that way, BELOW
-       the 0.080 of a normal pair. Word tokens plus autojunk=False score it
-       0.821.
+     - Character-wise comparison collapses once the text is normalized.
+       `difflib` enables its autojunk heuristic on sequences of 200+ elements,
+       treating any element in more than 1% of the sequence as noise -- which,
+       for characters, is most of the alphabet. Normalizing makes this WORSE,
+       not better: stripping labels, tags and whitespace concentrates the
+       character frequencies and pushes more of them over the junk threshold.
+       Measured on normalized text, char-wise, autojunk on:
+
+           window   incident   worst normal
+           n=2        0.355        0.034
+           n=4        0.049        0.020
+           n=6        0.034        0.080   <- inverted; a verbatim repeat
+                                              scoring BELOW an unrelated pair
+
+       (On RAW text the same comparison holds up -- 0.745/0.137 at n=2 -- so
+       the trap is specifically the combination of normalization and
+       characters. Both are worth keeping, so the resolution is word tokens.)
+       Word tokens plus autojunk=False score the incident 0.821.
      - A single wide window also misses it: at six turns the incident scores
        0.370, under the 0.45 threshold, because the repeat ends after turn
        four and the remaining divergence dilutes it. Taking the max over
@@ -42,7 +54,17 @@ DESIGN NOTES, because two of these were review findings:
        recycled segment.
 
    Measured separation with those settings: incident 0.821, worst normal
-   0.187, mean normal 0.104.
+   0.187 (the 2026-08-06/07 pair), mean normal 0.104. Both figures are the
+   max across windows and the max across argument order -- SequenceMatcher's
+   greedy matching is not quite symmetric, and 0.187 is the conservative side
+   of a 0.168/0.187 pair.
+
+   IF YOU RE-TUNE THE THRESHOLD, measure with normalize_lead() and not a bare
+   tokenizer. Dropping the boilerplate strip moves the worst normal from 0.187
+   to 0.278 while moving the incident only 0.821 -> 0.886, i.e. it cuts the
+   margin from 4.4x to 3.2x. The nightly welcome template is a constant floor
+   under every comparison, and removing it buys more on the negatives than it
+   costs on the positive.
 """
 from __future__ import annotations
 

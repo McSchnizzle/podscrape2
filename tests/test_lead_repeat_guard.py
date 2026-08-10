@@ -175,3 +175,46 @@ def test_rewrite_prompt_carries_both_leads(incident):
     assert "do not resemble this" in prompt.lower()
     assert "trillion dollar company" in prompt
     assert "Introduce no new" in prompt
+
+
+def test_boilerplate_strip_widens_the_margin(incident):
+    """Pins the reason normalize_lead removes the welcome template.
+
+    A reviewer measuring with a bare tokenizer got a worst-normal of 0.278
+    against this guard's 0.187 and read it as a thinner safety margin. Both
+    numbers are correct; the difference is entirely the boilerplate strip,
+    which lowers the negatives far more than it lowers the positive. If a
+    future tuning pass drops the strip, the margin narrows from ~4.4x to
+    ~3.2x and this test says so out loud.
+    """
+    import difflib
+    import re
+
+    from src.generation.lead_repeat_guard import LEAD_TURN_WINDOWS, _lead_at_turns
+
+    def bare_tokens(text):
+        return re.findall(r"[a-z0-9']+", text.lower())
+
+    def score(a, b, tokenizer):
+        return max(
+            difflib.SequenceMatcher(None, tokenizer(_lead_at_turns(a, n)),
+                                    tokenizer(_lead_at_turns(b, n)), autojunk=False).ratio()
+            for n in LEAD_TURN_WINDOWS
+        )
+
+    def worst_normal(tokenizer):
+        return max(score(p["earlier"], p["later"], tokenizer) for p in incident["normal_pairs"])
+
+    stripped = worst_normal(lambda t: normalize_lead(t).split())
+    unstripped = worst_normal(bare_tokens)
+
+    assert stripped < unstripped, "the boilerplate strip should lower the negatives"
+    # Both sides of the comparison, so a regression in either is visible.
+    assert stripped < 0.25
+    assert unstripped > 0.25
+
+    inc = score(incident["aug7"]["script"], incident["aug8"]["script"],
+                lambda t: normalize_lead(t).split())
+    assert inc / stripped > 4.0, (
+        f"margin over worst normal collapsed: incident {inc:.3f} vs normal {stripped:.3f}"
+    )
