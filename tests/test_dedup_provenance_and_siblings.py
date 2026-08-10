@@ -185,3 +185,70 @@ def test_batch_accumulates_siblings_separately(monkeypatch):
     )
     # Prior digest content must stay separate from sibling content.
     assert "UNIQUE_BODY_1" not in calls[1]["prior_content"]
+
+
+# ---------------------------------------------------------------------------
+# Sentence-level stripping (refinement measured against the Aug 8 pool)
+# ---------------------------------------------------------------------------
+
+
+def test_strip_invented_removes_only_the_offending_sentence():
+    """Whole-chunk rejection cost most of the dedup benefit. Measured on the
+    2026-08-08 pool it fired on 11 chunks and pushed episode 794 from 54%
+    retained back to 82% -- nearly always over one or two stray sentences."""
+    # Realistic proportions: a 30k chunk is hundreds of sentences, so one or
+    # two strays are a couple of percent, not a third. A three-sentence output
+    # would (correctly) exceed MAX_INVENTED_FRACTION and be discarded whole --
+    # an output that short from a real chunk is itself a red flag.
+    source = (
+        "The company announced a new chip today at its developer event. "
+        "Analysts had expected this announcement for several months beforehand. "
+        "The stock closed flat despite the wide news coverage that followed. "
+    ) * 20
+    output = (
+        "The company announced a new chip today at its developer event. "
+        "Analysts had expected this announcement for several months beforehand. "
+        "The stock closed flat despite the wide news coverage that followed. "
+    ) * 20 + "This transcript covers chips and earnings, none of which is new."
+    cleaned, removed, fraction = td.strip_invented(output, source)
+    assert len(removed) == 1
+    assert "This transcript covers" in removed[0]
+    assert "announced a new chip" in cleaned
+    assert "stock closed flat" in cleaned
+    assert 0 < fraction < td.MAX_INVENTED_FRACTION
+
+
+def test_heavy_rewrite_falls_back_to_the_raw_chunk(monkeypatch):
+    """Past MAX_INVENTED_FRACTION the model rewrote rather than removed, and
+    stripping would leave incoherent text."""
+    transcript = "The company announced a new chip today at its developer event. " * 40
+    monkeypatch.setattr(
+        td, "_call_claude_p",
+        lambda *a, **k: "Google shares slid four percent after the surprise departure. " * 10,
+    )
+    monkeypatch.setattr(td, "split_transcript_into_chunks", lambda t, n: [t])
+
+    result = td.dedup_transcript(
+        transcript=transcript, episode_title="Heavy rewrite", episode_id=9,
+        prior_content="unrelated prior digest text",
+    )
+    assert result.deduped_transcript == transcript
+    assert "four percent" not in result.deduped_transcript
+
+
+def test_light_contamination_is_stripped_not_discarded(monkeypatch):
+    """The real 2026-08-08 shape: mostly faithful output with one line lifted
+    from a prior digest script."""
+    keep = "The company announced a new chip today at its developer event. "
+    transcript = keep * 40
+    leaked = "SPEAKER_1: Natasha here, and Malcolm, and here is the number I cannot get past. "
+    monkeypatch.setattr(td, "_call_claude_p", lambda *a, **k: (keep * 20) + leaked)
+    monkeypatch.setattr(td, "split_transcript_into_chunks", lambda t, n: [t])
+
+    result = td.dedup_transcript(
+        transcript=transcript, episode_title="Leaked line", episode_id=10,
+        prior_content="prior digest containing that line",
+    )
+    assert "Natasha here" not in result.deduped_transcript, "prior-digest text survived"
+    assert "announced a new chip" in result.deduped_transcript, "dedup work was thrown away"
+    assert result.deduped_chars < len(transcript)

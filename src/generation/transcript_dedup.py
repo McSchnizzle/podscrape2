@@ -271,6 +271,47 @@ def _provenance_normalize(text: str) -> str:
     return re.sub(r"\s+", " ", out).strip()
 
 
+# Above this fraction of invented sentences the model has rewritten rather
+# than removed, and stripping the offenders would leave incoherent text -- so
+# the whole chunk is discarded in favor of the raw original instead.
+MAX_INVENTED_FRACTION = 0.25
+
+
+def strip_invented(
+    output: str, source: str, min_words: int = 6
+) -> Tuple[str, List[str], float]:
+    """Remove output sentences absent from `source`.
+
+    Returns (cleaned_output, removed_sentences, fraction_removed).
+
+    Whole-chunk rejection was the first implementation and it was too blunt:
+    measured against the 2026-08-08 pool it fired on 11 chunks and pushed the
+    Vergecast episode from 54% retained back up to 82%, i.e. it bought
+    provenance by throwing away most of the dedup. Nearly every rejection was
+    one or two stray sentences -- meta-commentary like "This transcript covers
+    X, none of which..." plus, in one case, a verbatim line lifted from a
+    prior digest script. Dropping those individually keeps the rest of the
+    model's work.
+    """
+    sentences = re.split(r"(?<=[.!?])\s+", output)
+    haystack = _provenance_normalize(source)
+    if not haystack:
+        return output, [], 0.0
+
+    kept, removed = [], []
+    for raw in sentences:
+        key = _provenance_normalize(raw)
+        if len(key.split()) >= min_words and key not in haystack:
+            removed.append(raw.strip())
+        else:
+            kept.append(raw)
+
+    if not sentences:
+        return output, [], 0.0
+    fraction = len(removed) / len(sentences)
+    return " ".join(kept).strip(), removed, fraction
+
+
 def _invented_sentences(
     output: str, source: str, min_words: int = 6, max_report: int = 5
 ) -> List[str]:
@@ -703,16 +744,24 @@ def dedup_transcript(
             # output sentences must come from the input chunk. On violation
             # keep the raw chunk, which is the safe direction (worst case is
             # a duplicate, never an invention).
-            invented = _invented_sentences(cleaned_chunk, chunk)
-            if invented:
+            stripped, invented, fraction = strip_invented(cleaned_chunk, chunk)
+            if not invented:
+                cleaned_parts.append(cleaned_chunk)
+            elif fraction > MAX_INVENTED_FRACTION:
                 logger.warning(
                     f"Pre-gen dedup: '{episode_title[:50]}' chunk {i}/{len(chunks)} "
                     f"returned {len(invented)} sentence(s) absent from the source "
-                    f"(e.g. {invented[0][:90]!r}); keeping the raw chunk"
+                    f"({fraction:.0%} of output) -- this is a rewrite, not a removal; "
+                    f"keeping the raw chunk. First: {invented[0][:90]!r}"
                 )
                 cleaned_parts.append(chunk)
             else:
-                cleaned_parts.append(cleaned_chunk)
+                logger.warning(
+                    f"Pre-gen dedup: '{episode_title[:50]}' chunk {i}/{len(chunks)} "
+                    f"invented {len(invented)} sentence(s) ({fraction:.0%} of output); "
+                    f"stripped them and kept the rest. First: {invented[0][:90]!r}"
+                )
+                cleaned_parts.append(stripped)
 
     # Reassemble. Use "\n\n" between non-empty chunks so the script
     # generator sees a natural paragraph break at chunk seams; drop
