@@ -29,13 +29,14 @@ DESIGN NOTES, because two of these were review findings:
    `autojunk=False`. All three of those details were forced by measurement
    against the 14 adjacent pairs in the retained history:
 
-     - Character-wise comparison collapses once the text is normalized.
-       `difflib` enables its autojunk heuristic on sequences of 200+ elements,
-       treating any element in more than 1% of the sequence as noise -- which,
-       for characters, is most of the alphabet. Normalizing makes this WORSE,
-       not better: stripping labels, tags and whitespace concentrates the
-       character frequencies and pushes more of them over the junk threshold.
-       Measured on normalized text, char-wise, autojunk on:
+     - Character-wise comparison is unusable here, and its failure is
+       unstable rather than merely bad. `difflib` enables its autojunk
+       heuristic on sequences of 200+ elements, treating any element in more
+       than 1% of the sequence as noise -- for characters, that is most of the
+       alphabet. How badly it degrades then depends on incidental choices that
+       have nothing to do with similarity. Measured char-wise, autojunk on,
+       on `normalize_lead(_lead_at_turns(script, n))` -- the extractor is
+       load-bearing, so reproduce it with exactly that:
 
            window   incident   worst normal
            n=2        0.355        0.034
@@ -43,10 +44,16 @@ DESIGN NOTES, because two of these were review findings:
            n=6        0.034        0.080   <- inverted; a verbatim repeat
                                               scoring BELOW an unrelated pair
 
-       (On RAW text the same comparison holds up -- 0.745/0.137 at n=2 -- so
-       the trap is specifically the combination of normalization and
-       characters. Both are worth keeping, so the resolution is word tokens.)
-       Word tokens plus autojunk=False score the incident 0.821.
+       Two knobs move those numbers by an order of magnitude on identical
+       input. Rebuild the lead as `" ".join(lines starting with SPEAKER_)`
+       instead of a contiguous slice and n=4 reads 0.700 instead of 0.049.
+       Strip spaces from the normalized text and n=2 reads 0.862 instead of
+       0.355. A reviewer who reconstructed the segment the first way saw no
+       inversion at all and reasonably concluded this note was wrong -- hence
+       naming the extractor above.
+
+       Word tokens sidestep the entire cluster: no autojunk sensitivity, no
+       whitespace sensitivity, no extractor sensitivity. Incident 0.821.
      - A single wide window also misses it: at six turns the incident scores
        0.370, under the 0.45 threshold, because the repeat ends after turn
        four and the remaining divergence dilutes it. Taking the max over
