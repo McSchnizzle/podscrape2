@@ -170,6 +170,10 @@ episode logged "using pre-deduped transcript". But it is exactly the hole that
 any future whole-episode drop mechanism would widen, which is a second reason
 that mechanism is deferred (see §3).
 
+Fixed in v4.01: a cache miss is now deduped on demand
+(`_dedup_expansion_episode`), failing open to the raw transcript so a dedup
+error still cannot cost us the episode.
+
 ### N4 (P1, new — found in review) Dedup failure is swallowed silently
 
 `create_digest:2526` wraps the entire pre-gen dedup batch in a bare
@@ -251,6 +255,10 @@ promising a final variety pass, followed by no code. Measured:
 | Aug 7 | 5 | 1 |
 | Aug 8 | 4 | 1 |
 | Aug 9 | 1 | 1 |
+
+(The Aug 6 row was measured from `logs/digest_20260806_210428.log` on 2026-08-09;
+log retention deleted that file later the same day, so it is no longer
+reproducible. The Aug 7-9 rows still are.)
 
 The single pass always runs on the **initial draft**, which the expansion loop
 then throws away and regenerates. Every digest that expanded has shipped
@@ -465,3 +473,33 @@ Real data, no mocks, per project standard.
 
 v4.01 in `web_ui_hosted/app/version.ts`, named in the commit message, with
 `npm run build` and `npx tsc --noEmit` clean before commit.
+
+---
+
+## 7. Status — what actually shipped in v4.01
+
+| Item | State |
+|---|---|
+| F1 all three prompt renderers carry the real block; false novelty assertion deleted | **shipped** |
+| F2 dedup output provenance-checked against its input chunk | **shipped** |
+| N1 sibling context budgeted separately, no longer truncated away | **shipped** |
+| N3 expansion-added episodes deduped on demand | **shipped** |
+| N4 dedup-batch failure logs at ERROR with a stack trace | **shipped** |
+| N5 finalization ordered after the hard-floor check, with a re-check | **shipped** |
+| F4 `script_content_predupe` now populated | **shipped** |
+| F5 variety pass restored, exactly once, on the shipping draft | **shipped** |
+| Phase A deterministic lead-segment repeat guard | **shipped** |
+| F7 `guard_final_turn_length` and the legacy metadata pair deleted | **shipped** |
+| F8 CLAUDE.md corrected (`use_dialogue_api`, anti-AI rule locations) | **shipped** |
+| N2 permanent loss on erroneous drop | **not applicable yet** — no new drop mechanism shipped |
+| F3 story-arc subsystem | **deferred**, prerequisite experiment in §3 |
+| F6 expansion-loop cost | **deferred**, separate change and benchmark |
+| Whole-episode drop/demote verdict | **deferred**, see §3 |
+| F7 `_run_dedup_pass_with_retry` / `dedup_pass.py` / `scrub_episodes` / `SettingsKeys.Dedup` | **kept** — `_fetch_prior_digests` is now load-bearing for the guard; the rest is still dead and should go once F3 is decided |
+
+Guard thresholds are shadow-logged on every run (`scores_by_window`). Review a
+week of those numbers before treating 0.45 as settled.
+
+Measured guard behavior at ship time: incident pair 0.821, worst normal 0.187
+across 14 adjacent pairs, zero false positives, verified against the live
+database as well as the committed fixture.

@@ -192,3 +192,66 @@ def test_create_digest_calls_finalize_script_after_the_expansion_loop():
         "check -- the variety pass trims 1-2% and would otherwise be able to push a "
         "draft that cleared the floor back under it"
     )
+
+
+# ---------------------------------------------------------------------------
+# Expansion-added episodes must not bypass dedup (adversarial review, F7)
+# ---------------------------------------------------------------------------
+
+
+def test_expansion_episode_is_deduped_on_demand(generator, monkeypatch):
+    """The pre-dedup pool is capped at MAX_TRANSCRIPTS. Episodes the expansion
+    loop reaches beyond that cap were never compared against prior digests and
+    used to reach the writer with raw transcripts."""
+    import src.generation.transcript_dedup as td
+
+    class _Ep:
+        id = 42
+        title = "Expansion episode"
+        transcript_content = "RAW UNDEDUPED CONTENT " * 100
+
+    monkeypatch.setattr(
+        td,
+        "dedup_transcript",
+        lambda **k: td.TranscriptDedupResult(
+            episode_id=42,
+            episode_title="Expansion episode",
+            original_chars=len(k["transcript"]),
+            deduped_chars=20,
+            deduped_transcript="CLEANED CONTENT",
+        ),
+    )
+
+    ep, cache = _Ep(), {}
+    generator._dedup_expansion_episode(ep, ["a prior digest script"], cache)
+    assert ep.transcript_content == "CLEANED CONTENT"
+    assert cache[42] == "CLEANED CONTENT"
+
+
+def test_expansion_dedup_failure_keeps_the_raw_transcript(generator, monkeypatch):
+    """Fail open: a dedup failure must not cost us the episode."""
+    import src.generation.transcript_dedup as td
+
+    class _Ep:
+        id = 43
+        title = "Expansion episode"
+        transcript_content = "RAW CONTENT"
+
+    def boom(**k):
+        raise RuntimeError("dedup exploded")
+
+    monkeypatch.setattr(td, "dedup_transcript", boom)
+    ep, cache = _Ep(), {}
+    generator._dedup_expansion_episode(ep, ["prior"], cache)
+    assert ep.transcript_content == "RAW CONTENT"
+    assert cache == {}
+
+
+def test_expansion_loop_dedups_cache_misses():
+    """Wiring: the loop must not silently pass a cache miss straight through."""
+    import inspect
+
+    src = inspect.getsource(ScriptGenerator.create_digest)
+    assert "_dedup_expansion_episode(" in src, (
+        "expansion-added episodes bypass dedup again"
+    )

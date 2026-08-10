@@ -2108,6 +2108,53 @@ REMINDER: Each transcript above is the actual content provided for that episode.
             logger.debug(f"Feed priority lookup failed, falling back to score-only sort: {e}")
             return None
 
+    def _dedup_expansion_episode(
+        self,
+        ep: Episode,
+        prior_scripts: List[str],
+        cache: dict,
+    ) -> None:
+        """Dedup one expansion-added episode against prior digests, in place.
+
+        The upfront batch only covers MAX_TRANSCRIPTS episodes. Anything the
+        expansion loop pulls in beyond that was never compared against prior
+        digests, and the old code handed it to the writer with its raw
+        transcript -- so the more the upfront pass dropped, the less dedup
+        actually applied to the shipped digest.
+
+        Fails open to the raw transcript, matching the batch path: a dedup
+        failure must not cost us the episode.
+        """
+        from src.generation.transcript_dedup import dedup_transcript
+
+        try:
+            result = dedup_transcript(
+                transcript=ep.transcript_content or "",
+                episode_title=ep.title,
+                episode_id=ep.id,
+                prior_content="\n".join(
+                    f"--- PRIOR DIGEST {i + 1} ---\n{s}\n" for i, s in enumerate(prior_scripts)
+                ),
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Expansion dedup failed for '{ep.title[:50]}' ({exc}); using raw transcript"
+            )
+            return
+
+        if result.below_floor_action == "dropped":
+            cache[ep.id] = ""
+            logger.info(
+                f"Expansion dedup: '{ep.title[:50]}' is fully redundant; excluding"
+            )
+        elif not result.skipped and result.deduped_transcript:
+            cache[ep.id] = result.deduped_transcript
+            ep.transcript_content = result.deduped_transcript
+            logger.info(
+                f"Expansion dedup: '{ep.title[:50]}' "
+                f"{result.original_chars:,} -> {result.deduped_chars:,} chars"
+            )
+
     def finalize_script(
         self,
         script_content: str,
@@ -2596,6 +2643,12 @@ Thank you for your understanding, and we'll see you tomorrow!
         # Dedup the full pool against prior digests
         original_episodes = list(episodes)
         deduped_transcript_cache = {}  # episode.id -> deduped transcript
+        # v4.01: kept in scope for the expansion loop. The pre-dedup pool is
+        # capped at MAX_TRANSCRIPTS, so once dedup drops an episode the
+        # expansion loop fetches replacements that were never in that pool --
+        # and those used to reach the writer with RAW transcripts. The more
+        # dedup dropped, the less dedup actually applied.
+        dedup_prior_scripts: List[str] = []
         # kanban #2861 (codex round 3, P2): episode IDs the dedup safety net
         # dropped where dedup actually RAN and established zero novel
         # content (below_floor_action=="dropped" AND skipped=False --
@@ -2627,6 +2680,7 @@ Thank you for your understanding, and we'll see you tomorrow!
                 )
                 prior_scripts = [d.script_content for d in prior_digests]
 
+            dedup_prior_scripts = prior_scripts
             if prior_scripts:
                 dedup_results, _ = dedup_episode_batch(
                     episodes=all_available_episodes,
@@ -2762,12 +2816,22 @@ Thank you for your understanding, and we'll see you tomorrow!
             # so they're excluded from every subsequent fetch, even if rejected.
             excluded_from_expansion.update(ep.id for ep in extras if ep.id is not None)
 
-            # v3.48: Apply pre-deduped transcript if available in cache
+            # v3.48: Apply pre-deduped transcript if available in cache.
+            # v4.01: a cache MISS is deduped on demand rather than passed
+            # through raw. The pre-dedup pool is capped at MAX_TRANSCRIPTS, so
+            # any episode the loop reaches beyond that cap was never deduped
+            # against prior digests at all -- the exact case where an episode
+            # covering a story we already published walks straight to the
+            # writer.
             for ep in extras:
                 if ep.id in deduped_transcript_cache:
                     ep.transcript_content = deduped_transcript_cache[ep.id]
                     logger.info(
                         f"Expansion: using pre-deduped transcript for '{ep.title[:50]}'"
+                    )
+                elif dedup_prior_scripts:
+                    self._dedup_expansion_episode(
+                        ep, dedup_prior_scripts, deduped_transcript_cache
                     )
 
             # Skip episodes that were fully redundant in dedup
