@@ -2250,7 +2250,7 @@ REMINDER: Each transcript above is the actual content provided for that episode.
         candidate = self._call_claude_p(
             "You edit an existing sourced podcast dialogue. Return only the complete "
             "revised script, with SPEAKER_1: and SPEAKER_2: turns. Compress to about "
-            "27,000 characters (roughly 4,000 spoken words), within 25,000-30,000 "
+            "25,000 characters (roughly 3,500 spoken words), within 25,000-30,000 "
             "characters and never above 35,000. Remove repetition and excess framing, "
             "not substantive source coverage. Preserve each source's main thesis, "
             "supporting evidence, attribution, qualifications, host identities, "
