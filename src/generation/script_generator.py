@@ -2232,6 +2232,63 @@ REMINDER: Each transcript above is the actual content provided for that episode.
         logger.info("Finalize: lead rewritten; repeat resolved")
         return rewritten
 
+    def enforce_dialogue_length(self, script_content: str, topic: str,
+                                floor: int = 10000) -> str:
+        """Enforce the existing dialogue ceiling after every optional edit.
+
+        One bounded compression attempt is allowed. Unlike optional polish,
+        a failed length repair must prevent persistence and downstream TTS.
+        Narrative scripts retain their separate existing policy.
+        """
+        if not self._is_dialogue_mode(topic) or len(script_content) <= 35000:
+            return script_content
+
+        from src.generation import lead_repeat_guard as guard
+
+        logger.warning("Dialogue length %s exceeds hard ceiling 35000; repairing once",
+                       len(script_content))
+        candidate = self._call_claude_p(
+            "You edit an existing sourced podcast dialogue. Return only the complete "
+            "revised script, with SPEAKER_1: and SPEAKER_2: turns. Compress to about "
+            "27,000 characters (roughly 4,000 spoken words), within 25,000-30,000 "
+            "characters and never above 35,000. Remove repetition and excess framing, "
+            "not substantive source coverage. Preserve each source's main thesis, "
+            "supporting evidence, attribution, qualifications, host identities, "
+            "opening and closing. Do not introduce facts, numbers, sources, or "
+            "opinions absent from the original. Keep at most 25 audio tags and "
+            "at most 35 percent of turns tagged. Do not explain your edits.",
+            f"Topic: {topic}\n\nOriginal script:\n{script_content}",
+            timeout=600,
+        )
+        candidate, _ = self._validate_and_fix_dialogue_format(candidate)
+        instruction = self.topic_instructions.get(topic)
+        voice_config = getattr(instruction, 'voice_config', None)
+        candidate, _ = self._enforce_speaker_name_binding(candidate, voice_config)
+        candidate = self._apply_anti_ai_cleanup(candidate, skip_variety_pass=True)
+
+        def validate(content):
+            if not floor <= len(content) <= 35000:
+                raise ScriptGenerationError(
+                    f"Dialogue length repair rejected: {len(content)} characters "
+                    f"outside hard bounds {floor}-35000"
+                )
+            if 'SPEAKER_1:' not in content or 'SPEAKER_2:' not in content:
+                raise ScriptGenerationError("Dialogue length repair lost speaker labels")
+            if guard.contains_unsupported_numbers(content, script_content):
+                raise ScriptGenerationError("Dialogue length repair introduced unsupported numbers")
+
+        validate(candidate)
+        # Compression can change the lead. Reuse its existing provenance and
+        # repetition guards, then check hard limits again after all edits.
+        candidate = self.finalize_script(candidate, topic=topic, dialogue=True,
+                                         floor=floor, already_varied=True)
+        candidate, _ = self._validate_and_fix_dialogue_format(candidate)
+        candidate, _ = self._enforce_speaker_name_binding(candidate, voice_config)
+        validate(candidate)
+        logger.info("Dialogue length repaired: %s -> %s characters",
+                    len(script_content), len(candidate))
+        return candidate
+
     def _rewrite_repeated_lead(self, script_content: str, result, dialogue: bool) -> Optional[str]:
         """Regenerate a repeated lead segment. Returns None if unusable.
 
@@ -2907,6 +2964,7 @@ Thank you for your understanding, and we'll see you tomorrow!
             floor=HARD_FLOOR,
             already_varied=not did_expand,
         )
+        script_content = self.enforce_dialogue_length(script_content, topic, floor=HARD_FLOOR)
         word_count = len(script_content.split())
 
         # Save script to file with timestamp for uniqueness

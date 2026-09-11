@@ -56,6 +56,57 @@ from src.generation.transcript_dedup import MIN_DEDUPED_CHARS, RESTORE_EXCERPT_C
 TOPIC = "AI and Technology"
 
 
+@pytest.mark.parametrize("repair_kind", ["too_long", "too_short", "missing_labels", "new_number", "polish_too_long", "valid"])
+def test_dialogue_hard_ceiling_blocks_persistence_after_all_edits(
+    monkeypatch, generator, feed_repo, episode_repo, digest_repo, repair_kind,
+):
+    """A real create_digest must never expose an invalid repair to TTS's DB queue."""
+    from src.generation.script_generator import ScriptGenerationError
+
+    def dialogue(n):
+        return ('SPEAKER_1: Source reports a useful result.\n'
+                'SPEAKER_2: The evidence supports that conclusion.\n') * n
+
+    ep = _make_episode(feed_repo, episode_repo, guid='length-episode',
+                       transcript_content='Source material. ' * 100)
+    generator.get_qualifying_episodes = Mock(return_value=[ep])
+    generator._is_dialogue_mode = Mock(return_value=True)
+    generator.generate_script = Mock(return_value=(dialogue(300), 4000))
+    # Even a draft within policy can become oversized in the last polish pass.
+    oversized = dialogue(500)
+    generator.finalize_script = Mock(side_effect=[oversized, oversized if repair_kind == 'polish_too_long' else dialogue(300)])
+    candidates = {
+        'too_long': oversized,
+        'too_short': dialogue(2),
+        'missing_labels': 'Plain prose. ' * 2000,
+        'new_number': dialogue(300) + '\nSPEAKER_1: It costs 987654 dollars.',
+        'polish_too_long': dialogue(300),
+        'valid': dialogue(300),
+    }
+    generator._call_claude_p = Mock(return_value=candidates[repair_kind])
+    generator._apply_anti_ai_cleanup = Mock(side_effect=lambda content, **kwargs: content)
+    if repair_kind == 'valid':
+        digest = generator.create_digest(TOPIC, date.today())
+        assert 10000 <= len(digest.script_content) <= 35000
+        assert digest_repo.get_by_topic_date(TOPIC, date.today()).script_content == digest.script_content
+        generator.save_script.assert_called_once()
+    else:
+        with pytest.raises(ScriptGenerationError):
+            generator.create_digest(TOPIC, date.today())
+        generator.save_script.assert_not_called()
+        assert digest_repo.get_by_topic_date(TOPIC, date.today()) is None
+        generator.mark_digest_episodes_as_digested.assert_not_called()
+    generator._call_claude_p.assert_called_once()
+    assert generator._call_claude_p.call_args.kwargs['timeout'] == 600
+
+
+def test_dialogue_ceiling_leaves_narrative_policy_unchanged(generator):
+    generator._is_dialogue_mode = Mock(return_value=False)
+    generator._call_claude_p = Mock()
+    assert generator.enforce_dialogue_length('n' * 40000, TOPIC) == 'n' * 40000
+    generator._call_claude_p.assert_not_called()
+
+
 def _ep19_style_original() -> str:
     """A transcript that argues a thesis from evidence, long enough that an
     over-aggressive dedup pass plausibly reduces it far below the
