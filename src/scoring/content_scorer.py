@@ -439,7 +439,7 @@ Provide scores for each topic as a JSON object with topic names as keys and scor
 
             processing_time = (datetime.now() - start_time).total_seconds()
             label = f"episode {episode_id}" if episode_id else "transcript"
-            logger.info(f"Scored {label} via claude -p in {processing_time:.2f}s: "
+            logger.info(f"Scored {label} via completion CLI in {processing_time:.2f}s: "
                         f"{', '.join(f'{k}={v:.2f}' for k, v in scores.items())}"
                         + (f", harold_applicability={harold_applicability:.2f}" if harold_applicability is not None else ""))
 

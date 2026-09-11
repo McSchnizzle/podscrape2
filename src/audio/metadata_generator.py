@@ -198,7 +198,7 @@ class MetadataGenerator:
                 category=metadata_dict.get('category', 'Technology')[:50],
                 episode_links=metadata_dict.get('episode_links', []) or [],
             )
-            logger.info(f"Generated metadata via claude -p — Title: '{metadata.title}', "
+            logger.info(f"Generated metadata via completion CLI; title: '{metadata.title}', "
                         f"episode_links: {len(metadata.episode_links or [])}")
             return metadata
 
