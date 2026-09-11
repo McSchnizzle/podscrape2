@@ -1344,7 +1344,7 @@ Follow ALL rules in the system prompt exactly, especially:
             elif char_count > 35000:
                 logger.warning(f"Dialogue script exceeds target: {char_count} > 35,000 characters")
 
-            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via {self.ai_model})")
+            logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via completion CLI)")
             return script_content, char_count
 
         except Exception as e:
