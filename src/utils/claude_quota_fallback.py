@@ -26,9 +26,9 @@ DEFAULT_MODEL = 'gpt-6-astra'
 MAX_OUTPUT_BYTES = 1_048_576
 LOG = logging.getLogger(__name__)
 _QUOTA_RE = re.compile(
-    r"(?:you(?:'ve| have)?\s+(?:hit|reached)\s+your\s+(?:usage\s+)?limit"
-    r'|(?:usage|(?:weekly|session|subscription)(?:\s+usage)?)\s+limit\s+(?:has been\s+)?(?:reached|exceeded|exhausted)'
-    r'|(?:reached|exceeded|exhausted)\s+(?:your\s+|the\s+)?(?:usage|(?:weekly|session|subscription)(?:\s+usage)?)\s+limit'
+    r"(?:you(?:'ve| have)?\s+(?:hit|reached)\s+your\s+(?:(?:usage|(?:daily|weekly|session|subscription)(?:\s+usage)?)\s+)?limit"
+    r'|(?:usage|(?:daily|weekly|session|subscription)(?:\s+usage)?)\s+limit\s+(?:has been\s+)?(?:reached|exceeded|exhausted)'
+    r'|(?:reached|exceeded|exhausted)\s+(?:your\s+|the\s+)?(?:usage|(?:daily|weekly|session|subscription)(?:\s+usage)?)\s+limit'
     r'|out of extra usage|credit balance is too low|insufficient[_ ]quota'
     r'|usage_limit_reached|quota[_ ]exhausted)', re.I)
 _NONQUOTA_RE = re.compile(r'oauth|token expired|invalid api key|authentication|prompt is too long|context.{0,25}(?:limit|exceed)', re.I)
@@ -135,10 +135,11 @@ def _request(prompt, *, timeout, env=None, model=None, schema=None, images=()):
     if timeout is None or timeout <= 0: raise QuotaFallbackError('completion deadline exhausted')
     source = os.environ if env is None else env
     model = model or source.get('CLAUDE_QUOTA_CODEX_MODEL') or DEFAULT_MODEL
-    binary = source.get('CODEX_BIN') or shutil.which('codex', path=source.get('PATH'))
-    if not binary:
-        candidate = Path(source.get('HOME', str(Path.home()))) / '.local/bin/codex'
-        binary = str(candidate) if candidate.is_file() else 'codex'
+    # Cron's system PATH can select a stale distro-wide CLI. Prefer the
+    # maintained per-user installation, while respecting explicit overrides.
+    candidate = Path(source.get('HOME', str(Path.home()))) / '.local/bin/codex'
+    binary = source.get('CODEX_BIN') or (str(candidate) if candidate.is_file() else
+             shutil.which('codex', path=source.get('PATH')) or 'codex')
     with tempfile.TemporaryDirectory(prefix='claude-quota-codex-') as directory:
         out = Path(directory) / 'answer.txt'
         argv = [binary, 'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules',
