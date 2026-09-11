@@ -18,6 +18,9 @@ import subprocess
 from typing import List, Optional
 
 
+from src.utils.claude_quota_fallback import run_claude
+
+
 def _claude_cli_model() -> str:
     """Alias for `claude -p --model`. Sourced from
     src/config/models.py::MODEL_ROLES so a model change is one edit,
@@ -52,7 +55,7 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 300) -> 
     env.pop("CLAUDECODE", None)
     env.pop("ANTHROPIC_API_KEY", None)
 
-    result = subprocess.run(
+    result = run_claude(
         [
             claude_path, "-p",
             "--model", _claude_cli_model(),

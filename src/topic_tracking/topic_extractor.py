@@ -23,6 +23,9 @@ from src.config.web_config import WebConfigManager, SettingsKeys
 from src.database.story_arc_repo import get_story_arc_repo
 
 
+from src.utils.claude_quota_fallback import run_claude
+
+
 def _claude_cli_model() -> str:
     """Alias for `claude -p --model`. Sourced from
     src/config/models.py::MODEL_ROLES so a model change is one edit,
@@ -100,7 +103,7 @@ class StoryArcExtractor:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
-        result = subprocess.run(
+        result = run_claude(
             [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,

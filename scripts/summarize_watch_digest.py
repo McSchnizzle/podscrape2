@@ -29,6 +29,8 @@ load_dotenv(Path(__file__).resolve().parent.parent / '.env')
 
 from src.watch import email_render  # noqa: E402
 
+from src.utils.claude_quota_fallback import run_claude
+
 logger = logging.getLogger("summarize_watch_digest")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -123,7 +125,7 @@ def call_claude_p(user_prompt: str, timeout: int = CLAUDE_TIMEOUT_SECONDS) -> st
     env.pop("CLAUDECODE", None)
     env.pop("ANTHROPIC_API_KEY", None)
     full_prompt = f"{SYNTHESIS_PROMPT}\n\n---\n\n## RAW EXCERPTS TO SUMMARIZE\n\n{user_prompt}"
-    result = subprocess.run(
+    result = run_claude(
         [claude_path, "-p", "--model", "sonnet", "--effort", "low",
          "--tools", "", "--no-session-persistence", "-"],
         input=full_prompt,

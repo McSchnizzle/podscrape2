@@ -35,6 +35,8 @@ import subprocess
 import threading
 from typing import Optional
 
+from .claude_quota_fallback import is_quota_exhausted
+
 
 def _claude_cli_model() -> str:
     """Alias for `claude -p --model`. Sourced from
@@ -107,6 +109,12 @@ def _run_probe() -> bool:
             f"all claude-p features will be skipped this run"
         )
         return False
+
+    if is_quota_exhausted(result):
+        logger.warning(
+            "Claude quota exhausted; completion stages remain enabled for Codex fallback"
+        )
+        return True
 
     if result.returncode != 0:
         logger.warning(

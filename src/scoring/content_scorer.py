@@ -34,6 +34,9 @@ from src.config.web_config import WebConfigManager, SettingsKeys
 from src.scoring.harold_rnd import HAROLD_RND_SCORE_KEY
 
 
+from src.utils.claude_quota_fallback import run_claude
+
+
 def _claude_cli_model() -> str:
     """Alias for `claude -p --model`. Sourced from
     src/config/models.py::MODEL_ROLES so a model change is one edit,
@@ -190,7 +193,7 @@ class ContentScorer:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
-        result = subprocess.run(
+        result = run_claude(
             [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "medium",
              "--tools", "", "--no-session-persistence", "-"],
             input=prompt,

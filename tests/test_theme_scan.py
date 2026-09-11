@@ -354,13 +354,13 @@ class TestPromptInjectionHardening:
 class TestCallClaudePStdoutCap:
     """Codex delta-review fix #3a: cap claude -p stdout before parsing."""
 
-    @patch("src.watch.theme_scan.subprocess.run")
+    @patch("src.watch.theme_scan.run_claude")
     def test_stdout_under_cap_passes_through_unchanged(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
         result = theme_scan._call_claude_p("system", "user", 300)
         assert result == "[]"
 
-    @patch("src.watch.theme_scan.subprocess.run")
+    @patch("src.watch.theme_scan.run_claude")
     def test_stdout_over_cap_is_truncated_with_warning(self, mock_run, caplog):
         huge_stdout = "[" + ("x" * (theme_scan.MAX_CLAUDE_P_STDOUT_BYTES + 1000))
         mock_run.return_value = MagicMock(returncode=0, stdout=huge_stdout, stderr="")

@@ -31,6 +31,8 @@ from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager, SettingsKeys
 from ..watch.theme_scan import WATCH_THEME_TOPIC, scan_episodes_for_daily_emphasis
 
+from src.utils.claude_quota_fallback import QuotaFallbackError, run_claude
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -278,7 +280,7 @@ class ScriptGenerator:
         env.pop("CLAUDECODE", None)  # Allow running from within Claude Code context
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
 
-        result = subprocess.run(
+        result = run_claude(
             [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "low",
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
@@ -295,9 +297,9 @@ class ScriptGenerator:
 
         return result.stdout.strip()
 
-    # v3.43: GPT fallback removed per Paul. If claude -p fails we retry with
-    # escalating backoff instead, then email on final exhaustion. See
-    # _call_claude_p_with_retry below.
+    # Quota exhaustion falls back to Codex inside _call_claude_p. Other
+    # Claude errors retain the existing retry policy; a failed quota fallback
+    # must not repeat the exhausted Claude request.
     CLAUDE_P_RETRY_WAITS = [30, 90, 180, 600]  # 5 attempts total; 15 min of waits
     CLAUDE_P_MAX_ATTEMPTS = 5
 
@@ -339,6 +341,9 @@ class ScriptGenerator:
                         f"(< hard floor {min_chars}); retrying"
                     )
                 return result
+            except QuotaFallbackError as e:
+                self._notify_claude_p_exhausted(context, [str(e)])
+                raise
             except Exception as e:
                 last_err = e
                 attempt_errors.append(f"attempt {attempt}: {type(e).__name__}: {str(e)[:200]}")

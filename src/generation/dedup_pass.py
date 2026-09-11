@@ -22,6 +22,9 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 
+from src.utils.claude_quota_fallback import QuotaFallbackError, run_claude
+
+
 def _claude_cli_model() -> str:
     """Alias for `claude -p --model`. Sourced from
     src/config/models.py::MODEL_ROLES so a model change is one edit,
@@ -79,7 +82,7 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) ->
     env.pop("CLAUDECODE", None)
     env.pop("ANTHROPIC_API_KEY", None)
 
-    result = subprocess.run(
+    result = run_claude(
         [
             claude_path, "-p",
             "--model", _claude_cli_model(),
@@ -302,7 +305,7 @@ def run_dedup_pass(
                 skipped=True,
                 skip_reason="claude -p timeout",
             )
-        except DedupPassError as e:
+        except (DedupPassError, QuotaFallbackError) as e:
             logger.warning(f"Dedup pass: claude -p failed, keeping original draft: {e}")
             return DedupResult(
                 rewritten_script=draft_script,

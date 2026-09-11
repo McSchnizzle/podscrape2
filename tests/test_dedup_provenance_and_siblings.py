@@ -22,6 +22,12 @@ import pytest
 from src.generation import transcript_dedup as td
 
 
+@pytest.fixture(autouse=True)
+def healthy_completion_probe(monkeypatch):
+    """These completion tests must never invoke the real provider probe."""
+    monkeypatch.setattr("src.utils.claude_p_health.is_claude_p_healthy", lambda: True)
+
+
 # ---------------------------------------------------------------------------
 # 1. Provenance
 # ---------------------------------------------------------------------------
