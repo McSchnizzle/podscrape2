@@ -14,9 +14,15 @@ removed; if you find similar guidance elsewhere, it is stale.
 ```
 RSS Feeds -> Episode Discovery -> Audio Download/Chunking -> Transcription (Whisper)
   -> Scoring -> Script Generation -> TTS -> Publishing (GitHub + dynamic RSS) -> Retention
+  -> Story Arc Dedup -> Creator Briefing Email
 ```
 
-Six phases: Discovery, Audio, Digest, TTS, Publishing, Retention.
+Eight phases: Discovery, Audio, Digest, TTS, Publishing, Retention, Dedup, and
+Briefing (`scripts/run_briefing_email.py`). Phase 8 emails the key stories behind
+the night's published digest, with web-search-verified links, to the recipients
+in `web_settings` category `creator_briefing`. Recipients live only in the
+database because this repo is public. `--dry-run --test --to <addr>` renders a
+preview to `data/briefings/` without sending.
 
 ```bash
 python3 run_full_pipeline_orchestrator.py              # full run
@@ -28,10 +34,10 @@ python3 scripts/run_discovery.py   # or run_audio / run_digest / run_tts /
 Production: 9 PM PT daily via user crontab (`0 21 * * *`) wrapping
 `scripts/run_pipeline_with_alerts.sh` through `~/patrol/cron-wrapper.sh`.
 
-**Timeout is a live concern.** The cron wrapper allows 7200s. Runtime is trending
-up and was last measured at 6247s (~86% of the cap). If runs start hitting the
-ceiling, raise it to 10800s; if the baseline exceeds ~2h consistently,
-investigate rather than raise again.
+**Timeout.** The cron wrapper allows 10800s (check `crontab -l`, not this
+sentence). Runs in September 2026 took 1300-3300s; Phase 8 adds 3-8 minutes of
+web search. If the baseline exceeds ~2h consistently, investigate rather than
+raise the cap again.
 
 ## Version: check the file, do not trust prose
 

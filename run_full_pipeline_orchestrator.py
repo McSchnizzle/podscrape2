@@ -585,6 +585,32 @@ class PipelineOrchestrator:
                     'merged_groups': groups, 'arcs_merged': merged
                 })
 
+            # Phase 8: Creator Briefing Email
+            # Emails the key stories behind tonight's published digest, with links
+            # out, to the recipients in web_settings (creator_briefing). A failure
+            # here is recorded but never fails a run whose podcast already shipped.
+            self.logger.info("\n" + "="*80)
+            self.logger.info("PHASE 8: CREATOR BRIEFING EMAIL")
+            self.logger.info("="*80)
+
+            self._record_phase_event('briefing', 'starting', None)
+
+            briefing_result = self.run_phase_script('scripts/run_briefing_email.py')
+
+            if not briefing_result.get('success'):
+                self.logger.warning(f"Briefing email phase failed: {briefing_result.get('error')}")
+                self._record_phase_event('briefing', 'failed', {
+                    'error': briefing_result.get('error')
+                })
+            else:
+                sent = briefing_result.get('emails_sent', 0)
+                self.logger.info(f"✉️  Briefing email: {briefing_result.get('status')}, {sent} sent"
+                                 + (f" ({briefing_result['reason']})" if briefing_result.get('reason') else ""))
+                self._record_phase_event('briefing', 'completed', {
+                    'status': briefing_result.get('status'), 'emails_sent': sent,
+                    'digest_id': briefing_result.get('digest_id'),
+                })
+
             # Final summary
             return self._log_success(
                 start_time,
@@ -677,7 +703,7 @@ class PipelineOrchestrator:
         return {'success': False, 'error': error_message}
 
 def main():
-    parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline (orchestrator) - 6 phases')
+    parser = argparse.ArgumentParser(description='Run complete RSS podcast pipeline (orchestrator) - 8 phases')
     parser.add_argument('--log', help='Log file path', default=None)
     parser.add_argument('--phase', help='Stop after phase',
                        choices=['discovery','audio','digest','tts','publishing','retention'], default=None)

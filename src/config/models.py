@@ -83,6 +83,8 @@ MODEL_ROLES: Dict[str, str] = {
     "extraction": "gpt-5-mini",
     # Episode titles and descriptions.
     "metadata": "gpt-5-mini",
+    # Phase 8 creator briefing email: web-search-backed story rundown.
+    "briefing": "gpt-5.2",
     # Semantic similarity for arc dedup and novelty.
     "embedding": "text-embedding-3-small",
     # Speech to text.
@@ -121,6 +123,7 @@ REASONING_EFFORT: Dict[str, str] = {
     "extraction": "minimal",
     "generation": "minimal",
     "research": "minimal",
+    "briefing": "minimal",
 }
 
 DEFAULT_REASONING_EFFORT = "minimal"

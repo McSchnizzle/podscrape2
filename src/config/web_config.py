@@ -155,6 +155,16 @@ class SettingsKeys:
         CATEGORY = "feed_priority"
         ENABLED = "enabled"
 
+    class CreatorBriefing:
+        # Phase 8: nightly story-briefing email. Recipients live ONLY in the
+        # database; this repo is public.
+        CATEGORY = "creator_briefing"
+        ENABLED = "enabled"
+        RECIPIENTS = "recipients"
+        RECIPIENT_NAME = "recipient_name"
+        MODEL = "model"
+        MAX_STORIES = "max_stories"
+
 
 # AI Model Definitions and Limits
 #
@@ -232,6 +242,13 @@ DEFAULTS = {
 
     # Feed Priority Configuration (v3.28+)
     (SettingsKeys.FeedPriority.CATEGORY, SettingsKeys.FeedPriority.ENABLED): {"type": "bool", "default": True},
+
+    # Creator Briefing Email (Phase 8). Off until recipients are set in the DB.
+    (SettingsKeys.CreatorBriefing.CATEGORY, SettingsKeys.CreatorBriefing.ENABLED): {"type": "bool", "default": False},
+    (SettingsKeys.CreatorBriefing.CATEGORY, SettingsKeys.CreatorBriefing.RECIPIENTS): {"type": "string", "default": ""},
+    (SettingsKeys.CreatorBriefing.CATEGORY, SettingsKeys.CreatorBriefing.RECIPIENT_NAME): {"type": "string", "default": ""},
+    (SettingsKeys.CreatorBriefing.CATEGORY, SettingsKeys.CreatorBriefing.MODEL): {"type": "string", "default": role("briefing")},
+    (SettingsKeys.CreatorBriefing.CATEGORY, SettingsKeys.CreatorBriefing.MAX_STORIES): {"type": "int", "default": 5, "min": 3, "max": 8},
 
     # Ad Filtering Configuration
     (SettingsKeys.AdFiltering.CATEGORY, SettingsKeys.AdFiltering.ENABLED): {"type": "bool", "default": True},

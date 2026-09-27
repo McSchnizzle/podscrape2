@@ -377,6 +377,26 @@ CREATE TABLE IF NOT EXISTS web_settings (
 );
 
 -- ==============================================================================
+-- CREATOR BRIEFING EMAIL (Phase 8)
+-- ==============================================================================
+
+-- One row per briefing email sent; blocks re-sending a digest to a recipient.
+-- is_test rows are previews and never block the real send.
+CREATE TABLE IF NOT EXISTS briefing_email_sends (
+    id SERIAL NOT NULL,
+    digest_id INTEGER NOT NULL REFERENCES digests(id) ON DELETE CASCADE,
+    recipient VARCHAR(320) NOT NULL,
+    subject TEXT NOT NULL,
+    message_id VARCHAR(255),
+    story_count INTEGER NOT NULL DEFAULT 0,
+    is_test BOOLEAN NOT NULL DEFAULT FALSE,
+    sent_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_briefing_email_sends_digest_recipient ON briefing_email_sends (digest_id, recipient);
+
+-- ==============================================================================
 -- ROW LEVEL SECURITY POLICIES
 -- ==============================================================================
 -- All tables have RLS enabled. See Alembic migrations for policy definitions.

@@ -603,3 +603,24 @@ class WatchDigestRun(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
+
+
+class BriefingEmailSend(Base):
+    """One row per creator-briefing email sent (Phase 8). The ledger that
+    keeps a digest from being mailed to the same recipient twice; preview
+    sends are recorded with is_test and never count as the real send."""
+    __tablename__ = "briefing_email_sends"
+
+    id = Column(Integer, primary_key=True)
+    digest_id = Column(Integer, ForeignKey('digests.id', ondelete='CASCADE'), nullable=False)
+    recipient = Column(String(320), nullable=False)
+    subject = Column(Text, nullable=False)
+    message_id = Column(String(255))
+    story_count = Column(Integer, nullable=False, default=0)
+    is_test = Column(Boolean, nullable=False, default=False, server_default='false')
+    sent_at = Column(DateTime(timezone=True), nullable=False,
+                     default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_briefing_email_sends_digest_recipient', 'digest_id', 'recipient'),
+    )
