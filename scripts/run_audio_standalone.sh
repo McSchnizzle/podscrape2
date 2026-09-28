@@ -1,6 +1,6 @@
 #!/bin/bash
 # Standalone audio phase wrapper - called by 3-hourly cron
-# Drains pending episodes via Whisper transcription + scoring, decoupled from the
+# Discovers new episodes on every feed, then drains pending episodes via Whisper transcription + scoring, decoupled from the
 # nightly digest pipeline so transcription latency cannot starve digest generation.
 #
 # Usage: ./scripts/run_audio_standalone.sh
@@ -27,6 +27,23 @@ set +a
 echo "========================================" >> "$LOG_FILE"
 echo "Audio phase started: $(date)" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
+
+# Discovery first (Paul 2026-09-28): check ALL feeds, RSS and YouTube, every 3 hours instead of only
+# at the 21:00 pipeline run. Before this, an episode published on the digest day could never make
+# that night's digest: it was discovered at 21:00 and transcribed after the 21:05 digest. Discovery
+# is idempotent (already-known episodes are skipped), so the 21:00 run finding them again is harmless.
+# A discovery failure is logged and never blocks transcription of what is already pending.
+echo "Discovery started: $(date)" >> "$LOG_FILE"
+nice -n 10 python3 scripts/run_discovery.py --days-back 5 --limit 10 2>&1 | tee -a "$LOG_FILE" > /dev/null
+DISCOVERY_EXIT=${PIPESTATUS[0]}
+echo "Discovery finished (exit $DISCOVERY_EXIT) after $(( $(date +%s) - START_TIME ))s" >> "$LOG_FILE"
+
+# The transcription time budget (run_audio.py, default 5400s of the 7200s cron timeout) must count
+# the discovery minutes too, or a long discovery pushes transcription into the hard kill.
+BUDGET_TOTAL=${PODCAST_AUDIO_BUDGET_SECONDS:-5400}
+BUDGET_LEFT=$(( BUDGET_TOTAL - ( $(date +%s) - START_TIME ) ))
+[ "$BUDGET_LEFT" -lt 600 ] && BUDGET_LEFT=600
+export PODCAST_AUDIO_BUDGET_SECONDS=$BUDGET_LEFT
 
 # Run the standalone audio phase
 # --max-youtube 3 + --max-rss 3 = balanced fetch from each feed type (6 total max).
