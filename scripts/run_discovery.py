@@ -64,6 +64,10 @@ try:
 except ImportError:
     from utils.logging_config import setup_phase_logging
 
+# Deferred retry passes for YouTube feeds that failed (seconds to wait before each pass).
+DEFERRED_PASS_DELAYS_S = (90, 240)
+
+
 class DiscoveryRunner:
     """RSS feed discovery phase"""
 
@@ -205,177 +209,203 @@ class DiscoveryRunner:
             'User-Agent': 'PodcastDigest/1.0 (+https://github.com/McSchnizzle/podscrape2)'
         }
 
-        for feed_idx, feed_info in enumerate(self.rss_feeds, 1):
-            # Continue checking all feeds - don't break early
+        pending_feeds = list(enumerate(self.rss_feeds, 1))
+        unreachable: list = []
+        for pass_idx in range(len(DEFERRED_PASS_DELAYS_S) + 1):
+            retry_next: list = []
+            if pass_idx > 0:
+                delay_s = DEFERRED_PASS_DELAYS_S[pass_idx - 1]
+                self.logger.info(
+                    f"Deferred pass {pass_idx}: retrying {len(pending_feeds)} YouTube feed(s) after {delay_s}s")
+                time.sleep(delay_s)
+            for feed_idx, feed_info in pending_feeds:
+                # Continue checking all feeds - don't break early
 
-            feed_url = feed_info['url']
-            feed_name = feed_info['name']
-            feed_type = feed_info.get('feed_type', 'rss')
+                feed_url = feed_info['url']
+                feed_name = feed_info['name']
+                feed_type = feed_info.get('feed_type', 'rss')
 
-            self.logger.info(f"[{feed_idx}/{len(self.rss_feeds)}] Checking {feed_name} [{feed_type}]")
-            self.logger.info(f"  URL: {feed_url}")
+                self.logger.info(f"[{feed_idx}/{len(self.rss_feeds)}] Checking {feed_name} [{feed_type}]")
+                self.logger.info(f"  URL: {feed_url}")
 
-            # Mark feed as checked
-            try:
-                if feed_info.get('id'):
-                    self.feed_repo.update_last_checked(int(feed_info['id']), datetime.now())
-            except Exception as e:
-                self.logger.warning(f"Failed to update last_checked for feed {feed_info['id']}: {e}")
-
-            try:
-                # Fetch feed with requests (with timeout to prevent hanging)
-                # Rate-limit YouTube feeds to avoid intermittent 404s from burst detection
-                feed = None
-                is_youtube = 'youtube.com' in feed_url
-                if is_youtube and feed_idx > 1:
-                    delay = random.uniform(3.0, 5.0)
-                    self.logger.info(f"  Sleeping {delay:.1f}s (YouTube rate-limit guard)...")
-                    time.sleep(delay)
+                # Mark feed as checked
                 try:
-                    self.logger.info(f"  Fetching feed (timeout: 12s)...")
-                    resp = requests.get(feed_url, timeout=12, headers=headers)
-                    # Retry once on 404/500 for YouTube (transient rate-limiting)
-                    if is_youtube and resp.status_code in (404, 500):
-                        retry_delay = random.uniform(5.0, 8.0)
-                        self.logger.warning(f"  Got {resp.status_code}, retrying in {retry_delay:.1f}s...")
-                        time.sleep(retry_delay)
-                        resp = requests.get(feed_url, timeout=12, headers=headers)
-                    resp.raise_for_status()
-                    self.logger.info(f"  ✓ Fetch complete ({len(resp.content)} bytes)")
-                    self.logger.info(f"  Parsing feed XML...")
-                    feed = feedparser.parse(resp.content)
-                    self.logger.info(f"  ✓ Parse complete")
+                    if feed_info.get('id'):
+                        self.feed_repo.update_last_checked(int(feed_info['id']), datetime.now())
                 except Exception as e:
-                    self.logger.error(f"  ✗ Failed to fetch feed: {e}")
-                    continue  # Skip this feed and move to next one
+                    self.logger.warning(f"Failed to update last_checked for feed {feed_info['id']}: {e}")
 
-                # Check for parser issues
-                if getattr(feed, 'bozo', 0):
-                    self.logger.warning(f"  Parser flagged feed as bozo: {getattr(feed, 'bozo_exception', None)}")
+                try:
+                    # Fetch feed with requests (with timeout to prevent hanging)
+                    # Rate-limit YouTube feeds to avoid intermittent 404s from burst detection
+                    feed = None
+                    is_youtube = 'youtube.com' in feed_url
+                    if is_youtube and feed_idx > 1:
+                        delay = random.uniform(3.0, 5.0)
+                        self.logger.info(f"  Sleeping {delay:.1f}s (YouTube rate-limit guard)...")
+                        time.sleep(delay)
+                    try:
+                        self.logger.info(f"  Fetching feed (timeout: 12s)...")
+                        resp = requests.get(feed_url, timeout=12, headers=headers)
+                        # Retry once on 404/500 for YouTube (transient rate-limiting)
+                        if is_youtube and resp.status_code in (404, 500):
+                            retry_delay = random.uniform(5.0, 8.0)
+                            self.logger.warning(f"  Got {resp.status_code}, retrying in {retry_delay:.1f}s...")
+                            time.sleep(retry_delay)
+                            resp = requests.get(feed_url, timeout=12, headers=headers)
+                        resp.raise_for_status()
+                        self.logger.info(f"  ✓ Fetch complete ({len(resp.content)} bytes)")
+                        self.logger.info(f"  Parsing feed XML...")
+                        feed = feedparser.parse(resp.content)
+                        self.logger.info(f"  ✓ Parse complete")
+                    except Exception as e:
+                        if is_youtube and pass_idx < len(DEFERRED_PASS_DELAYS_S):
+                            # YouTube's feed endpoint throws intermittent 404/500s for minutes at
+                            # a time (24 of 26 feeds failed nightly 08-31..09-27 while the same
+                            # URLs answered 200 the next morning). Queue for a deferred pass
+                            # instead of losing the feed for the night.
+                            self.logger.warning(f"  ✗ Failed to fetch feed (will retry in a later pass): {e}")
+                            retry_next.append((feed_idx, feed_info))
+                        else:
+                            self.logger.error(f"  ✗ Failed to fetch feed: {e}")
+                            unreachable.append(feed_name)
+                        continue  # Skip this feed and move to next one
 
-                if not getattr(feed, 'entries', None):
-                    self.logger.warning(f"  No entries found in feed")
-                    continue
+                    # Check for parser issues
+                    if getattr(feed, 'bozo', 0):
+                        self.logger.warning(f"  Parser flagged feed as bozo: {getattr(feed, 'bozo_exception', None)}")
 
-                self.logger.info(f"  Found {len(feed.entries)} total episodes in feed")
-
-                # Check recent episodes
-                cutoff_date = datetime.now() - timedelta(days=self.days_back)
-
-                for i, entry in enumerate(feed.entries[:10]):
-                    # Get episode GUID
-                    episode_guid = entry.get('id') or entry.get('guid') or getattr(entry, 'link', f"episode_{i}_{feed_name}")
-                    title = entry.get('title', 'Untitled')
-
-                    # Parse published date
-                    published_date = None
-                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                        published_date = datetime(*entry.published_parsed[:6])
-                    elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                        published_date = datetime(*entry.updated_parsed[:6])
-                    else:
-                        published_date = datetime.now()
-
-                    # Skip old episodes
-                    if published_date < cutoff_date:
-                        self.logger.info(f"SKIP: {title[:50]}... (older than {self.days_back} days)")
+                    if not getattr(feed, 'entries', None):
+                        self.logger.warning(f"  No entries found in feed")
                         continue
 
-                    # Check if already processed
-                    existing = self.episode_repo.get_by_episode_guid(episode_guid)
-                    if existing:
-                        # Terminal states - skip completely (already processed)
-                        # Uses EpisodeStatus enum for maintainability
-                        if existing.status in EpisodeStatus.terminal_status_values():
-                            self.logger.info(f"SKIP: {title[:60]}... (already processed: {existing.status})")
-                            continue
-                        # Resumable states - add to discovered list for reprocessing
-                        # Uses EpisodeStatus enum - includes 'processing' for stuck episodes
-                        elif existing.status in EpisodeStatus.resumable_status_values():
-                            self.logger.info(f"RESUME: {title[:60]}... ({existing.status})")
-                            discovered_episodes.append({
-                                'guid': episode_guid,
-                                'title': title,
-                                'feed_name': feed_name,
-                                'feed_id': feed_info.get('id'),
-                                'status': existing.status,
-                                'published_date': published_date.isoformat(),
-                                'audio_url': existing.audio_url,
-                                'mode': 'resume'
-                            })
-                            continue
-                        # Unknown status - log warning and skip (fail-safe)
+                    self.logger.info(f"  Found {len(feed.entries)} total episodes in feed")
+
+                    # Check recent episodes
+                    cutoff_date = datetime.now() - timedelta(days=self.days_back)
+
+                    for i, entry in enumerate(feed.entries[:10]):
+                        # Get episode GUID
+                        episode_guid = entry.get('id') or entry.get('guid') or getattr(entry, 'link', f"episode_{i}_{feed_name}")
+                        title = entry.get('title', 'Untitled')
+
+                        # Parse published date
+                        published_date = None
+                        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                            published_date = datetime(*entry.published_parsed[:6])
+                        elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                            published_date = datetime(*entry.updated_parsed[:6])
                         else:
-                            self.logger.warning(f"SKIP: {title[:60]}... (unknown status: {existing.status})")
+                            published_date = datetime.now()
+
+                        # Skip old episodes
+                        if published_date < cutoff_date:
+                            self.logger.info(f"SKIP: {title[:50]}... (older than {self.days_back} days)")
                             continue
 
-                    # Find audio/video URL for new episodes
-                    audio_url = None
+                        # Check if already processed
+                        existing = self.episode_repo.get_by_episode_guid(episode_guid)
+                        if existing:
+                            # Terminal states - skip completely (already processed)
+                            # Uses EpisodeStatus enum for maintainability
+                            if existing.status in EpisodeStatus.terminal_status_values():
+                                self.logger.info(f"SKIP: {title[:60]}... (already processed: {existing.status})")
+                                continue
+                            # Resumable states - add to discovered list for reprocessing
+                            # Uses EpisodeStatus enum - includes 'processing' for stuck episodes
+                            elif existing.status in EpisodeStatus.resumable_status_values():
+                                self.logger.info(f"RESUME: {title[:60]}... ({existing.status})")
+                                discovered_episodes.append({
+                                    'guid': episode_guid,
+                                    'title': title,
+                                    'feed_name': feed_name,
+                                    'feed_id': feed_info.get('id'),
+                                    'status': existing.status,
+                                    'published_date': published_date.isoformat(),
+                                    'audio_url': existing.audio_url,
+                                    'mode': 'resume'
+                                })
+                                continue
+                            # Unknown status - log warning and skip (fail-safe)
+                            else:
+                                self.logger.warning(f"SKIP: {title[:60]}... (unknown status: {existing.status})")
+                                continue
 
-                    if feed_type == 'youtube':
-                        # YouTube feeds: use the video watch URL as the "audio_url"
-                        # YouTube RSS entries have link to watch page
-                        audio_url = entry.get('link')
-                        if not audio_url:
-                            # Try extracting from entry ID (format: yt:video:VIDEO_ID)
-                            entry_id = entry.get('id', '')
-                            if 'yt:video:' in entry_id:
-                                video_id = entry_id.split('yt:video:')[-1]
-                                audio_url = f"https://www.youtube.com/watch?v={video_id}"
-                    else:
-                        # RSS podcast feeds: look for audio enclosure
-                        for link in entry.get('links', []):
-                            if link.get('type', '').startswith('audio/'):
-                                audio_url = link['href']
-                                break
+                        # Find audio/video URL for new episodes
+                        audio_url = None
 
-                        if not audio_url and hasattr(entry, 'enclosures'):
-                            for enclosure in entry.enclosures:
-                                if enclosure.type.startswith('audio/'):
-                                    audio_url = enclosure.href
+                        if feed_type == 'youtube':
+                            # YouTube feeds: use the video watch URL as the "audio_url"
+                            # YouTube RSS entries have link to watch page
+                            audio_url = entry.get('link')
+                            if not audio_url:
+                                # Try extracting from entry ID (format: yt:video:VIDEO_ID)
+                                entry_id = entry.get('id', '')
+                                if 'yt:video:' in entry_id:
+                                    video_id = entry_id.split('yt:video:')[-1]
+                                    audio_url = f"https://www.youtube.com/watch?v={video_id}"
+                        else:
+                            # RSS podcast feeds: look for audio enclosure
+                            for link in entry.get('links', []):
+                                if link.get('type', '').startswith('audio/'):
+                                    audio_url = link['href']
                                     break
 
-                    if not audio_url:
-                        self.logger.info(f"SKIP: {title[:60]}... (no audio/video URL)")
-                        continue
+                            if not audio_url and hasattr(entry, 'enclosures'):
+                                for enclosure in entry.enclosures:
+                                    if enclosure.type.startswith('audio/'):
+                                        audio_url = enclosure.href
+                                        break
 
-                    # Found new episode - create database record as 'pending'
-                    self.logger.info(f"NEW: {title}")
+                        if not audio_url:
+                            self.logger.info(f"SKIP: {title[:60]}... (no audio/video URL)")
+                            continue
 
-                    if not self.dry_run:
-                        try:
-                            # Create episode in database with 'pending' status
-                            new_episode = Episode(
-                                episode_guid=episode_guid,
-                                title=title,
-                                description=entry.get('summary', '')[:500],
-                                audio_url=audio_url,
-                                published_date=published_date,
-                                feed_id=feed_info.get('id'),
-                                status='pending'
-                            )
-                            episode_id = self.episode_repo.create(new_episode)
-                            self.logger.info(f"   ✓ Created pending episode in database (ID: {episode_id})")
-                        except Exception as e:
-                            self.logger.warning(f"   ⚠️  Failed to create database record: {e}")
+                        # Found new episode - create database record as 'pending'
+                        self.logger.info(f"NEW: {title}")
 
-                    discovered_episodes.append({
-                        'guid': episode_guid,
-                        'title': title,
-                        'description': entry.get('summary', '')[:500],
-                        'audio_url': audio_url,
-                        'published_date': published_date.isoformat(),
-                        'duration_seconds': None,
-                        'feed_name': feed_name,
-                        'feed_id': feed_info.get('id'),
-                        'feed_type': feed_type,
-                        'mode': 'new'
-                    })
-                    # Continue checking for more episodes in this feed
+                        if not self.dry_run:
+                            try:
+                                # Create episode in database with 'pending' status
+                                new_episode = Episode(
+                                    episode_guid=episode_guid,
+                                    title=title,
+                                    description=entry.get('summary', '')[:500],
+                                    audio_url=audio_url,
+                                    published_date=published_date,
+                                    feed_id=feed_info.get('id'),
+                                    status='pending'
+                                )
+                                episode_id = self.episode_repo.create(new_episode)
+                                self.logger.info(f"   ✓ Created pending episode in database (ID: {episode_id})")
+                            except Exception as e:
+                                self.logger.warning(f"   ⚠️  Failed to create database record: {e}")
 
-            except Exception as e:
-                self.logger.error(f"Error parsing {feed_name}: {e}")
-                continue
+                        discovered_episodes.append({
+                            'guid': episode_guid,
+                            'title': title,
+                            'description': entry.get('summary', '')[:500],
+                            'audio_url': audio_url,
+                            'published_date': published_date.isoformat(),
+                            'duration_seconds': None,
+                            'feed_name': feed_name,
+                            'feed_id': feed_info.get('id'),
+                            'feed_type': feed_type,
+                            'mode': 'new'
+                        })
+                        # Continue checking for more episodes in this feed
+
+                except Exception as e:
+                    self.logger.error(f"Error parsing {feed_name}: {e}")
+                    continue
+
+            pending_feeds = retry_next
+            if not pending_feeds:
+                break
+
+        if unreachable:
+            self.logger.warning(
+                f"Feeds unreachable after all passes ({len(unreachable)}): {', '.join(unreachable)}")
 
         return {
             'success': True,
