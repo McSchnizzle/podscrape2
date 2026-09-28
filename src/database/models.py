@@ -685,6 +685,26 @@ class EpisodeRepository:
                 logger.error(f"Failed to update audio download for episode {episode_guid}: {e}")
                 raise
 
+    def reset_transcript(self, episode_guid: str) -> None:
+        """Clear an episode transcript before rebuilding it from ordered chunks."""
+        with self.db.get_session() as session:
+            try:
+                episode_model = session.query(EpisodeModel)\
+                    .filter(EpisodeModel.episode_guid == episode_guid).first()
+
+                if not episode_model:
+                    raise ValueError(f"Episode not found: {episode_guid}")
+
+                episode_model.transcript_content = ""
+                episode_model.transcript_word_count = 0
+                episode_model.updated_at = datetime.now(timezone.utc)
+                session.commit()
+
+            except SQLAlchemyError as e:
+                session.rollback()
+                logger.error(f"Failed to reset transcript for episode {episode_guid}: {e}")
+                raise
+
     def append_transcript_chunk(self, episode_guid: str, chunk_text: str, chunk_number: int) -> int:
         """
         Append transcript chunk to existing transcript content (memory-efficient incremental writes).

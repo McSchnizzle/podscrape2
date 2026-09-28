@@ -31,7 +31,11 @@ echo "========================================" >> "$LOG_FILE"
 # Run the standalone audio phase
 # --max-youtube 3 + --max-rss 3 = balanced fetch from each feed type (6 total max).
 # Prevents one feed type's backlog from starving the other in 3-hourly runs.
-python3 scripts/run_audio.py --max-youtube 3 --max-rss 3 --verbose 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
+# Share et01 politely (Paul 2026-09-27): local Whisper on torch otherwise spawns one BLAS/OpenMP
+# thread per core in EVERY worker thread (~14 of 32 cores for hours, halving VitalAI CI). Cap the
+# math pools and run niced so interactive work and CI get the CPU first.
+export OMP_NUM_THREADS=6 MKL_NUM_THREADS=6 OPENBLAS_NUM_THREADS=6 TORCH_NUM_THREADS=6
+nice -n 15 python3 scripts/run_audio.py --max-youtube 3 --max-rss 3 --verbose 2>&1 | tee -a "$LOG_FILE" > "$TEMP_LOG"
 EXIT_CODE=${PIPESTATUS[0]}
 
 END_TIME=$(date +%s)

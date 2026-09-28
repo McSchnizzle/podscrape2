@@ -18,6 +18,16 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 import threading
+import signal
+
+# Run time budget (2026-09-28). The cron wrapper kills this job at 7200s with SIGTERM to the shell
+# only, so a transcription used to die silently mid-chunk and sit in 'processing' until a later
+# run's 60-min stuck reset. Now the transcriber stops BETWEEN chunks once the budget is spent (all
+# finished chunks are cached beside the audio) and the episode goes straight back to 'pending'.
+# Default leaves ~30 min before the 2h kill for a daytime chunk (~25 min at load) to finish.
+RUN_BUDGET_SECONDS = float(os.environ.get("PODCAST_AUDIO_BUDGET_SECONDS", "5400"))
+RUN_STARTED_MONOTONIC = time.monotonic()
+RUN_DEADLINE_MONOTONIC = RUN_STARTED_MONOTONIC + RUN_BUDGET_SECONDS
 
 
 
@@ -38,6 +48,46 @@ bootstrap_phase()
 
 from src.database.models import get_episode_repo, Episode
 from src.podcast.audio_processor import AudioProcessor
+from src.podcast.openai_whisper_transcriber import TranscriptionDeferred
+
+# Episodes a worker is transcribing right now: guid -> (title, monotonic start, repo). Read by the
+# SIGTERM handler so a kill names what it interrupted instead of the log just stopping.
+_INFLIGHT: dict = {}
+_INFLIGHT_LOCK = threading.Lock()
+
+
+def _inflight_register(guid, title, repo):
+    with _INFLIGHT_LOCK:
+        _INFLIGHT[guid] = (title, time.monotonic(), repo)
+
+
+def _inflight_unregister(guid):
+    with _INFLIGHT_LOCK:
+        _INFLIGHT.pop(guid, None)
+
+
+def _on_sigterm(signum, _frame):
+    """Log what a kill interrupted and hand those episodes straight back to 'pending' (their
+    finished chunks are cached, so the next run resumes), then exit."""
+    log = logging.getLogger("pipeline.audio")
+    elapsed = time.monotonic() - RUN_STARTED_MONOTONIC
+    with _INFLIGHT_LOCK:
+        items = list(_INFLIGHT.items())
+    log.error(f"⛔ Received signal {signum} after {elapsed:.0f}s of this run; "
+              f"{len(items)} episode(s) interrupted mid-transcription")
+    for guid, (title, started, repo) in items:
+        log.error(f"⛔ Interrupted '{title}' after {time.monotonic() - started:.0f}s on this episode; "
+                  f"finished chunks are cached, re-queued as pending")
+        try:
+            repo.update_status(guid, 'pending')
+        except Exception as exc:  # noqa: BLE001 -- best effort inside a signal handler
+            log.error(f"   could not re-queue {guid}: {exc}")
+    for h in log.handlers + logging.getLogger().handlers:
+        try:
+            h.flush()
+        except Exception:
+            pass
+    os._exit(128 + signum)
 from src.utils.logging_config import setup_phase_logging
 from src.scoring.content_scorer import ContentScorer
 from src.scoring.harold_rnd import HAROLD_RND_SCORE_KEY, is_reserved_score_key
@@ -295,6 +345,8 @@ class AudioProcessor_Runner:
 
                 audio_result = self._process_episode_audio(episode_data)
 
+                if audio_result.get('deferred'):
+                    continue  # time budget spent; re-queued as pending, not a failure
                 if not audio_result.get('success'):
                     failed_episodes.append({
                         'guid': episode.episode_guid,
@@ -442,6 +494,7 @@ class AudioProcessor_Runner:
         # Shared state (thread-safe)
         processed_episodes = []
         failed_episodes = []
+        deferred_titles = []
         relevant_count = 0
         not_relevant_count = 0
         total_processed = 0
@@ -514,6 +567,13 @@ class AudioProcessor_Runner:
                 
                 audio_result = self._process_episode_audio(episode_data)
 
+                if audio_result.get('deferred'):
+                    return {
+                        'guid': episode.episode_guid,
+                        'title': episode.title,
+                        'error': audio_result.get('error', 'deferred'),
+                        'type': 'deferred'
+                    }
                 if not audio_result.get('success'):
                     return {
                         'guid': episode.episode_guid,
@@ -632,6 +692,8 @@ class AudioProcessor_Runner:
                             processed_episodes.append(result)
                         elif result['type'] == 'failed':
                             failed_episodes.append(result)
+                        elif result['type'] == 'deferred':
+                            deferred_titles.append(result.get('title'))
                         # not_relevant and skipped episodes don't get added to output
                     except Exception as e:
                         self.logger.error(f"Worker thread exception: {e}")
@@ -642,6 +704,9 @@ class AudioProcessor_Runner:
         
         # Final summary
         self._log_processing_summary(processed_episodes, relevant_count, not_relevant_count, total_processed)
+        if deferred_titles:
+            self.logger.info(f"⏸ Deferred to the next run (time budget): {len(deferred_titles)}: "
+                             + "; ".join(t for t in deferred_titles if t))
         self.logger.info(f"\n🏁 PARALLEL PROCESSING COMPLETE:")
         self.logger.info(f"   Total rounds: {round_num - 1}")
         self.logger.info(f"   Peak workers: {actual_max_workers}")
@@ -836,6 +901,17 @@ class AudioProcessor_Runner:
         if self._is_youtube_episode(episode_data, db_episode):
             return self._process_youtube_transcript(episode_data, db_episode)
 
+        if time.monotonic() >= RUN_DEADLINE_MONOTONIC:
+            self.logger.info(f"⏸ Run time budget ({RUN_BUDGET_SECONDS:.0f}s) spent; not starting "
+                             f"'{db_episode.title}' this run")
+            try:
+                self.episode_repo.update_status(episode_guid, 'pending')
+            except Exception:
+                pass
+            return {'success': False, 'deferred': True, 'error': 'run time budget spent'}
+
+        _inflight_register(episode_guid, db_episode.title, self.episode_repo)
+        episode_clock = time.monotonic()
         try:
             # Step 1: Download audio
             self.logger.info("Downloading audio...")
@@ -894,14 +970,27 @@ class AudioProcessor_Runner:
 
             # Convert paths to strings for Whisper API
             chunk_paths_str = [str(path) for path in chunk_paths]
+            chunk_audio_seconds = []
+            for cp in chunk_paths_str:
+                try:
+                    chunk_audio_seconds.append(float(self.audio_processor._get_audio_duration(cp)))
+                except Exception:
+                    chunk_audio_seconds.append(float(self._transcriber_config['chunk_duration_minutes']) * 60)
+            self.logger.info(
+                f"▶ Transcribing '{db_episode.title}': {sum(chunk_audio_seconds)/60:.1f} min audio in "
+                f"{len(chunk_paths_str)} chunks; run budget left "
+                f"{max(0.0, RUN_DEADLINE_MONOTONIC - time.monotonic()):.0f}s")
 
             # Transcribe using thread-local instance with MEMORY-EFFICIENT MODE
             # Pass episode_repo to enable incremental database writes (constant O(1) memory)
             transcription_result = thread_transcriber.transcribe_episode(
                 chunk_paths_str,
                 episode_guid,
-                episode_repo=self.episode_repo
+                episode_repo=self.episode_repo,
+                deadline_monotonic=RUN_DEADLINE_MONOTONIC,
+                chunk_audio_seconds=chunk_audio_seconds,
             )
+            self.logger.info(f"⏹ Transcribed '{db_episode.title}' in {time.monotonic() - episode_clock:.0f}s wall")
 
             # In memory-efficient mode, transcript_text is empty (already in database)
             # Word count comes from database incremental writes
@@ -983,6 +1072,16 @@ class AudioProcessor_Runner:
                 'chunks_processed': len(transcription_result.chunks)
             }
 
+        except TranscriptionDeferred as d:
+            self.logger.warning(
+                f"⏸ Deferred '{db_episode.title}': {d.chunks_done}/{d.total_chunks} chunks done and cached "
+                f"after {d.elapsed_seconds:.0f}s (run budget {RUN_BUDGET_SECONDS:.0f}s); the next run resumes "
+                f"at chunk {d.chunks_done + 1}")
+            try:
+                self.episode_repo.update_status(episode_guid, 'pending')
+            except Exception:
+                pass
+            return {'success': False, 'deferred': True, 'error': str(d)}
         except Exception as e:
             error_str = str(e)
             self.logger.error(f"Audio processing failed: {error_str}")
@@ -1005,6 +1104,8 @@ class AudioProcessor_Runner:
                 'success': False,
                 'error': error_str
             }
+        finally:
+            _inflight_unregister(episode_guid)
 
     def _is_youtube_short(self, db_episode):
         """Detect YouTube Shorts - too short for meaningful digest content."""
@@ -1512,6 +1613,7 @@ def main():
                        help='Cap RSS (non-YouTube) episodes processed per run. Combine with --max-youtube for balanced fetch.')
 
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, _on_sigterm)
 
     dry_run = resolve_dry_run_flag(args.dry_run)
 
@@ -1565,6 +1667,13 @@ def main():
                 # 3. neither → original "find N relevant" behavior across all pending
                 prefetched = None
                 max_total = args.max_total_episodes
+                # Reset stuck 'processing' episodes BEFORE any prefetch. It used to run only inside
+                # process_episodes_optimized, AFTER the balanced prefetch, so a reset episode was
+                # never in that run's list ("Reset 1 stuck ... No pending episodes", 09-27 14:30
+                # and 20:30), and the one RSS episode that night missed the digest.
+                reset_count = runner.episode_repo.reset_stuck_processing_episodes(timeout_minutes=60)
+                if reset_count:
+                    runner.logger.info(f"🔄 Reset {reset_count} stuck 'processing' episode(s) to 'pending' before fetching")
                 if args.max_youtube is not None or args.max_rss is not None:
                     yt_n = args.max_youtube or 0
                     rss_n = args.max_rss or 0

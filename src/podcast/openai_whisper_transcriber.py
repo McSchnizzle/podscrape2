@@ -62,6 +62,24 @@ def retry_with_backoff(max_retries=2, backoff_factor=1.5):
         return wrapper
     return decorator
 
+class TranscriptionDeferred(Exception):
+    """Raised between chunks when the run's time budget is spent (2026-09-28).
+
+    Completed chunks are already cached beside their audio, so the next run resumes at
+    ``chunks_done + 1`` instead of starting over. Not a failure: the caller puts the episode back
+    to 'pending' so the very next audio run picks it up.
+    """
+
+    def __init__(self, episode_guid: str, chunks_done: int, total_chunks: int, elapsed_seconds: float):
+        self.episode_guid = episode_guid
+        self.chunks_done = chunks_done
+        self.total_chunks = total_chunks
+        self.elapsed_seconds = elapsed_seconds
+        super().__init__(
+            f"time budget reached for {episode_guid} after chunk {chunks_done}/{total_chunks} "
+            f"({elapsed_seconds:.0f}s)")
+
+
 class OpenAIWhisperTranscriber:
     """
     Local OpenAI Whisper transcriber - direct replacement for Parakeet MLX
@@ -169,7 +187,9 @@ class OpenAIWhisperTranscriber:
     @retry_with_backoff(max_retries=2, backoff_factor=1.5)
     def transcribe_episode(self, audio_chunks: List[str], episode_guid: str,
                           in_progress_file: Optional[str] = None,
-                          episode_repo=None) -> EpisodeTranscription:
+                          episode_repo=None,
+                          deadline_monotonic: Optional[float] = None,
+                          chunk_audio_seconds: Optional[List[float]] = None) -> EpisodeTranscription:
         """
         Transcribe a complete episode from audio chunks
 
@@ -206,26 +226,62 @@ class OpenAIWhisperTranscriber:
             total_processing_time = 0.0
             current_word_count = 0
 
+            if memory_efficient:
+                episode_repo.reset_transcript(episode_guid)
+
             # Initialize in-progress file if provided
             if in_progress_file:
                 with open(in_progress_file, 'w', encoding='utf-8') as f:
                     f.write(f"Transcription in progress for episode {episode_guid}\n")
                     f.write(f"Processing {len(audio_chunks)} chunks...\n\n")
 
+            episode_clock = time.monotonic()
+            cached_chunks = 0
             for i, chunk_path in enumerate(audio_chunks):
-                logger.info(f"Processing chunk {i+1}/{len(audio_chunks)}: {chunk_path}")
-
                 chunk_start_time = i * self.chunk_duration_seconds
-                chunk_result = self._transcribe_chunk(
-                    chunk_path,
-                    chunk_number=i+1,
-                    start_time=chunk_start_time
-                )
+                # Cache name carries the chunk length so a chunk-duration setting change can
+                # never splice text from differently cut chunks.
+                chunk_cache_path = Path(f"{chunk_path}.{self.chunk_duration_seconds}s.txt")
+                cached = memory_efficient and chunk_cache_path.exists()
+                # Time budget: stop BETWEEN chunks, never mid-chunk, so the kill-at-timeout path
+                # (silent death, 'processing' left stuck) is not the normal way a long run ends.
+                if (not cached and deadline_monotonic is not None
+                        and time.monotonic() >= deadline_monotonic):
+                    raise TranscriptionDeferred(episode_guid, i, len(audio_chunks),
+                                                time.monotonic() - episode_clock)
+                logger.info(f"Processing chunk {i+1}/{len(audio_chunks)}: {chunk_path}")
+                if cached:
+                    cached_chunks += 1
+                    logger.info(f"Resuming: reusing cached chunk {i+1}/{len(audio_chunks)}")
+                    chunk_result = TranscriptionChunk(
+                        chunk_number=i+1,
+                        start_time_seconds=chunk_start_time,
+                        end_time_seconds=chunk_start_time + self.chunk_duration_seconds,
+                        text=chunk_cache_path.read_text(encoding="utf-8"),
+                        confidence=1.0,
+                        processing_time_seconds=0.0,
+                    )
+                else:
+                    chunk_result = self._transcribe_chunk(
+                        chunk_path,
+                        chunk_number=i+1,
+                        start_time=chunk_start_time
+                    )
+                    if memory_efficient:
+                        self._write_chunk_cache(chunk_cache_path, chunk_result.text)
                 transcription_chunks.append(chunk_result)
                 total_processing_time += chunk_result.processing_time_seconds
 
-                logger.info(f"Completed chunk {i+1}/{len(audio_chunks)}: {len(chunk_result.text)} chars, "
-                           f"{chunk_result.processing_time_seconds:.1f}s processing time")
+                audio_s = (chunk_audio_seconds[i] if chunk_audio_seconds and i < len(chunk_audio_seconds)
+                           else self.chunk_duration_seconds)
+                if cached:
+                    logger.info(f"Completed chunk {i+1}/{len(audio_chunks)} from cache: {len(chunk_result.text)} chars")
+                else:
+                    rtf = chunk_result.processing_time_seconds / audio_s if audio_s else 0.0
+                    logger.info(f"Completed chunk {i+1}/{len(audio_chunks)}: {len(chunk_result.text)} chars, "
+                                f"{chunk_result.processing_time_seconds:.1f}s processing for ~{audio_s:.0f}s audio "
+                                f"(RTF {rtf:.2f}; >1 is slower than realtime), "
+                                f"episode elapsed {time.monotonic() - episode_clock:.0f}s")
 
                 # MEMORY OPTIMIZATION: Write chunk to database immediately instead of accumulating in memory
                 if memory_efficient and chunk_result.text.strip():
@@ -272,8 +328,8 @@ class OpenAIWhisperTranscriber:
             speed_ratio = total_duration / processing_duration if processing_duration > 0 else 0
 
             logger.info(f"Episode transcription complete: {word_count} words, "
-                       f"{len(transcription_chunks)} chunks, "
-                       f"{speed_ratio:.1f}x realtime speed")
+                       f"{len(transcription_chunks)} chunks ({cached_chunks} resumed from cache), "
+                       f"{processing_duration:.0f}s wall, {speed_ratio:.1f}x realtime speed")
 
             # Finalize transcript in database if using memory-efficient mode
             if memory_efficient:
@@ -288,10 +344,38 @@ class OpenAIWhisperTranscriber:
 
             return episode_transcription
 
+        except TranscriptionDeferred:
+            raise  # not a failure; completed chunks are cached and the caller re-queues
         except Exception as e:
             error_msg = f"Failed to transcribe episode {episode_guid}: {e}"
             logger.error(error_msg)
             raise PodcastError(error_msg) from e
+
+    @staticmethod
+    def _write_chunk_cache(cache_path: Path, text: str) -> None:
+        """Atomically persist a completed chunk transcript beside its audio file."""
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=cache_path.parent,
+                prefix=f".{cache_path.name}.",
+                delete=False,
+            ) as temporary_file:
+                temporary_file.write(text)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+                temporary_path = Path(temporary_file.name)
+
+            os.replace(temporary_path, cache_path)
+        except Exception:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
 
     def _transcribe_chunk(self, chunk_path: str, chunk_number: int, start_time: float) -> TranscriptionChunk:
         """Transcribe a single audio chunk using OpenAI Whisper"""
