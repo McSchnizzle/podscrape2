@@ -532,9 +532,12 @@ class AudioProcessor_Runner:
                         self.logger.debug(f"Episode {episode.title[:40]} already processing/processed (status: {current_episode.status}), skipping")
                         return {'type': 'skipped', 'guid': episode.episode_guid}
 
-                    # Mark episode as processing to prevent other workers from taking it
+                    # Mark episode as processing to prevent other workers from taking it.
+                    # Never in a dry run: it used to claim episodes and leave them 'processing'
+                    # until the next run's stuck reset (6 episodes, 2026-09-28 07:02).
                     try:
-                        worker_episode_repo.update_status(episode.episode_guid, 'processing')
+                        if not self.dry_run:
+                            worker_episode_repo.update_status(episode.episode_guid, 'processing')
                     except Exception as e:
                         self.logger.warning(f"Could not mark episode as processing: {e}")
                         return {'type': 'skipped', 'guid': episode.episode_guid}
