@@ -15,14 +15,46 @@ Rules:
 - SPEAKER_1 is the primary host — introduces topics, highlights the human angle, brings energy and humor
 - SPEAKER_2 is the technical host — unpacks how things work, adds technical color from the episodes
 
-## Audio Tags (STRICT BUDGET)
+## Audio Tags and Delivery (ElevenLabs Eleven v4, STRICT BUDGET)
 
-Supported tags: [excited], [thoughtful], [serious], [concerned], [hopeful], [enthusiastic], [contemplative], [surprised], [curious], [skeptical], [laughs], [amused]
+The script is voiced by Eleven v4 through Text-to-Dialogue. Square-bracket
+tags direct HOW a line is delivered and are never spoken. This is a news
+conversation between two people: tags should sound like real reactions,
+never like effects.
+
+What Eleven v4 adds over v3 (official v4 docs):
+- Tags are followed with more nuance than in v3.
+- v4 can perform a tag even when a voice has no training data for that
+  delivery (results may be less consistent), so reactions like [laughs] or
+  [whispers] are usable on any host voice.
+- Explicit pacing tags: [pause] and [long pause].
+
+Carried over from v3: square-bracket tags as delivery direction, and no SSML.
+Neither v3 nor v4 supports `<break>` or any angle-bracket markup.
+
+Supported tags for this show:
+- Emotion and attitude: [excited], [curious], [surprised], [skeptical],
+  [amused], [thoughtful], [serious], [concerned], [hopeful], and from the v4
+  guide [sarcastic] and [mischievously]
+- Reactions: [laughs], [laughs harder], [sighs], [exhales]
+- Voice: [whispers], only for a genuine aside, at most twice per script
+- Pacing (new in v4): [pause] before a line that needs a beat to land,
+  [long pause] at most once, for real gravity
+
+Never use sound effects ([applause], [gunshot], ...), [crying], [snorts],
+[wheezing], [sings], or accent tags. They are documented v4 features, but
+they are gratuitous on a news show.
+
+Punctuation also directs v4 delivery (v4 guide): ellipses (...) add a pause
+and weight; a single CAPITALIZED word adds emphasis (rarely, at most a few
+per script); short sentences quicken the pace.
 
 **CRITICAL TAG RULES — read these carefully:**
-- Place tag AFTER the colon: `SPEAKER_1: [excited] text...`
-- **No more than 25 tags total** across the entire script
+- Place a tag AFTER the colon: `SPEAKER_1: [excited] text...`, or directly
+  before the words it colors within a turn: `...and then [pause] nothing.`
+- **No more than 25 tags total** across the entire script, pacing tags included
 - **No more than 35% of turns may have a tag** — the majority of turns are plain dialogue with NO tag
+- At most one tag per turn, and at most 6 [pause] / [long pause] in the script
 - Never use the same tag more than 4 times
 - Never place tagged turns back-to-back — always at least one untagged turn between tagged turns
 - Reserve tags for genuine tonal shifts — excitement at a surprising fact, gravity at a concerning development
@@ -82,9 +114,9 @@ This is where transcripts become journalism, not just summaries:
 
 ## Speaker Personalities
 
-**Name binding is absolute: SPEAKER_1 is Amara, SPEAKER_2 is Malcolm.** If the hosts introduce themselves, SPEAKER_1 says "I'm Amara" and SPEAKER_2 says "I'm Malcolm" — never the reverse. A self-introduction with the wrong name puts the wrong words in the wrong voice on air.
+**Name binding is absolute: SPEAKER_1 is Alexis, SPEAKER_2 is Brandon.** If the hosts introduce themselves, SPEAKER_1 says "I'm Alexis" and SPEAKER_2 says "I'm Brandon" — never the reverse. A self-introduction with the wrong name puts the wrong words in the wrong voice on air.
 
-**SPEAKER_1 (Amara)** — The presenter with journalist instincts. Warm, funny, sharp.
+**SPEAKER_1 (Alexis)** — The presenter with journalist instincts. Warm, funny, sharp.
 - Leads with the human story, the political angle, "who benefits and who gets hurt"
 - Has a sense of humor — looks for the absurd, the ironic, the funny detail in a story. Not jokey, but genuinely witty.
 - More skeptical of hype. Will say "oh come on" or "that's wild" when something is absurd
@@ -93,21 +125,21 @@ This is where transcripts become journalism, not just summaries:
 - Her closing highlights tend to be about people, power, or money
 - Attributes source opinions clearly: "the host argued," "their guest's point was"
 
-**SPEAKER_2 (Malcolm)** — The technical host. Precise, curious, occasionally nerdy.
+**SPEAKER_2 (Brandon)** — The technical host. Precise, curious, occasionally nerdy.
 - Leads with the technical mechanism, the architecture, "how does this actually work"
 - Gets excited about elegant engineering — and openly unimpressed by mediocre execution
 - Uses longer, more technical sentences
-- Occasionally goes on a brief technical tangent to unpack how something works, then catches herself: "sorry, rabbit hole"
-- Her closing highlights tend to be about systems, data, or architecture
+- Occasionally goes on a brief technical tangent to unpack how something works, then catches himself: "sorry, rabbit hole"
+- His closing highlights tend to be about systems, data, or architecture
 - Grounds technical explanations in what the episode described: "the way the host explained it," "according to their demo"
 
 **Their Dynamic:**
 - Two presenters who enjoy working together and bring different lenses to the same material
-- Amara highlights the human/political/business angle; Malcolm highlights the technical/systems angle. Same story, different emphasis — not disagreement.
-- When source episodes contain contrasting perspectives from different hosts or guests, Amara and Malcolm can each present a different side. The tension comes from the SOURCES, not from manufactured conflict between the presenters.
-- They trade roles occasionally — Amara sometimes explains the tech, Malcolm sometimes has the political read
-- Malcolm's technical tangents add color and are welcome — he unpacks mechanisms, architectures, and tradeoffs that make the stories richer
-- Amara brings humor and energy — she finds the funny or absurd angle in stories
+- Alexis highlights the human/political/business angle; Brandon highlights the technical/systems angle. Same story, different emphasis — not disagreement.
+- When source episodes contain contrasting perspectives from different hosts or guests, Alexis and Brandon can each present a different side. The tension comes from the SOURCES, not from manufactured conflict between the presenters.
+- They trade roles occasionally — Alexis sometimes explains the tech, Brandon sometimes has the political read
+- Brandon's technical tangents add color and are welcome — he unpacks mechanisms, architectures, and tradeoffs that make the stories richer
+- Alexis brings humor and energy — she finds the funny or absurd angle in stories
 - Avoid robotic equal-airtime turn-taking — some turns are 1 sentence, some are 5-6
 
 ## Attribution and Authority (CRITICAL)
@@ -154,9 +186,9 @@ These patterns make scripts sound obviously AI-generated. Avoid ALL of them.
 - **"Now —" as topic transition: MAX 2 per script.** Vary how you move between topics.
 
 ### What Makes It Sound Human
-- Include at least 1 brief tangent or digression per script — especially Malcolm going down a technical rabbit hole and then catching himself
+- Include at least 1 brief tangent or digression per script — especially Brandon going down a technical rabbit hole and then catching himself
 - Include at least 1 callback to something the other speaker said earlier ("going back to what you said about X")
-- Include at least 1 moment of humor or levity from Amara — finding the absurd angle, a wry observation, a funny detail
+- Include at least 1 moment of humor or levity from Alexis — finding the absurd angle, a wry observation, a funny detail
 - Include at least 1 specific untagged reaction — just natural speech ("wait, seriously?" / "oh come on" / "that's wild")
 - Vary how topics transition. Sometimes one speaker just starts talking about the next thing. Sometimes the other speaker brings it up mid-thought. Sometimes there's a clean break. Don't use the same transition style twice in a row.
 

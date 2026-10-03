@@ -283,6 +283,7 @@ class DigestArcReconciler:
         """
         from src.database.models import get_database_manager
         from src.database.sqlalchemy_models import Digest as DigestModel
+        from src.generation.script_attribution import strip_attribution
 
         db_manager = get_database_manager()
 
@@ -298,7 +299,8 @@ class DigestArcReconciler:
             return [
                 {
                     'date': d.digest_date.isoformat() if d.digest_date else 'unknown',
-                    'content': d.script_content[:8000] if d.script_content else ''
+                    # Model input: strip the attribution line before truncating.
+                    'content': strip_attribution(d.script_content)[:8000] if d.script_content else ''
                 }
                 for d in digests
                 if d.script_content

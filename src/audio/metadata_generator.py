@@ -22,6 +22,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 from ..config.web_config import WebConfigManager, SettingsKeys
+from ..generation.script_attribution import strip_attribution
 
 
 from src.utils.claude_quota_fallback import run_claude
@@ -239,7 +240,7 @@ class MetadataGenerator:
             raise MetadataGenerationError(f"Script file not found: {script_path}")
         
         with open(script_file, 'r', encoding='utf-8') as f:
-            content = f.read()
+            content = strip_attribution(f.read())
         
         # Extract main content, skip headers and metadata
         lines = content.split('\n')
@@ -272,7 +273,8 @@ class MetadataGenerator:
     
     def _clean_script_content(self, content: str) -> str:
         """Clean script content (remove markdown headers, metadata blocks)"""
-        lines = content.split('\n')
+        # The Codex attribution line must not steer the title or description.
+        lines = strip_attribution(content).split('\n')
         content_lines = []
         skip_metadata = False
 

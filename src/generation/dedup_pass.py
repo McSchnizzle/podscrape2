@@ -104,7 +104,12 @@ def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) ->
             f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
         )
 
-    return result.stdout.strip()
+    # Who actually wrote the rewrite: run_claude marks Codex answers.
+    from src.generation.script_attribution import AuthoredText
+    provider = getattr(result, "provider", None) or "claude"
+    model = getattr(result, "model", None) or (
+        _claude_cli_model() if provider == "claude" else None)
+    return AuthoredText(result.stdout.strip(), provider, model)
 
 
 # ---------------------------------------------------------------------------
@@ -290,11 +295,14 @@ def run_dedup_pass(
     revised = None
     for attempt in range(max_attempts):
         try:
-            revised = _call_claude_p(
+            raw = _call_claude_p(
                 _DEDUP_SYSTEM_PROMPT,
                 user_prompt,
                 timeout=timeout,
-            ).strip()
+            )
+            # Keep the writer's provenance on the accepted text.
+            from src.generation.script_attribution import carry
+            revised = carry(raw.strip(), raw)
         except subprocess.TimeoutExpired:
             logger.warning("Dedup pass: claude -p timed out, keeping original draft")
             return DedupResult(
@@ -414,6 +422,7 @@ def _fetch_prior_digests(
     # repo method for this one use case.
     from src.database.models import get_database_manager
     from src.database.sqlalchemy_models import Digest as DigestModel
+    from src.generation.script_attribution import strip_attribution
 
     db = get_database_manager()
     with db.get_session() as session:
@@ -436,7 +445,8 @@ def _fetch_prior_digests(
             {
                 "id": r.id,
                 "date": r.digest_date.isoformat() if r.digest_date else "unknown",
-                "content": r.script_content or "",
+                # Model and lead-guard input: no attribution line.
+                "content": strip_attribution(r.script_content) or "",
             }
             for r in rows
         ]

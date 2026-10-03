@@ -37,6 +37,9 @@ def main() -> int:
     from src.database.models import get_database_manager
     from src.database.sqlalchemy_models import Digest as DigestModel
     from src.generation.dedup_pass import run_dedup_pass
+    from src.generation.script_attribution import (
+        attribution_after_rewrite, provenance, strip_attribution,
+    )
 
     db = get_database_manager()
     with db.get_session() as session:
@@ -49,8 +52,10 @@ def main() -> int:
         print(f"  chars: {len(digest.script_content or '')}")
         print(f"  running dedup pass (lookback={args.lookback}, exclude_digest_id={digest.id})")
 
+        # The model sees the script body only, never the attribution line.
+        body = strip_attribution(digest.script_content or "")
         result = run_dedup_pass(
-            draft_script=digest.script_content or "",
+            draft_script=body,
             topic=digest.topic,
             lookback=args.lookback,
             exclude_digest_id=digest.id,
@@ -70,7 +75,7 @@ def main() -> int:
         # Simple unified diff preview
         import difflib
         diff = difflib.unified_diff(
-            (digest.script_content or "").splitlines(keepends=True),
+            body.splitlines(keepends=True),
             result.rewritten_script.splitlines(keepends=True),
             fromfile=f"digest-{digest.id}.predupe",
             tofile=f"digest-{digest.id}.deduped",
@@ -90,7 +95,12 @@ def main() -> int:
             print(f"Applying dedup to digest {digest.id}...")
             if digest.script_content_predupe is None:
                 digest.script_content_predupe = digest.script_content
-            digest.script_content = result.rewritten_script
+            # Re-measure authorship for the rewritten words rather than
+            # carrying the old claim forward; the line stays last.
+            digest.script_content = attribution_after_rewrite(
+                digest.script_content or "", result.rewritten_script, "dedup",
+                provenance(result.rewritten_script),
+            )
             digest.script_word_count = len(result.rewritten_script.split())
             session.commit()
             print(f"✓ Digest {digest.id} updated ({result.chars_before} -> {result.chars_after} chars)")

@@ -35,6 +35,7 @@ from sqlalchemy import text  # noqa: E402
 
 from src.database.models import get_database_manager  # noqa: E402
 from src.generation import lead_repeat_guard as guard  # noqa: E402
+from src.generation.script_attribution import strip_attribution  # noqa: E402
 from src.generation.script_generator import ScriptGenerator  # noqa: E402
 
 logger = logging.getLogger("replay")
@@ -176,8 +177,9 @@ def main() -> int:
         db = get_database_manager()
         session = db.get_session()
         try:
+            # Prior scripts feed the dedup model: no attribution line.
             prior_scripts = [
-                r[0]
+                strip_attribution(r[0])
                 for r in session.execute(
                     text(
                         "select script_content from digests where topic = :t "
@@ -243,7 +245,7 @@ def run_one(gen, topic, episodes, digest_date, saturated, args, trial: int) -> f
     session = db.get_session()
     try:
         priors = [
-            {"id": r[0], "date": str(r[1]), "content": r[2]}
+            {"id": r[0], "date": str(r[1]), "content": strip_attribution(r[2])}
             for r in session.execute(
                 text(
                     "select id, digest_date, script_content from digests where topic = :t "

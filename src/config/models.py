@@ -42,6 +42,10 @@ CATALOG: Dict[str, Dict[str, Dict]] = {
         "gpt-5-nano": {"max_output": 64000, "max_input": 128000, "display_name": "GPT-5 Nano"},
     },
     "anthropic": {
+        # 5.5 limits copied from the 5 entries (only used to clamp API-path
+        # token settings; the claude -p path ignores them).
+        "claude-sonnet-5-5": {"max_output": 128000, "max_input": 1000000, "display_name": "Claude Sonnet 5.5"},
+        "claude-opus-5-5": {"max_output": 128000, "max_input": 1000000, "display_name": "Claude Opus 5.5"},
         "claude-opus-5": {"max_output": 128000, "max_input": 1000000, "display_name": "Claude Opus 5"},
         "claude-sonnet-5": {"max_output": 128000, "max_input": 1000000, "display_name": "Claude Sonnet 5"},
         "claude-opus-4-6": {"max_output": 128000, "max_input": 1000000, "display_name": "Claude Opus 4.6 (1M)"},
@@ -51,7 +55,8 @@ CATALOG: Dict[str, Dict[str, Dict]] = {
         "claude-sonnet-4-5-20250929": {"max_output": 64000, "max_input": 200000, "display_name": "Claude Sonnet 4.5"},
     },
     "elevenlabs": {
-        "eleven_v3": {"max_characters": 5000, "display_name": "v3 (5k chars, highest quality)"},
+        "eleven_v4": {"max_characters": 10000, "display_name": "v4 (10k chars, current flagship)"},
+        "eleven_v3": {"max_characters": 5000, "display_name": "v3 (5k chars, previous generation)"},
         "eleven_turbo_v2_5": {"max_characters": 40000, "display_name": "Turbo v2.5 (40k chars)"},
         "eleven_turbo_v2": {"max_characters": 30000, "display_name": "Turbo v2 (30k chars)"},
         "eleven_flash_v2_5": {"max_characters": 40000, "display_name": "Flash v2.5 (40k chars, low latency)"},

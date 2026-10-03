@@ -219,10 +219,14 @@ class PublishingPipelineRunner:
 
         recent_digests = self.digest_repo.get_recent_digests(days=days_back)
 
+        from src.publishing.bakeoff import BAKEOFF_TOPIC
         digests = []
         for digest_model in recent_digests:
             # Only include digests that have MP3 files
             if not digest_model.mp3_path:
+                continue
+            # Bakeoff episodes are published only by explicit digest id.
+            if digest_model.topic == BAKEOFF_TOPIC:
                 continue
 
             digest = {

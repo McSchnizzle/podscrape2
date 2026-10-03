@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from .voice_manager import VoiceManager, VoiceSettings
 from .dialogue_chunker import chunk_dialogue_script, DialogueChunk
 from ..database.models import Digest, get_digest_repo, get_topic_repo
+from ..generation.script_attribution import strip_attribution
 from ..config.config_manager import ConfigManager
 from ..config.web_config import WebConfigManager, SettingsKeys
 from ..utils.timezone import get_pacific_now
@@ -215,6 +216,8 @@ class AudioGenerator:
         """Generate audio from script content - routes to dialogue or single-voice based on topic config"""
         ref_info = f" (ref: {script_reference})" if script_reference else ""
         logger.info(f"Generating audio for script content{ref_info}")
+        # The Codex attribution line is for readers, never for the voice.
+        script_content = strip_attribution(script_content)
 
         if not script_content or not script_content.strip():
             raise AudioGenerationError(f"Script content is empty{ref_info}")
@@ -864,13 +867,19 @@ class AudioGenerator:
         import shutil
 
         logger.info(f"Generating chunked dialogue audio for {topic}")
+        # The Codex attribution line is for readers, never for the voice.
+        script_content = strip_attribution(script_content)
         logger.info(f"Voice config: {voice_config}")
         logger.info(f"Dialogue model: {dialogue_model}")
 
         # Chunk the dialogue script
         # Use 2500 chars for safety margin (API limit is 3000)
         try:
-            chunks = chunk_dialogue_script(script_content, max_chunk_size=2500)
+            # Text-to-Dialogue guidance: keep a request at or below 2,000
+            # characters for reliable generation. v3 has run at 2,500 for
+            # months, so only v4 adopts the documented bound.
+            chunk_size = 2000 if dialogue_model == "eleven_v4" else 2500
+            chunks = chunk_dialogue_script(script_content, max_chunk_size=chunk_size)
             logger.info(f"Split script into {len(chunks)} chunks")
             for chunk in chunks:
                 logger.info(f"  Chunk {chunk.chunk_number}: {chunk.char_count} chars, {chunk.turn_count} turns")
@@ -1020,9 +1029,12 @@ class AudioGenerator:
         return self._openai_client
 
     def _strip_audio_tags(self, text: str) -> str:
-        """Strip ElevenLabs audio tags like [excited], [laughs] that OpenAI doesn't support."""
+        """Strip ElevenLabs audio tags like [excited], [long pause] that OpenAI
+        TTS would read aloud. Any short bracketed lowercase direction counts,
+        so v4 tags ([whispers], [sarcastic], [laughs harder]) are covered
+        without a list to keep in sync."""
         import re
-        return re.sub(r'\[(?:excited|thoughtful|serious|concerned|hopeful|enthusiastic|contemplative|surprised|curious|skeptical|laughs|amused|sighs|chuckles|pause|quickly|slowly)\]\s*', '', text)
+        return re.sub(r'\[[a-z][a-z ]{0,30}\]\s*', '', text)
 
     def _generate_openai_tts_chunk(self, text: str, voice: str = "nova", model: str = "tts-1") -> bytes:
         """
@@ -1075,6 +1087,8 @@ class AudioGenerator:
         import shutil
 
         logger.info(f"FALLBACK: Generating dialogue audio via OpenAI TTS for {topic}")
+        # The Codex attribution line is for readers, never for the voice.
+        script_content = strip_attribution(script_content)
 
         # Parse speaker turns from script
         dialogue_turns = []
@@ -1166,6 +1180,8 @@ class AudioGenerator:
         import shutil
 
         logger.info(f"FALLBACK: Generating narrative audio via OpenAI TTS for {topic}")
+        # The Codex attribution line is for readers, never for the voice.
+        script_content = strip_attribution(script_content)
 
         # Clean the script for TTS
         tts_text = self._clean_script_for_tts(script_content)

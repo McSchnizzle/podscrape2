@@ -34,6 +34,8 @@ from urllib.parse import quote_plus, urlsplit
 
 import httpx
 
+from src.generation.script_attribution import strip_attribution
+
 logger = logging.getLogger(__name__)
 
 SENDER_ADDRESS = "paulinpdx503@gmail.com"
@@ -162,12 +164,16 @@ class BriefingMaterial:
 
 
 def select_digest(session, today: date):
-    """Newest published digest no older than MAX_DIGEST_AGE_DAYS."""
+    """Newest published digest no older than MAX_DIGEST_AGE_DAYS.
+
+    Bakeoff episodes are never a briefing source."""
     from src.database.sqlalchemy_models import Digest
+    from src.publishing.bakeoff import BAKEOFF_TOPIC
     cutoff = today - timedelta(days=MAX_DIGEST_AGE_DAYS)
     return (
         session.query(Digest)
         .filter(Digest.status == "published")
+        .filter(Digest.topic != BAKEOFF_TOPIC)
         .filter(Digest.github_url.isnot(None))
         .filter(Digest.digest_date >= cutoff)
         .order_by(Digest.digest_date.desc(), Digest.id.desc())
@@ -218,7 +224,8 @@ def gather_material(session, digest) -> BriefingMaterial:
         episode_title=digest.mp3_title or f"AI and Technology, {digest.digest_date}",
         episode_summary=summary,
         release_url=digest.github_url,
-        script=(digest.script_content or "")[:SCRIPT_CHAR_BUDGET],
+        # The Codex attribution line is for Paul, not for the briefing model.
+        script=(strip_attribution(digest.script_content) or "")[:SCRIPT_CHAR_BUDGET],
         arcs=arcs,
         episodes=episodes,
     )

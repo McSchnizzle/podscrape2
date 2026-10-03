@@ -32,6 +32,10 @@ from ..config.web_config import WebConfigManager, SettingsKeys
 from ..watch.theme_scan import WATCH_THEME_TOPIC, scan_episodes_for_daily_emphasis
 
 from src.utils.claude_quota_fallback import QuotaFallbackError, run_claude
+from .script_attribution import (
+    AuthoredText, AuthorshipTracker, append_attribution, attribution_line, carry,
+    provenance, strip_attribution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,10 @@ class ScriptGenerationError(Exception):
     pass
 
 from src.generation.anti_ai_rules import compact_banned_list
+
+
+# Reasoning effort for the script draft (Paul, 2026-10-03: Sonnet 5.5, medium).
+SCRIPT_DRAFT_EFFORT = "medium"
 
 
 def _claude_cli_model() -> str:
@@ -251,7 +259,8 @@ class ScriptGenerator:
     # └─────────────────────────────────────────────────────────────────────┘
 
     @staticmethod
-    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200) -> str:
+    def _call_claude_p(system_prompt: str, user_prompt: str, timeout: int = 1200,
+                       *, model: Optional[str] = None, effort: str = "low") -> str:
         """Call Claude via claude -p (programmatic mode) instead of direct API.
 
         Uses the Claude Code CLI's programmatic mode, which runs on the existing
@@ -281,7 +290,7 @@ class ScriptGenerator:
         env.pop("ANTHROPIC_API_KEY", None)  # Force Max subscription, not API billing
 
         result = run_claude(
-            [claude_path, "-p", "--model", _claude_cli_model(), "--effort", "low",
+            [claude_path, "-p", "--model", model or _claude_cli_model(), "--effort", effort,
              "--tools", "", "--no-session-persistence", "-"],
             input=full_prompt,
             capture_output=True,
@@ -295,7 +304,58 @@ class ScriptGenerator:
                 f"claude -p failed (exit {result.returncode}): {result.stderr[:500]}"
             )
 
-        return result.stdout.strip()
+        # Who actually wrote this text. run_claude marks a Codex answer with
+        # provider='codex'; a plain Claude result carries no provider field.
+        provider = getattr(result, "provider", None) or "claude"
+        model = getattr(result, "model", None) or (
+            _claude_cli_model() if provider == "claude" else None)
+        return AuthoredText(result.stdout.strip(), provider, model)
+
+    def _draft_cli_options(self) -> Dict[str, str]:
+        """Exact model and effort for the script DRAFT call.
+
+        The configured generation model (web_settings ai_digest_generation)
+        is passed to the CLI verbatim when it is a Claude id, so the setting
+        is the model that runs; it used to only select this code path while
+        the CLI received the `sonnet` alias. Polish passes (variety, lead,
+        length) keep the utility alias and low effort, with their timeouts.
+        """
+        model = getattr(self, "ai_model", "") or ""
+        if not model.startswith("claude-"):
+            return {}
+        return {"model": model, "effort": SCRIPT_DRAFT_EFFORT}
+
+    def _authorship(self) -> AuthorshipTracker:
+        """Who wrote each accepted stage of the script now being built. Updated
+        only where a model's output is ACCEPTED into the script that ships;
+        see src/generation/script_attribution.py."""
+        tracker = self.__dict__.get("_authorship_tracker")
+        if tracker is None:
+            tracker = self._authorship_tracker = AuthorshipTracker()
+        return tracker
+
+    def _accept_draft(self, draft, variety=None) -> None:
+        """A new draft replaces the previous one, and with it every label
+        from the discarded draft. `variety` is the (before, after) pair of a
+        variety revision kept for THIS draft during cleanup, if any."""
+        tracker = self._authorship()
+        tracker.start(draft, "draft", provenance(draft))
+        if variety is not None:
+            before, after = variety
+            tracker.apply("variety", before, after, provenance(after))
+
+    def _track_rewrite(self, stage: str, before: str, after) -> None:
+        """An accepted model rewrite of `before` into `after`."""
+        self._authorship().apply(stage, before, after, provenance(after))
+
+    def _apply_attribution(self, script_content: str) -> str:
+        """Append the Codex attribution line if Codex words remain."""
+        body = strip_attribution(script_content)
+        tracker = self._authorship().finish(body)
+        line = attribution_line(tracker)
+        logger.info(f"Script authorship: {line or 'no Codex words remain'} "
+                    f"(word counts by writer: {tracker.counts()})")
+        return append_attribution(body, tracker)
 
     # Quota exhaustion falls back to Codex inside _call_claude_p. Other
     # Claude errors retain the existing retry policy; a failed quota fallback
@@ -311,8 +371,13 @@ class ScriptGenerator:
         timeout_per_attempt: int = 1200,
         context: str = "script generation",
         min_chars: Optional[int] = None,
+        model: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> str:
         """Call claude -p with escalating-backoff retry.
+
+        `model` / `effort`: the exact CLI model id and effort for a script
+        draft (see _draft_cli_options); omitted, the utility defaults apply.
 
         5 attempts total. Waits between attempts: 30s, 90s, 180s, 600s.
         Worst case: 5 * 20min + 15min waits ~= 115 min.
@@ -334,7 +399,9 @@ class ScriptGenerator:
                 logger.info(
                     f"claude -p {context} attempt {attempt}/{self.CLAUDE_P_MAX_ATTEMPTS}"
                 )
-                result = self._call_claude_p(system_prompt, user_prompt, timeout=timeout_per_attempt)
+                cli = {k: v for k, v in (('model', model), ('effort', effort)) if v}
+                result = self._call_claude_p(system_prompt, user_prompt,
+                                             timeout=timeout_per_attempt, **cli)
                 if min_chars is not None and len(result) < min_chars:
                     raise ScriptGenerationError(
                         f"claude -p {context} attempt {attempt} returned {len(result)} chars "
@@ -424,7 +491,7 @@ class ScriptGenerator:
             logger.info("Using claude -p for Anthropic model call (no API key)")
             return self._call_claude_p_with_retry(
                 system_prompt, user_prompt, context="script generation",
-                min_chars=min_chars,
+                min_chars=min_chars, **self._draft_cli_options(),
             )
         else:
             response = self.openai_client.responses.create(
@@ -1308,10 +1375,11 @@ Follow ALL rules in the system prompt exactly, especially:
                 # output the same way as errors (v3.46).
                 script_content = self._call_claude_p_with_retry(
                     skill_based_prompt, user_prompt, context=f"dialogue script for {topic}",
-                    min_chars=10000,
+                    min_chars=10000, **self._draft_cli_options(),
                 )
             else:
                 script_content = self._call_llm(system_prompt, user_prompt, min_chars=10000)
+            draft = script_content
 
             char_count = len(script_content)
 
@@ -1345,6 +1413,9 @@ Follow ALL rules in the system prompt exactly, especially:
                 logger.warning(f"Dialogue script exceeds target: {char_count} > 35,000 characters")
 
             logger.info(f"Generated dialogue script for {topic}: {char_count} characters from {len(episodes)} episodes (via completion CLI)")
+            # Each successful draft replaces the last: only the draft that
+            # survives expansion is the one that ships.
+            self._accept_draft(draft, getattr(self, "_cleanup_variety", None))
             return script_content, char_count
 
         except Exception as e:
@@ -1482,13 +1553,19 @@ Follow ALL rules in the system prompt exactly, especially:
         import re
 
         original_len = len(script)
+        # The variety revision kept for THIS draft, as (before, after).
+        # Recorded as authorship only if the draft itself is accepted.
+        self._cleanup_variety = None
 
         # Phase 1: LLM structural variety pass (rewrites sentences for varied rhythm)
         # v3.48: Skip on intermediate expansion iterations to save ~6 min per loop
         if skip_variety_pass:
             logger.info("Structural variety pass skipped (intermediate expansion iteration)")
         else:
-            script = self._run_structural_variety_pass(script)
+            varied = self._run_structural_variety_pass(script)
+            if varied is not script:
+                self._cleanup_variety = (script, varied)
+            script = varied
 
         # Phase 2: Mechanical contraction enforcement AFTER LLM pass
         # (LLM may re-introduce formal forms during rewriting)
@@ -1575,7 +1652,8 @@ DO NOT INTRODUCE:
 
         try:
             logger.info(f"Running structural variety pass via claude -p ({len(script)} chars)")
-            revised = self._call_claude_p(system_prompt, user_prompt, timeout=360).strip()
+            raw = self._call_claude_p(system_prompt, user_prompt, timeout=360)
+            revised = raw.strip()
 
             # Validate the result
             if not revised or len(revised) < len(script) * 0.5:
@@ -1592,7 +1670,7 @@ DO NOT INTRODUCE:
                 return script
 
             logger.info(f"Structural variety pass complete: {len(script)} -> {len(revised)} chars ({len(revised) - len(script):+d})")
-            return revised
+            return carry(revised, raw)
 
         except Exception as e:
             logger.warning(f"Structural variety pass failed ({e}), keeping original script")
@@ -1769,6 +1847,7 @@ REMINDER: Each transcript above is the actual content provided for that episode.
                 logger.warning(f"Narrative script exceeds target: {char_count} > 15,000 characters")
 
             logger.info(f"Generated narrative script for {topic}: {char_count} characters from {len(episodes)} episodes")
+            self._accept_draft(script_content)
             return script_content, char_count
 
         except Exception as e:
@@ -2203,6 +2282,8 @@ REMINDER: Each transcript above is the actual content provided for that episode.
                     f"({len(script_content)} -> {len(varied)} < {floor}); keeping pre-pass draft"
                 )
             else:
+                if varied is not script_content:
+                    self._track_rewrite("variety", script_content, varied)
                 script_content = varied
 
         # --- 2. Lead-repeat guard --------------------------------------
@@ -2230,6 +2311,7 @@ REMINDER: Each transcript above is the actual content provided for that episode.
             return script_content
 
         logger.info("Finalize: lead rewritten; repeat resolved")
+        self._track_rewrite("lead_rewrite", script_content, rewritten)
         return rewritten
 
     def enforce_dialogue_length(self, script_content: str, topic: str,
@@ -2260,6 +2342,7 @@ REMINDER: Each transcript above is the actual content provided for that episode.
             f"Topic: {topic}\n\nOriginal script:\n{script_content}",
             timeout=600,
         )
+        repair = candidate
         candidate, _ = self._validate_and_fix_dialogue_format(candidate)
         instruction = self.topic_instructions.get(topic)
         voice_config = getattr(instruction, 'voice_config', None)
@@ -2278,13 +2361,21 @@ REMINDER: Each transcript above is the actual content provided for that episode.
                 raise ScriptGenerationError("Dialogue length repair introduced unsupported numbers")
 
         validate(candidate)
-        # Compression can change the lead. Reuse its existing provenance and
-        # repetition guards, then check hard limits again after all edits.
-        candidate = self.finalize_script(candidate, topic=topic, dialogue=True,
-                                         floor=floor, already_varied=True)
-        candidate, _ = self._validate_and_fix_dialogue_format(candidate)
-        candidate, _ = self._enforce_speaker_name_binding(candidate, voice_config)
-        validate(candidate)
+        # Recorded before finalization so a lead rewrite inside it diffs
+        # against the compressed text; undone if the repair is rejected.
+        snapshot = self._authorship().snapshot()
+        self._track_rewrite("length_repair", script_content, repair)
+        try:
+            # Compression can change the lead. Reuse its existing provenance and
+            # repetition guards, then check hard limits again after all edits.
+            candidate = self.finalize_script(candidate, topic=topic, dialogue=True,
+                                             floor=floor, already_varied=True)
+            candidate, _ = self._validate_and_fix_dialogue_format(candidate)
+            candidate, _ = self._enforce_speaker_name_binding(candidate, voice_config)
+            validate(candidate)
+        except Exception:
+            self._authorship().restore(snapshot)
+            raise
         logger.info("Dialogue length repaired: %s -> %s characters",
                     len(script_content), len(candidate))
         return candidate
@@ -2312,7 +2403,8 @@ REMINDER: Each transcript above is the actual content provided for that episode.
 
         prompt = guard.build_rewrite_prompt(script_content, result, dialogue)
         try:
-            new_lead = self._call_claude_p(prompt, "", timeout=360).strip()
+            raw_lead = self._call_claude_p(prompt, "", timeout=360)
+            new_lead = raw_lead.strip()
         except Exception as exc:
             logger.warning(f"Lead rewrite: claude -p failed ({exc})")
             return None
@@ -2342,7 +2434,7 @@ REMINDER: Each transcript above is the actual content provided for that episode.
             )
             return None
 
-        return candidate
+        return carry(candidate, raw_lead)
 
     def _check_topic_repetition(self, episodes: List[Episode], topic: str) -> Tuple[bool, str, List[str]]:
         """
@@ -2631,6 +2723,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         Multiple digests per topic per day are allowed (with unique timestamps).
         """
         logger.info(f"Creating digest for {topic} on {digest_date}")
+        self._authorship_tracker = AuthorshipTracker()
 
         # Find qualifying episodes FIRST - only undigested scored episodes
         # This allows multiple digests per day when new episodes are scored
@@ -2740,7 +2833,8 @@ Thank you for your understanding, and we'll see you tomorrow!
                     .limit(14)
                     .all()
                 )
-                prior_scripts = [d.script_content for d in prior_digests]
+                # Model input: prior scripts without their attribution line.
+                prior_scripts = [strip_attribution(d.script_content) for d in prior_digests]
 
             dedup_prior_scripts = prior_scripts
             if prior_scripts:
@@ -2966,6 +3060,10 @@ Thank you for your understanding, and we'll see you tomorrow!
         )
         script_content = self.enforce_dialogue_length(script_content, topic, floor=HARD_FLOOR)
         word_count = len(script_content.split())
+        # Compare the audit copy against the script body, before the marker.
+        shipped_body = script_content
+        # Last edit before persistence, so the marker stays the final line.
+        script_content = self._apply_attribution(script_content)
 
         # Save script to file with timestamp for uniqueness
         digest_timestamp = datetime.now(UTC)
@@ -2980,7 +3078,7 @@ Thank you for your understanding, and we'll see you tomorrow!
             episode_count=len(episodes),
             script_path=script_path,
             script_content=script_content,
-            script_content_predupe=predupe_content if predupe_content != script_content else None,
+            script_content_predupe=predupe_content if predupe_content != shipped_body else None,
             script_word_count=word_count,
             average_score=sum(ep.scores.get(topic, 0.0) for ep in episodes) / len(episodes) if episodes else 0.0
         )
@@ -3149,6 +3247,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         Selects 1-5 undigested episodes and creates a general digest.
         """
         logger.info(f"Creating general summary for {digest_date}")
+        self._authorship_tracker = AuthorshipTracker()
         
         # Check if we already have any topic-specific digests for this date
         existing_digests = self.digest_repo.get_by_date(digest_date)
@@ -3174,6 +3273,7 @@ Thank you for your understanding, and we'll see you tomorrow!
         
         # Generate general summary script
         script_content, word_count = self._generate_general_summary_script(episodes, digest_date)
+        script_content = self._apply_attribution(script_content)
         
         # Save script to file
         script_path = self.save_script("General_Summary", digest_date, script_content, word_count)
@@ -3285,6 +3385,7 @@ Transcript: {transcript['transcript']}
             self.max_output_tokens = min(int(self.max_output_tokens), 2000)
             script = self._call_llm(system_prompt, user_prompt)
             self.max_output_tokens = original_max
+            self._accept_draft(script)
             word_count = len(script.split())
             
             if word_count > 1200:
