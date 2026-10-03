@@ -5,7 +5,9 @@
  * AI & Technology Topic RSS Feed API Route (v2.08)
  *
  * ARCHITECTURE: This API route generates a topic-specific RSS feed from Supabase database.
- * Only includes digests from the "AI and Technology" topic.
+ * Includes digests from the "AI and Technology" topic plus the reserved
+ * "Bakeoff" topic (one-off script-model bakeoff episodes for this show,
+ * published by explicit id; see src/publishing/bakeoff.py).
  *
  * URL Mapping:
  * - Public URL: https://podcast.paulrbrown.org/ai-tech-digest.xml
@@ -23,6 +25,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 300; // Cache for 5 minutes
 
 const TOPIC_FILTER = 'AI and Technology';
+// Topics this feed carries. 'Bakeoff' must match BAKEOFF_TOPIC in
+// src/publishing/bakeoff.py (tests/test_ai_tech_feed_topics.py checks it).
+const FEED_TOPICS = [TOPIC_FILTER, 'Bakeoff'];
 
 interface Digest {
   id: number;
@@ -146,12 +151,12 @@ export async function GET(request: NextRequest) {
       `SELECT id, topic, to_char(digest_date, 'YYYY-MM-DD') AS digest_date,
               mp3_path, mp3_title, mp3_summary, mp3_duration_seconds, github_url, generated_at
          FROM digests
-        WHERE topic = $1
+        WHERE topic = ANY($1::text[])
           AND github_url IS NOT NULL
           AND mp3_path IS NOT NULL
         ORDER BY digest_date DESC, generated_at DESC NULLS LAST
         LIMIT 50`,
-      [TOPIC_FILTER]
+      [FEED_TOPICS]
     );
 
     if (!digests || digests.length === 0) {
