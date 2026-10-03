@@ -252,6 +252,66 @@ def cmd_script(args) -> None:
         raise SystemExit(f"episode {n}: observed model does not match {model_id}; not usable")
 
 
+def _spoken_words(script: str) -> int:
+    return len(re.sub(r"SPEAKER_[12]:|\[[a-zA-Z ]+\]", " ", script).split())
+
+
+REVISION = """
+
+## Revision task (length only)
+
+Below is YOUR previous draft for this episode. It runs {words} spoken words,
+about {minutes} minutes of audio. Revise it to 650-750 spoken words (about
+five minutes). Keep your own voice, structure and best moments, the facts
+exactly as they are, the funny beat and the moment of gravitas, and all the
+rules above. Cut, do not add new material. Output the complete revised
+script only.
+
+### Previous draft
+
+{draft}
+"""
+
+
+def cmd_revise(args) -> None:
+    """One controlled length revision by the SAME author (Paul, 2026-10-03)."""
+    n = args.n
+    state = _state()
+    rec = state["episodes"][str(n)]
+    if rec.get("length_retry"):
+        raise SystemExit(f"episode {n}: a length revision was already used")
+    _env()
+    label, kind, model_id = AUTHORS[n]
+    old_script_path = Path(rec["script_path"])
+    draft = old_script_path.read_text()
+    words = _spoken_words(draft)
+    minutes = round(rec.get("duration_seconds", 0) / 60, 1) or round(words / 150, 1)
+    prompt = build_prompt() + REVISION.format(words=words, minutes=minutes, draft=draft)
+    res = (run_claude_author if kind == "claude" else run_codex_author)(model_id, prompt)
+    script = res.pop("text")
+    if not res["verified"]:
+        raise SystemExit(f"episode {n}: revision answered by {res['observed_models']}; not usable")
+    archived = old_script_path.with_name(f"script_{n}.v1.txt")
+    old_script_path.rename(archived)
+    old_mp3 = Path(rec["mp3_path"]) if rec.get("mp3_path") else None
+    if old_mp3 and old_mp3.exists():
+        old_mp3.rename(old_mp3.with_name(old_mp3.stem + ".v1.mp3"))
+    old_script_path.write_text(script)
+    retry = {"reason": "length: first draft ran over the five-minute target",
+             "original_script": str(archived), "original_sha256": rec["script_sha256"],
+             "original_chars": len(draft), "original_spoken_words": words,
+             "original_duration_seconds": rec.get("duration_seconds"),
+             "revision_prompt_sha256": _sha(prompt)}
+    for k in ("mp3_path", "duration_seconds", "mp3_bytes", "credits_before", "credits_after",
+              "credits_spent", "quality"):
+        rec.pop(k, None)
+    rec.update({"script_sha256": _sha(script), "validation": validate_script(script),
+                "spoken_words": _spoken_words(script), "length_retry": retry, **res})
+    _save({"episodes": {str(n): rec}})
+    print(json.dumps({k: rec[k] for k in ("requested_model", "observed_models", "verified",
+                                          "spoken_words", "validation")}, default=str))
+
+
 # --------------------------------------------------------------------------
 # Audio
 # --------------------------------------------------------------------------
@@ -353,6 +413,10 @@ def cmd_publish(args) -> None:
     summary = (f"Script-model bakeoff, episode {n} of 5. Script written by {label} "
                f"({model_id}, {EFFORT} effort). Voiced by ElevenLabs v4 (Alexis and Brandon). "
                f"All five episodes share one research packet: {titles}.")
+    if rec.get("length_retry"):
+        summary += (" Disclosure: this script is the author's one controlled length revision; "
+                    "its first draft ran "
+                    f"{rec['length_retry']['original_spoken_words']} spoken words.")
     values = dict(topic=BAKEOFF_TOPIC, digest_date=DIGEST_DATE, digest_timestamp=stamp,
                   generated_at=stamp, script_content=script, script_word_count=len(script.split()),
                   episode_count=len(PACKET_EPISODES), mp3_path=rec["mp3_path"],
@@ -427,7 +491,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("packet").set_defaults(fn=cmd_packet)
-    for name, fn in (("script", cmd_script), ("tts", cmd_tts), ("check", cmd_check),
+    for name, fn in (("script", cmd_script), ("revise", cmd_revise), ("tts", cmd_tts), ("check", cmd_check),
                      ("publish", cmd_publish)):
         p = sub.add_parser(name)
         p.add_argument("n", type=int, choices=sorted(AUTHORS))
